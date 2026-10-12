@@ -1,0 +1,22 @@
+# Diretórios de build
+build/
+bin/
+out/
+
+# Cache do CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+
+# IDEs e Editores
+.vscode/
+.vs/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Binários gerados
+*.exe
+*.out
+*.app
