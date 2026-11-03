@@ -30,19 +30,70 @@ bool InitClearing(Clearing *clearing) {
     }
     SetTextureFilter(clearing->collisionGuide, TEXTURE_FILTER_POINT);
 
+    Image foregroundImage = LoadImage("assets/clareira.png");
+    Image foregroundMask = LoadImage("assets/clareira_foreground_mask.png");
+    if (foregroundImage.data == NULL || foregroundMask.data == NULL ||
+        foregroundMask.width != clearing->background.width ||
+        foregroundMask.height != clearing->background.height) {
+        TraceLog(LOG_ERROR, "Mascara dos galhos ausente ou com tamanho diferente do mapa");
+        if (foregroundImage.data != NULL) UnloadImage(foregroundImage);
+        if (foregroundMask.data != NULL) UnloadImage(foregroundMask);
+        UnloadClearing(clearing);
+        return false;
+    }
+    ImageFormat(&foregroundImage, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+    clearing->foregroundMaskPixels = LoadImageColors(foregroundMask);
+    UnloadImage(foregroundMask);
+    if (clearing->foregroundMaskPixels == NULL) {
+        UnloadImage(foregroundImage);
+        UnloadClearing(clearing);
+        return false;
+    }
+    Color *foregroundPixels = (Color *) foregroundImage.data;
+    int count = foregroundImage.width * foregroundImage.height;
+    for (int index = 0; index < count; index++) {
+        foregroundPixels[index].a = clearing->foregroundMaskPixels[index].a;
+    }
+    clearing->foreground = LoadTextureFromImage(foregroundImage);
+    UnloadImage(foregroundImage);
+    if (clearing->foreground.id == 0) {
+        UnloadClearing(clearing);
+        return false;
+    }
+    SetTextureFilter(clearing->foreground, TEXTURE_FILTER_POINT);
+
     // A mascara bloqueia as marcas vermelhas; este retangulo fecha o resto da borda.
     clearing->playableBounds = (Rectangle) {
-        90.0f, 160.0f,
-        (float) clearing->background.width - 180.0f,
-        (float) clearing->background.height - 230.0f
+        50.0f, 150.0f,
+        (float) clearing->background.width - 100.0f,
+        (float) clearing->background.height - 166.0f
     };
-    clearing->spawn = (Vector2) { 757.0f, 821.0f };
+    clearing->spawn = (Vector2) { 790.0f, 894.0f };
     clearing->pedestal = (Vector2) { 869.0f, 162.0f };
     return true;
 }
 
 void DrawClearing(const Clearing *clearing) {
     DrawTexture(clearing->background, 0, 0, WHITE);
+}
+
+void DrawClearingForeground(const Clearing *clearing, Vector2 player) {
+    int x = (int) player.x;
+    int y = (int) player.y;
+    bool behindBranch = x >= 0 && y >= 0 &&
+        x < clearing->background.width && y < clearing->background.height &&
+        clearing->foregroundMaskPixels[y * clearing->background.width + x].a > 0;
+    int middle = clearing->background.width / 2;
+    DrawTextureRec(clearing->foreground,
+        (Rectangle) { 0, 0, (float) middle, (float) clearing->background.height },
+        (Vector2) { 0, 0 },
+        behindBranch && x < middle ? Fade(WHITE, 0.7f) : WHITE);
+    DrawTextureRec(clearing->foreground,
+        (Rectangle) { (float) middle, 0,
+                      (float) (clearing->background.width - middle),
+                      (float) clearing->background.height },
+        (Vector2) { (float) middle, 0 },
+        behindBranch && x >= middle ? Fade(WHITE, 0.7f) : WHITE);
 }
 
 void DrawClearingCollisionGuide(const Clearing *clearing) {
@@ -64,6 +115,14 @@ bool IsClearingBlocked(const Clearing *clearing, Vector2 point) {
 }
 
 void UnloadClearing(Clearing *clearing) {
+    if (clearing->foregroundMaskPixels != NULL) {
+        UnloadImageColors(clearing->foregroundMaskPixels);
+        clearing->foregroundMaskPixels = NULL;
+    }
+    if (clearing->foreground.id != 0) {
+        UnloadTexture(clearing->foreground);
+        clearing->foreground.id = 0;
+    }
     if (clearing->collisionPixels != NULL) {
         UnloadImageColors(clearing->collisionPixels);
         clearing->collisionPixels = NULL;

@@ -2,9 +2,13 @@
 
 Protótipo da clareira em C com raylib 5.5. A arte de fundo está em
 `assets/clareira.png`. O mapa marcado pelo criador está em
-`design/clareira_marcada.jpg`; `assets/clareira_collision.png` é a máscara de
-colisão gerada a partir das linhas vermelhas. Azul marca o pedestal e amarelo
-marca a posição inicial do jogador.
+`design/clareira_marcada.png`. As linhas vermelhas geram
+`assets/clareira_collision.png`; as áreas pretas geram
+`assets/clareira_foreground_mask.png` para desenhar os galhos sobre o jogador.
+As correções feitas sobre o print do jogo estão em `design/clareira_ajustes.png`:
+preto acrescenta galho em primeiro plano e ciano libera espaço para andar.
+Amarelo marca a posição inicial; o pedestal mantém sua área de interação
+definida no código.
 
 ## Compilar no Windows (MSYS2 UCRT64)
 
@@ -24,9 +28,11 @@ em `build/`.
 - E perto do pedestal: inspecionar a saída ainda selada.
 - Esc: sair.
 
-O personagem ainda é um círculo provisório. As colisões seguem os traços
-vermelhos, com uma margem para o tamanho dele. Pedras pequenas sem marcação não
-bloqueiam movimento. Para atualizar a máscara após editar a imagem anotada no
+O personagem ainda é um círculo provisório. As colisões seguem a linha central
+dos traços vermelhos, com uma margem pequena para o tamanho dele. Os galhos
+marcados de preto aparecem acima do personagem; ficam parcialmente transparentes
+quando ele passa por trás. Objetos sem marcação não bloqueiam movimento.
+Para atualizar a máscara após editar a imagem anotada no
 mesmo tamanho (1672 × 941 pixels), rode:
 
 ```powershell

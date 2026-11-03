@@ -7,7 +7,9 @@
 typedef struct Clearing {
     Texture2D background;
     Texture2D collisionGuide;
+    Texture2D foreground;
     Color *collisionPixels;
+    Color *foregroundMaskPixels;
     Rectangle playableBounds;
     Vector2 spawn;
     Vector2 pedestal;
@@ -15,6 +17,7 @@ typedef struct Clearing {
 
 bool InitClearing(Clearing *clearing);
 void DrawClearing(const Clearing *clearing);
+void DrawClearingForeground(const Clearing *clearing, Vector2 player);
 void DrawClearingCollisionGuide(const Clearing *clearing);
 bool IsClearingBlocked(const Clearing *clearing, Vector2 point);
 void UnloadClearing(Clearing *clearing);

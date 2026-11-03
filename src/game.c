@@ -42,10 +42,14 @@ int main(void) {
         if (Vector2LengthSqr(direction) > 0.0f) {
             direction = Vector2Normalize(direction);
             Vector2 movement = Vector2Scale(direction, playerSpeed * GetFrameTime());
-            Vector2 next = { player.x + movement.x, player.y };
-            if (!IsClearingBlocked(&clearing, next)) player.x = next.x;
-            next = (Vector2) { player.x, player.y + movement.y };
-            if (!IsClearingBlocked(&clearing, next)) player.y = next.y;
+            int steps = (int) (Vector2Length(movement) / 4.0f) + 1;
+            Vector2 step = Vector2Scale(movement, 1.0f / (float) steps);
+            for (int index = 0; index < steps; index++) {
+                Vector2 next = { player.x + step.x, player.y };
+                if (!IsClearingBlocked(&clearing, next)) player.x = next.x;
+                next = (Vector2) { player.x, player.y + step.y };
+                if (!IsClearingBlocked(&clearing, next)) player.y = next.y;
+            }
         }
 
         Camera2D camera = FitClearing(&clearing);
@@ -57,11 +61,12 @@ int main(void) {
             ClearBackground(BLACK);
             BeginMode2D(camera);
                 DrawClearing(&clearing);
+                DrawCircleV(player, 16.0f, (Color) { 66, 172, 204, 255 });
+                DrawCircleLines((int) player.x, (int) player.y, 16.0f, WHITE);
+                DrawClearingForeground(&clearing, player);
                 if (showCollisionGuide) {
                     DrawClearingCollisionGuide(&clearing);
                 }
-                DrawCircleV(player, 16.0f, (Color) { 66, 172, 204, 255 });
-                DrawCircleLines((int) player.x, (int) player.y, 16.0f, WHITE);
             EndMode2D();
 
             DrawRectangle(12, 12, 380, 76, Fade(BLACK, 0.72f));
