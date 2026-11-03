@@ -17,16 +17,18 @@ FetchContent_MakeAvailable(raylib)
 # Fontes do projeto
 set(SOURCES
     src/game.c
+    src/clearing.c
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
 target_link_libraries(${PROJECT_NAME} PRIVATE raylib)
 
-# Copia a pasta assets para o diretório do binário após o build
+# Mantem os assets atualizados no diretorio do binario a cada build.
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets")
-    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    add_custom_target(copy_assets ALL
         COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_CURRENT_SOURCE_DIR}/assets"
         "$<TARGET_FILE_DIR:${PROJECT_NAME}>/assets"
+        DEPENDS ${PROJECT_NAME}
     )
 endif()
