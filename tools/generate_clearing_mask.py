@@ -41,9 +41,9 @@ while cv2.countNonZero(remaining):
 kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
 blocked = cv2.dilate(skeleton, kernel)
 blocked = cv2.morphologyEx(
-    blocked, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    blocked, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
 )
-blocked = cv2.GaussianBlur(blocked, (5, 5), 0)
+blocked = cv2.GaussianBlur(blocked, (9, 9), 0)
 blocked = np.where(blocked >= 128, 255, 0).astype(np.uint8)
 
 adjustments = np.asarray(Image.open(ROOT / "design/clareira_ajustes.png").convert("RGBA"))
@@ -53,6 +53,20 @@ clearance = ((adjustments[:, :, 1] > 150) &
              (adjustments[:, :, 2] > 150) &
              (adjustments[:, :, 3] > 0))
 blocked[clearance] = 0
+
+# The cyan marks trim an oversized outline, but the large lower-right rock
+# itself is solid. Fill its visible footprint so the trimmed edge cannot leave
+# an opening into the stone. Points follow the rock, not the surrounding grass.
+rock = np.array([
+    (1380, 686), (1404, 676), (1438, 676), (1467, 691),
+    (1481, 718), (1487, 755), (1478, 786), (1457, 804),
+    (1380, 805), (1350, 785), (1343, 750), (1351, 714),
+], dtype=np.int32)
+rock_mask = np.zeros_like(blocked)
+cv2.fillPoly(rock_mask, [rock], 255)
+# Round the polygon's corners while keeping the stone's main footprint solid.
+rock_mask = cv2.GaussianBlur(rock_mask, (11, 11), 0)
+blocked[rock_mask >= 128] = 255
 overlay = np.zeros((*blocked.shape, 4), dtype=np.uint8)
 overlay[blocked > 0] = (255, 30, 30, 100)
 
