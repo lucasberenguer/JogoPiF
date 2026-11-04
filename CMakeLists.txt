@@ -23,6 +23,7 @@ set(SOURCES
     src/weapon_select.c
     src/bible.c
     src/gun.c
+    src/enemy.c
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})

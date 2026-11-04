@@ -33,3 +33,23 @@ for name, (box, size) in effects.items():
     canvas.alpha_composite(art, ((size[0]-art.width)//2, (size[1]-art.height)//2))
     canvas.save(ROOT / "assets" / f"arma_fogo_{name}.png")
 
+# Quatro quadros de postura por direcao. A folha original tem oito angulos;
+# usamos o angulo diagonal para a frente, pois o painel marcado "Baixo"
+# mostra as costas e nao funcionaria como pose frontal.
+pose_centers = {
+    0: (665, 620, 575, 575),   # frente: baixo-direita
+    1: (255, 210, 170, 170),   # costas
+    2: (1090, 1035, 995, 995),  # esquerda
+    3: (530, 485, 445, 445),  # direita
+}
+poses = Image.new("RGBA", (4 * 64, 4 * 80))
+for direction, centers in pose_centers.items():
+    for frame, center in enumerate(centers):
+        art = transparent((center-22, 292, center+22, 382))
+        scale = min(58/art.width, 70/art.height)
+        art = art.resize((round(art.width*scale), round(art.height*scale)),
+                         Image.Resampling.NEAREST)
+        poses.alpha_composite(art, (frame*64+(64-art.width)//2,
+                                    direction*80+77-art.height))
+poses.save(ROOT / "assets/arma_fogo_corpo.png")
+

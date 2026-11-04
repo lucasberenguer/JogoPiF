@@ -4,10 +4,12 @@
 
 typedef struct Bible {
     Texture2D sprites;
+    Texture2D activation;
     float angle;
     float animationTime;
     float boostRemaining;
     float boostCooldown;
+    float activationRemaining;
 } Bible;
 
 bool InitBible(Bible *bible);

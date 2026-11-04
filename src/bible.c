@@ -15,13 +15,16 @@ static Vector2 BookCenter(const Bible *b, Vector2 player, int index) {
 bool InitBible(Bible *b) {
     *b = (Bible){0};
     b->sprites = LoadTexture("assets/biblia_orbita.png");
-    if (!b->sprites.id) return false;
+    b->activation = LoadTexture("assets/biblia_ativacao.png");
+    if (!b->sprites.id || !b->activation.id) { UnloadBible(b); return false; }
     SetTextureFilter(b->sprites, TEXTURE_FILTER_POINT);
+    SetTextureFilter(b->activation, TEXTURE_FILTER_POINT);
     return true;
 }
 
 void UnloadBible(Bible *b) {
     if (b->sprites.id) UnloadTexture(b->sprites);
+    if (b->activation.id) UnloadTexture(b->activation);
     *b = (Bible){0};
 }
 
@@ -30,12 +33,14 @@ void ResetBible(Bible *b) {
     b->animationTime = 0.0f;
     b->boostRemaining = 0.0f;
     b->boostCooldown = 0.0f;
+    b->activationRemaining = 0.0f;
 }
 
 void UpdateBible(Bible *b, float dt, bool activate) {
     if (activate && b->boostCooldown <= 0.0f) {
         b->boostRemaining = 1.25f;
         b->boostCooldown = 5.0f;
+        b->activationRemaining = 0.54f;
     }
     bool boosted = b->boostRemaining > 0.0f;
     b->angle += (boosted ? 4.2f : 1.35f) * dt;
@@ -43,6 +48,8 @@ void UpdateBible(Bible *b, float dt, bool activate) {
     b->animationTime += dt;
     if (b->boostRemaining > 0.0f) b->boostRemaining = fmaxf(0.0f, b->boostRemaining - dt);
     if (b->boostCooldown > 0.0f) b->boostCooldown = fmaxf(0.0f, b->boostCooldown - dt);
+    if (b->activationRemaining > 0.0f)
+        b->activationRemaining = fmaxf(0.0f, b->activationRemaining - dt);
 }
 
 void DrawBible(const Bible *b, Vector2 player, bool foreground) {

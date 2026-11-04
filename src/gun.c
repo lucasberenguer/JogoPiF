@@ -5,7 +5,7 @@
 
 #define SHOT_SPEED 760.0f
 #define SHOT_LIFE 1.25f
-#define SHOT_CADENCE 0.23f
+#define GUN_POSE_DURATION 0.32f
 #define SHOT_RADIUS 8.0f
 #define SHOT_DAMAGE 11
 
@@ -23,13 +23,15 @@ bool InitGun(Gun *gun) {
     gun->projectile = LoadTexture("assets/arma_fogo_projetil.png");
     gun->flash = LoadTexture("assets/arma_fogo_clarao.png");
     gun->impact = LoadTexture("assets/arma_fogo_impacto.png");
-    if (!gun->projectile.id || !gun->flash.id || !gun->impact.id) {
+    gun->body = LoadTexture("assets/arma_fogo_corpo.png");
+    if (!gun->projectile.id || !gun->flash.id || !gun->impact.id || !gun->body.id) {
         UnloadGun(gun);
         return false;
     }
     SetTextureFilter(gun->projectile, TEXTURE_FILTER_POINT);
     SetTextureFilter(gun->flash, TEXTURE_FILTER_POINT);
     SetTextureFilter(gun->impact, TEXTURE_FILTER_POINT);
+    SetTextureFilter(gun->body, TEXTURE_FILTER_POINT);
     return true;
 }
 
@@ -37,21 +39,22 @@ void UnloadGun(Gun *gun) {
     if (gun->projectile.id) UnloadTexture(gun->projectile);
     if (gun->flash.id) UnloadTexture(gun->flash);
     if (gun->impact.id) UnloadTexture(gun->impact);
+    if (gun->body.id) UnloadTexture(gun->body);
     *gun = (Gun){0};
 }
 
 void ResetGun(Gun *gun) {
     memset(gun->shots, 0, sizeof(gun->shots));
     memset(gun->impacts, 0, sizeof(gun->impacts));
-    gun->cooldown = 0.0f;
     gun->flashRemaining = 0.0f;
+    gun->poseRemaining = 0.0f;
     gun->aim = (Vector2){1.0f, 0.0f};
 }
 
 void UpdateGun(Gun *gun, const Clearing *clearing, Vector2 player,
-               Vector2 aimWorld, float dt, bool triggerHeld) {
-    gun->cooldown = fmaxf(0.0f, gun->cooldown-dt);
+               Vector2 aimWorld, float dt, bool triggerPressed) {
     gun->flashRemaining = fmaxf(0.0f, gun->flashRemaining-dt);
+    gun->poseRemaining = fmaxf(0.0f, gun->poseRemaining-dt);
     for (int i=0; i<GUN_MAX_IMPACTS; i++)
         gun->impacts[i].remaining = fmaxf(0.0f, gun->impacts[i].remaining-dt);
     Vector2 origin = {player.x, player.y-35.0f};
@@ -59,12 +62,12 @@ void UpdateGun(Gun *gun, const Clearing *clearing, Vector2 player,
     if (Vector2LengthSqr(delta) > 4.0f) gun->aim = Vector2Normalize(delta);
     gun->muzzle = Vector2Add(origin, Vector2Scale(gun->aim, 32.0f));
 
-    if (triggerHeld && gun->cooldown <= 0.0f) {
+    if (triggerPressed) {
         for (int i=0; i<GUN_MAX_SHOTS; i++) {
             if (gun->shots[i].life <= 0.0f) {
                 gun->shots[i] = (GunShot){gun->muzzle, gun->aim, SHOT_LIFE};
-                gun->cooldown = SHOT_CADENCE;
                 gun->flashRemaining = 0.11f;
+                gun->poseRemaining = GUN_POSE_DURATION;
                 break;
             }
         }

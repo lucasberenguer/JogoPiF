@@ -36,23 +36,32 @@ O arquivo `partida_pif.sav` fica ao lado do executável, em `build/`.
 As cartas e a moldura da escolha estão em `assets/`. A arma selecionada aparece
 na interface da clareira.
 Com a Katana equipada, o clique esquerdo já executa um corte visual em quatro
-quadros, orientado para onde o personagem está olhando. O efeito foi recortado
+quadros, orientado para onde o personagem está olhando. Cada clique inicia um
+golpe; segurar o botão não repete o ataque. O efeito foi recortado
 de `design/katana_ataque_referencia.png` por `tools/extract_katana.py`.
 O mesmo script também produz `assets/katana_corpo.png`, com poses do personagem
 sincronizadas com o corte nas quatro direções.
-Ainda não há inimigos para receber dano.
 Com a Bíblia equipada, quatro livros giram automaticamente em torno do
 personagem em um raio de 90 unidades. O clique esquerdo acelera a órbita por
 1,25 s e recarrega em 5 s.
+Quando a aceleração começa, o personagem abre a Bíblia numa animação curta.
 Os livros usam oito quadros recortados de `design/biblia_frames_referencia.png`
 por `tools/extract_bible.py`. O rastro dourado e as partículas acompanham a
-órbita. `src/bible.c` já oferece a detecção de contato circular e o valor de
-dano para integrar aos inimigos quando forem adicionados.
-Com a Arma de Fogo equipada, segure o clique esquerdo para disparar na direção
-do cursor. Os tiros repetem a cada 0,23 s, param nos obstáculos da clareira e
+órbita. O contato com os inimigos causa dano periodicamente.
+Com a Arma de Fogo equipada, cada clique esquerdo dispara um projétil na direção
+do cursor. Segurar o botão não repete o tiro. O personagem anima a postura de
+disparo a cada clique; os tiros param nos obstáculos da clareira e
 mostram clarão e impacto recortados de `design/arma_fogo_referencia.png` por
-`tools/extract_gun.py`. `src/gun.c` inclui a detecção de acerto e o dano de
-projétil para integrar aos inimigos quando forem adicionados.
+`tools/extract_gun.py`. Cada projétil causa dano ao primeiro inimigo atingido.
+Quatro inimigos encapuzados aparecem na clareira para testar o combate. Eles
+perseguem o jogador, atacam de perto, sofrem dano das três armas e deixam um
+item vermelho que recupera 15 pontos de vida ao ser recolhido. A esquiva evita
+o golpe durante sua animação; após receber dano, o jogador tem um breve
+intervalo antes de outro acerto. As poses originais estão em
+`design/inimigo_encapuzado_referencia.png`; a vista de costas gerada está em
+`design/inimigo_encapuzado_costas_gerado.png`, e a frontal em
+`design/inimigo_encapuzado_frente_gerado.png`. O script
+`tools/extract_enemy.py` monta as folhas de sprites usadas pelo jogo.
 Depois da escolha ou de **Continuar**, a clareira surge com um fade de 1,15 s.
 O movimento e a esquiva começam quando a transição termina.
 
@@ -63,8 +72,7 @@ O movimento e a esquiva começam quando a transição termina.
   usa a direção em que o personagem olha. A esquiva recarrega em 5 segundos
   e respeita as colisões.
 - F3: mostrar a máscara de colisão e os limites externos.
-- F4/F5: tirar ou recuperar 5 pontos de vida para testar os estados da HUD
-  enquanto o combate ainda não está implementado.
+- F4/F5: tirar ou recuperar 5 pontos de vida para testar os estados da HUD.
 - E perto do pedestal: inspecionar a saída ainda selada.
 - Esc: voltar ao menu.
 

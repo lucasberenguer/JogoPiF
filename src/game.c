@@ -6,6 +6,7 @@
 #include "weapon_select.h"
 #include "bible.h"
 #include "gun.h"
+#include "enemy.h"
 #include <math.h>
 
 static Camera2D FitClearing(const Clearing *clearing) {
@@ -167,6 +168,21 @@ int main(void) {
         CloseWindow();
         return 1;
     }
+    EnemyGroup enemies = { 0 };
+    if (!InitEnemies(&enemies)) {
+        UnloadGun(&gun);
+        UnloadBible(&bible);
+        UnloadWeaponSelect(&weaponSelect);
+        UnloadMenu(&menu);
+        UnloadHud(&hud);
+        UnloadTexture(katanaBody);
+        UnloadTexture(katanaCut);
+        UnloadTexture(dodgeSprites);
+        UnloadTexture(protagonist);
+        UnloadClearing(&clearing);
+        CloseWindow();
+        return 1;
+    }
 
     Vector2 player = clearing.spawn;
     int playerHealth = 100;
@@ -184,11 +200,12 @@ int main(void) {
     bool walking = false;
     bool showCollisionGuide = false;
     float pedestalMessageTime = 0.0f;
-    const float katanaAttackDuration = 0.32f;
-    const float katanaAttackRecovery = 0.40f;
+    const float katanaAttackDuration = 0.42f;
+    const float katanaAttackRecovery = 0.22f;
     float katanaAttackRemaining = 0.0f;
     float katanaAttackCooldown = 0.0f;
     int katanaAttackFacing = 0;
+    int katanaAttackId = 0;
     int screen = 0; /* 0: menu, 1: escolha da arma, 2: clareira */
     int currentWeapon = -1;
     const float entryFadeDuration = 1.15f;
@@ -215,6 +232,7 @@ int main(void) {
                 pedestalMessageTime = 0.0f;
                 ResetBible(&bible);
                 ResetGun(&gun);
+                ResetEnemies(&enemies, &clearing);
                 katanaAttackRemaining = 0.0f;
                 katanaAttackCooldown = 0.0f;
                 entryFadeRemaining = entryFadeDuration;
@@ -241,6 +259,7 @@ int main(void) {
                 pedestalMessageTime = 0.0f;
                 ResetBible(&bible);
                 ResetGun(&gun);
+                ResetEnemies(&enemies, &clearing);
                 katanaAttackRemaining = 0.0f;
                 katanaAttackCooldown = 0.0f;
                 entryFadeRemaining = entryFadeDuration;
@@ -284,6 +303,7 @@ int main(void) {
             IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
             katanaAttackCooldown <= 0.0f && dodgeRemaining <= 0.0f) {
             katanaAttackFacing = facing;
+            katanaAttackId++;
             katanaAttackRemaining = katanaAttackDuration;
             katanaAttackCooldown = katanaAttackRecovery;
         }
@@ -355,7 +375,36 @@ int main(void) {
                     : (aimDelta.y < 0.0f ? 1 : 0);
             UpdateGun(&gun, &clearing, player, aimWorld,
                       entering ? 0.0f : deltaTime,
-                      !entering && !dodging && IsMouseButtonDown(MOUSE_BUTTON_LEFT));
+                      !entering && !dodging && IsMouseButtonPressed(MOUSE_BUTTON_LEFT));
+        }
+        if (!entering) {
+            Vector2 playerCenter = {player.x, player.y-35.0f};
+            for (int i=0; i<ENEMY_COUNT; i++) {
+                Enemy *enemy = &enemies.list[i];
+                if (!EnemyCanBeHit(enemy)) continue;
+                Vector2 center = EnemyCenter(enemy);
+                if (currentWeapon == WEAPON_GUN) {
+                    int damage = GunHitCircle(&gun, center, 20.0f);
+                    if (damage) DamageEnemy(enemy, damage);
+                } else if (currentWeapon == WEAPON_BIBLE && enemy->bibleHitCooldown <= 0.0f &&
+                           BibleTouchesCircle(&bible, player, center, 20.0f)) {
+                    DamageEnemy(enemy, BibleContactDamage());
+                    enemy->bibleHitCooldown = 0.55f;
+                } else if (currentWeapon == WEAPON_KATANA && katanaAttackRemaining > 0.0f &&
+                           katanaAttackRemaining <= katanaAttackDuration*0.72f &&
+                           enemy->lastKatanaSwing != katanaAttackId) {
+                    Vector2 delta = Vector2Subtract(center, playerCenter);
+                    float distance = Vector2Length(delta);
+                    Vector2 forward = FacingVector(katanaAttackFacing);
+                    if (distance < 122.0f && distance > 0.0f &&
+                        Vector2DotProduct(delta, forward) >= -0.12f*distance) {
+                        DamageEnemy(enemy, 25);
+                        enemy->lastKatanaSwing = katanaAttackId;
+                    }
+                }
+            }
+            UpdateEnemies(&enemies, &clearing, player, deltaTime, dodging,
+                          &playerHealth, playerMaxHealth);
         }
         int frame = walking ? 1 + (int) (walkTime * 7.0f) % 4 : 0;
         bool nearPedestal = CheckCollisionPointCircle(player, clearing.pedestal, 72.0f);
@@ -366,6 +415,7 @@ int main(void) {
             ClearBackground(BLACK);
             BeginMode2D(camera);
                 DrawClearing(&clearing);
+                DrawEnemies(&enemies, player, false);
                 if (currentWeapon == WEAPON_BIBLE) DrawBible(&bible, player, false);
                 if (dodging) {
                     DrawTexturePro(dodgeSprites,
@@ -374,14 +424,30 @@ int main(void) {
                         (Vector2) { 0, 0 }, 0.0f, WHITE);
                 } else {
                     bool attacking = currentWeapon == WEAPON_KATANA && katanaAttackRemaining > 0.0f;
+                    bool firing = currentWeapon == WEAPON_GUN && gun.poseRemaining > 0.0f;
+                    bool invoking = currentWeapon == WEAPON_BIBLE && bible.activationRemaining > 0.0f;
                     int cutFrame = 0;
                     if (attacking) {
                         float progress = 1.0f - katanaAttackRemaining / katanaAttackDuration;
                         cutFrame = (int)(progress * 4.0f);
                         if (cutFrame > 3) cutFrame = 3;
                     }
-                    DrawTexturePro(attacking ? katanaBody : protagonist,
-                        (Rectangle) { (attacking ? cutFrame : frame) * 64.0f,
+                    int poseFrame = frame;
+                    Texture2D bodyTexture = protagonist;
+                    if (attacking) {
+                        bodyTexture = katanaBody;
+                        poseFrame = cutFrame;
+                    } else if (firing) {
+                        bodyTexture = gun.body;
+                        poseFrame = (int)((1.0f - gun.poseRemaining / 0.32f) * 4.0f);
+                        if (poseFrame > 3) poseFrame = 3;
+                    } else if (invoking) {
+                        bodyTexture = bible.activation;
+                        poseFrame = (int)((1.0f - bible.activationRemaining / 0.54f) * 6.0f);
+                        if (poseFrame > 5) poseFrame = 5;
+                    }
+                    DrawTexturePro(bodyTexture,
+                        (Rectangle) { poseFrame * 64.0f,
                                       (attacking ? katanaAttackFacing : facing) * 80.0f,
                                       64.0f, 80.0f },
                         (Rectangle) { player.x - 30.0f, player.y - 72.0f, 60.0f, 75.0f },
@@ -399,6 +465,7 @@ int main(void) {
                 }
                 if (currentWeapon == WEAPON_BIBLE) DrawBible(&bible, player, true);
                 if (currentWeapon == WEAPON_GUN) DrawGun(&gun);
+                DrawEnemies(&enemies, player, true);
                 DrawClearingForeground(&clearing, player);
                 if (showCollisionGuide) {
                     DrawClearingCollisionGuide(&clearing);
@@ -428,7 +495,7 @@ int main(void) {
                              : TextFormat("Aceleracao: %.1f s", bible.boostCooldown),
                          24, 176, 18, RAYWHITE);
             if (currentWeapon == WEAPON_GUN)
-                DrawText("Segure clique esquerdo: disparar", 24, 176, 18, RAYWHITE);
+                DrawText("Clique esquerdo: disparar (um tiro por clique)", 24, 176, 18, RAYWHITE);
             if (entering) {
                 float t = entryFadeRemaining / entryFadeDuration;
                 float opacity = t*t*(3.0f - 2.0f*t);
@@ -438,6 +505,7 @@ int main(void) {
         EndDrawing();
     }
 
+    UnloadEnemies(&enemies);
     UnloadGun(&gun);
     UnloadBible(&bible);
     UnloadWeaponSelect(&weaponSelect);
