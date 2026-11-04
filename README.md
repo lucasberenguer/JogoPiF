@@ -21,6 +21,41 @@ cmake --build build
 O CMake baixa a raylib automaticamente. O executável e os assets copiados ficam
 em `build/`.
 
+## Menu
+
+O jogo abre no menu, com as artes enviadas em `design/menu_*_referencia.png`.
+`tools/prepare_menu.py` recorta os botões em imagens transparentes em `assets/`.
+Clique nos botões ou use as setas e Enter. **Iniciar Jogo** abre a escolha entre
+Arma de Fogo, Bíblia Sagrada e Katana. Clique numa carta ou use as setas e
+Enter; Esc volta ao menu. A escolha cria o checkpoint inicial; se já houver
+progresso, o menu pede confirmação antes de substituí-lo.
+**Continuar Jogo** retoma do checkpoint inicial da clareira com a arma escolhida,
+o único checkpoint disponível no protótipo. **Configurações** permite alternar tela cheia com F ou Enter;
+**Créditos** abre uma tela reservada aos nomes da equipe.
+O arquivo `partida_pif.sav` fica ao lado do executável, em `build/`.
+As cartas e a moldura da escolha estão em `assets/`. A arma selecionada aparece
+na interface da clareira.
+Com a Katana equipada, o clique esquerdo já executa um corte visual em quatro
+quadros, orientado para onde o personagem está olhando. O efeito foi recortado
+de `design/katana_ataque_referencia.png` por `tools/extract_katana.py`.
+O mesmo script também produz `assets/katana_corpo.png`, com poses do personagem
+sincronizadas com o corte nas quatro direções.
+Ainda não há inimigos para receber dano.
+Com a Bíblia equipada, quatro livros giram automaticamente em torno do
+personagem em um raio de 90 unidades. O clique esquerdo acelera a órbita por
+1,25 s e recarrega em 5 s.
+Os livros usam oito quadros recortados de `design/biblia_frames_referencia.png`
+por `tools/extract_bible.py`. O rastro dourado e as partículas acompanham a
+órbita. `src/bible.c` já oferece a detecção de contato circular e o valor de
+dano para integrar aos inimigos quando forem adicionados.
+Com a Arma de Fogo equipada, segure o clique esquerdo para disparar na direção
+do cursor. Os tiros repetem a cada 0,23 s, param nos obstáculos da clareira e
+mostram clarão e impacto recortados de `design/arma_fogo_referencia.png` por
+`tools/extract_gun.py`. `src/gun.c` inclui a detecção de acerto e o dano de
+projétil para integrar aos inimigos quando forem adicionados.
+Depois da escolha ou de **Continuar**, a clareira surge com um fade de 1,15 s.
+O movimento e a esquiva começam quando a transição termina.
+
 ## Testar a clareira
 
 - WASD: mover.
@@ -31,7 +66,7 @@ em `build/`.
 - F4/F5: tirar ou recuperar 5 pontos de vida para testar os estados da HUD
   enquanto o combate ainda não está implementado.
 - E perto do pedestal: inspecionar a saída ainda selada.
-- Esc: sair.
+- Esc: voltar ao menu.
 
 O personagem usa uma folha de sprites com quatro direções, uma pose parada e
 quatro quadros de caminhada por direção, extraída de

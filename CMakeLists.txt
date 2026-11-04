@@ -19,6 +19,10 @@ set(SOURCES
     src/game.c
     src/clearing.c
     src/hud.c
+    src/menu.c
+    src/weapon_select.c
+    src/bible.c
+    src/gun.c
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
