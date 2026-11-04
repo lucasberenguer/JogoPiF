@@ -87,6 +87,14 @@ back_walk = np.asarray(Image.open(ROOT / "design/protagonista_costas_andando.png
 for frame in range(4):
     place_generated(back_walk, frame, 1, frame + 1)
 
+# Keep the same face and eyes between idle and walking. The lower body and
+# cape still animate; only the head/eye area is shared within each direction.
+for row in (0, 2, 3):
+    head = sheet[row * cell_height:row * cell_height + 43, :cell_width].copy()
+    for frame in range(1, 5):
+        sheet[row * cell_height:row * cell_height + 43,
+              frame * cell_width:(frame + 1) * cell_width] = head
+
 destination = ROOT / "assets/protagonista.png"
 Image.fromarray(sheet, "RGBA").save(destination)
 print(f"Wrote {destination} ({sheet.shape[1]}x{sheet.shape[0]})")

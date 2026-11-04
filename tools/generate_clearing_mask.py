@@ -67,6 +67,28 @@ cv2.fillPoly(rock_mask, [rock], 255)
 # Round the polygon's corners while keeping the stone's main footprint solid.
 rock_mask = cv2.GaussianBlur(rock_mask, (11, 11), 0)
 blocked[rock_mask >= 128] = 255
+
+# The red outlines alone leave the centers of several stones walkable. Fill
+# their visible bases with rounded shapes so actors slide around them without
+# catching on the square guide boxes in the reference screenshot.
+stone_bases = [
+    (345, 202, 43, 43),   # upper-left boulder
+    (235, 319, 25, 47),   # upper-left standing stone
+    (101, 476, 34, 27),   # middle-left low rock
+    (1040, 215, 25, 21), # small stone beside the altar
+    (1527, 343, 29, 69), # upper-right standing stone
+    (1519, 495, 29, 27), # right small rock
+    (1557, 561, 29, 31), # right lower rock
+    (320, 742, 26, 52),  # lower-left standing stone
+    (418, 827, 56, 51),  # lower-left boulder
+    (533, 913, 39, 32),  # lower-left edge stone
+    (994, 920, 34, 26),  # bottom edge stone
+]
+stones = np.zeros_like(blocked)
+for x, y, radius_x, radius_y in stone_bases:
+    cv2.ellipse(stones, (x, y), (radius_x, radius_y), 0, 0, 360, 255, -1)
+stones = cv2.GaussianBlur(stones, (9, 9), 0)
+blocked[stones >= 128] = 255
 overlay = np.zeros((*blocked.shape, 4), dtype=np.uint8)
 overlay[blocked > 0] = (255, 30, 30, 100)
 

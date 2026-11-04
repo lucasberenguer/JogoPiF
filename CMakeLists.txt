@@ -18,6 +18,7 @@ FetchContent_MakeAvailable(raylib)
 set(SOURCES
     src/game.c
     src/clearing.c
+    src/hud.c
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
