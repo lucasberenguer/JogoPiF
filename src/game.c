@@ -1,6 +1,7 @@
 #include "raylib.h"
 #include "raymath.h"
 #include "clearing.h"
+#include <math.h>
 
 static Camera2D FitClearing(const Clearing *clearing) {
     const float mapWidth = (float) clearing->background.width;
@@ -27,8 +28,20 @@ int main(void) {
         return 1;
     }
 
+    Texture2D protagonist = LoadTexture("assets/protagonista.png");
+    if (protagonist.id == 0) {
+        TraceLog(LOG_ERROR, "Nao foi possivel carregar assets/protagonista.png");
+        UnloadClearing(&clearing);
+        CloseWindow();
+        return 1;
+    }
+    SetTextureFilter(protagonist, TEXTURE_FILTER_POINT);
+
     Vector2 player = clearing.spawn;
     const float playerSpeed = 240.0f;
+    int facing = 0; // 0: baixo, 1: cima, 2: esquerda, 3: direita
+    float walkTime = 0.0f;
+    bool walking = false;
     bool showCollisionGuide = false;
     float pedestalMessageTime = 0.0f;
 
@@ -39,6 +52,8 @@ int main(void) {
             (float) IsKeyDown(KEY_D) - (float) IsKeyDown(KEY_A),
             (float) IsKeyDown(KEY_S) - (float) IsKeyDown(KEY_W)
         };
+        walking = false;
+        Vector2 previous = player;
         if (Vector2LengthSqr(direction) > 0.0f) {
             direction = Vector2Normalize(direction);
             Vector2 movement = Vector2Scale(direction, playerSpeed * GetFrameTime());
@@ -51,6 +66,25 @@ int main(void) {
                 if (!IsClearingBlocked(&clearing, next)) player.y = next.y;
             }
         }
+        Vector2 traveled = Vector2Subtract(player, previous);
+        walking = Vector2LengthSqr(traveled) > 0.01f;
+        if (walking) {
+            int newFacing = fabsf(traveled.x) >= fabsf(traveled.y) &&
+                fabsf(traveled.x) > 0.01f
+                ? (traveled.x < 0.0f ? 2 : 3)
+                : (traveled.y < 0.0f ? 1 : 0);
+            if (newFacing != facing) walkTime = 0.0f;
+            facing = newFacing;
+            walkTime += Vector2Length(traveled) / playerSpeed;
+        } else {
+            if (direction.x != 0.0f && fabsf(direction.x) >= fabsf(direction.y)) {
+                facing = direction.x < 0.0f ? 2 : 3;
+            } else if (direction.y != 0.0f) {
+                facing = direction.y < 0.0f ? 1 : 0;
+            }
+            walkTime = 0.0f;
+        }
+        int frame = walking ? 1 + (int) (walkTime * 7.0f) % 4 : 0;
 
         Camera2D camera = FitClearing(&clearing);
         bool nearPedestal = CheckCollisionPointCircle(player, clearing.pedestal, 72.0f);
@@ -61,8 +95,10 @@ int main(void) {
             ClearBackground(BLACK);
             BeginMode2D(camera);
                 DrawClearing(&clearing);
-                DrawCircleV(player, 16.0f, (Color) { 66, 172, 204, 255 });
-                DrawCircleLines((int) player.x, (int) player.y, 16.0f, WHITE);
+                DrawTexturePro(protagonist,
+                    (Rectangle) { frame * 64.0f, facing * 80.0f, 64.0f, 80.0f },
+                    (Rectangle) { player.x - 30.0f, player.y - 72.0f, 60.0f, 75.0f },
+                    (Vector2) { 0, 0 }, 0.0f, WHITE);
                 DrawClearingForeground(&clearing, player);
                 if (showCollisionGuide) {
                     DrawClearingCollisionGuide(&clearing);
@@ -81,6 +117,7 @@ int main(void) {
         EndDrawing();
     }
 
+    UnloadTexture(protagonist);
     UnloadClearing(&clearing);
     CloseWindow();
     return 0;

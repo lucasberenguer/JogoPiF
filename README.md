@@ -28,7 +28,16 @@ em `build/`.
 - E perto do pedestal: inspecionar a saída ainda selada.
 - Esc: sair.
 
-O personagem ainda é um círculo provisório. As colisões seguem a linha central
+O personagem usa uma folha de sprites com quatro direções, uma pose parada e
+quatro quadros de caminhada por direção, extraída de
+`design/protagonista_referencia.png` pelo script `tools/extract_protagonist.py`.
+A pose parada de cada direção vem de `design/protagonista_idle_gerado.png`;
+os quatro quadros de caminhada de costas vêm de
+`design/protagonista_costas_andando.png`.
+A direção exibida acompanha o deslocamento real e a animação avança conforme
+a distância percorrida.
+
+As colisões seguem a linha central
 dos traços vermelhos, com uma margem pequena para o tamanho dele. Os galhos
 marcados de preto aparecem acima do personagem; ficam parcialmente transparentes
 quando ele passa por trás. Objetos sem marcação não bloqueiam movimento.
