@@ -29,6 +29,14 @@ set(SOURCES
 add_executable(${PROJECT_NAME} ${SOURCES})
 target_link_libraries(${PROJECT_NAME} PRIVATE raylib)
 
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(enemy_audit_test tests/enemy_audit_test.c src/enemy.c src/clearing.c)
+    target_include_directories(enemy_audit_test PRIVATE src)
+    target_link_libraries(enemy_audit_test PRIVATE raylib)
+    add_test(NAME enemy_audit COMMAND enemy_audit_test)
+endif()
+
 # Mantem os assets atualizados no diretorio do binario a cada build.
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets")
     add_custom_target(copy_assets ALL

@@ -4,12 +4,17 @@
 #include "clearing.h"
 
 #define ENEMY_COUNT 4
+typedef enum EnemyType {
+    ENEMY_COMMON_MELEE, ENEMY_COMMON_RANGED, ENEMY_SPECIAL,
+    ENEMY_ELITE, ENEMY_BOSS
+} EnemyType;
 typedef enum EnemyState {
     ENEMY_IDLE, ENEMY_WALK, ENEMY_ATTACK, ENEMY_HURT, ENEMY_DIE, ENEMY_GONE
 } EnemyState;
 typedef struct Enemy {
     Vector2 position; /* ponto dos pes */
     int health;
+    EnemyType type;
     EnemyState state;
     int facing;
     int lastKatanaSwing;
@@ -19,6 +24,7 @@ typedef struct Enemy {
     float walkTime;
     bool attackConnected;
     bool pickupAvailable;
+    bool dropRolled;
 } Enemy;
 typedef struct EnemyGroup {
     Texture2D sprites;
@@ -38,4 +44,8 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground);
 void DamageEnemy(Enemy *enemy, int damage);
 bool EnemyCanBeHit(const Enemy *enemy);
 Vector2 EnemyCenter(const Enemy *enemy);
+int EnemyOptionalDropChance(EnemyType type);
+bool EnemyShouldDrop(EnemyType type, int roll);
+int EnemyAnimationFrame(const Enemy *enemy);
+void DrawEnemyDebug(const EnemyGroup *group);
 #endif

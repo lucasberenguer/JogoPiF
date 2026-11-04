@@ -36,14 +36,34 @@ int LoadMenuCheckpointWeapon(void) {
 
 bool InitMenu(Menu *m) {
     *m = (Menu){0};
-    m->background = LoadTexture("assets/menu_fundo.png");
+    m->background = LoadTexture("assets/menu_cenario.png");
+    m->moon = LoadTexture("assets/menu_lua.png");
+    m->seal = LoadTexture("assets/menu_selo.png");
+    m->necromancer = LoadTexture("assets/menu_necromante.png");
+    m->fog = LoadTexture("assets/menu_nevoa.png");
+    m->fogTexture = LoadTexture("assets/menu_nevoa_textura.png");
+    for (int i=0; i<6; i++) {
+        char path[64];
+        snprintf(path, sizeof(path), "assets/menu_heroi_%d.png", i);
+        m->hero[i] = LoadTexture(path);
+    }
     const char *paths[4] = {"assets/menu_iniciar.png", "assets/menu_continuar.png",
                             "assets/menu_config.png", "assets/menu_creditos.png"};
-    if (!m->background.id) return false;
+    if (!m->background.id || !m->moon.id || !m->seal.id || !m->necromancer.id || !m->fog.id || !m->fogTexture.id) {
+        UnloadMenu(m); return false;
+    }
+    for (int i=0; i<6; i++) if (!m->hero[i].id) { UnloadMenu(m); return false; }
+    SetTextureFilter(m->background, TEXTURE_FILTER_POINT);
+    SetTextureFilter(m->moon, TEXTURE_FILTER_POINT);
+    SetTextureFilter(m->seal, TEXTURE_FILTER_POINT);
+    SetTextureFilter(m->necromancer, TEXTURE_FILTER_POINT);
+    SetTextureFilter(m->fog, TEXTURE_FILTER_POINT);
+    SetTextureFilter(m->fogTexture, TEXTURE_FILTER_POINT);
+    for (int i=0; i<6; i++) SetTextureFilter(m->hero[i], TEXTURE_FILTER_POINT);
     for (int i=0; i<4; i++) {
         m->buttons[i] = LoadTexture(paths[i]);
         if (!m->buttons[i].id) { UnloadMenu(m); return false; }
-        SetTextureFilter(m->buttons[i], TEXTURE_FILTER_BILINEAR);
+        SetTextureFilter(m->buttons[i], TEXTURE_FILTER_POINT);
     }
     m->hasSave = LoadMenuCheckpointWeapon() >= 0;
     return true;
@@ -51,11 +71,18 @@ bool InitMenu(Menu *m) {
 
 void UnloadMenu(Menu *m) {
     for (int i=0; i<4; i++) if (m->buttons[i].id) UnloadTexture(m->buttons[i]);
+    for (int i=0; i<6; i++) if (m->hero[i].id) UnloadTexture(m->hero[i]);
+    if (m->fog.id) UnloadTexture(m->fog);
+    if (m->fogTexture.id) UnloadTexture(m->fogTexture);
+    if (m->necromancer.id) UnloadTexture(m->necromancer);
+    if (m->seal.id) UnloadTexture(m->seal);
+    if (m->moon.id) UnloadTexture(m->moon);
     if (m->background.id) UnloadTexture(m->background);
     *m = (Menu){0};
 }
 
 MenuAction UpdateMenu(Menu *m) {
+    m->effectTime += GetFrameTime();
     m->hasSave = LoadMenuCheckpointWeapon() >= 0;
     if (m->page == 3) {
         if (IsKeyPressed(KEY_ESCAPE)) m->page = 0;
@@ -97,6 +124,41 @@ void DrawMenu(const Menu *m) {
                      m->background.width*s, m->background.height*s};
     DrawTexturePro(m->background, (Rectangle){0,0,(float)m->background.width,(float)m->background.height},
                    dst, (Vector2){0}, 0, WHITE);
+    float t = m->effectTime;
+    float pulse = 1.0f + 0.025f*sinf(t*1.5f);
+    Rectangle moon = {dst.x+(1230.0f-235.0f*pulse)*s, dst.y+(155.0f-235.0f*pulse)*s,
+                      470.0f*pulse*s, 470.0f*pulse*s};
+    DrawTexturePro(m->moon, (Rectangle){0,0,(float)m->moon.width,(float)m->moon.height},
+                   moon, (Vector2){0}, 0, Fade(WHITE,0.90f));
+    Rectangle seal = {dst.x+1200*s,dst.y+275*s,330*s,330*s};
+    DrawTexturePro(m->seal, (Rectangle){0,0,(float)m->seal.width,(float)m->seal.height},
+                   seal, (Vector2){165*s,165*s}, t*10.0f, Fade(WHITE,0.72f));
+    Rectangle necro = {dst.x+1020*s,dst.y+225*s,390*s,260*s};
+    DrawTexturePro(m->necromancer,(Rectangle){0,0,(float)m->necromancer.width,(float)m->necromancer.height},
+                   necro,(Vector2){0},0,WHITE);
+    int frame = ((int)(t*6.0f))%6;
+    Texture2D hero = m->hero[frame];
+    Rectangle protagonist = {dst.x+50*s,dst.y+270*s,620*s,568*s};
+    DrawTexturePro(hero,(Rectangle){0,0,(float)hero.width,(float)hero.height},
+                   protagonist,(Vector2){0},0,WHITE);
+    float drift = fmodf(t*19.0f, 160.0f);
+    for (int i=0; i<2; i++) {
+        Rectangle fog = {dst.x+(-120.0f+drift+i*1450.0f)*s,dst.y+520*s,1672*s,420*s};
+        DrawTexturePro(m->fog,(Rectangle){0,360,(float)m->fog.width,580},
+                       fog,(Vector2){0},0,Fade(WHITE,0.38f));
+    }
+    Rectangle distantFog = {dst.x-45*s+fmodf(t*7.0f,90.0f)*s,dst.y+120*s,
+                            dst.width,dst.height};
+    DrawTexturePro(m->fogTexture,(Rectangle){0,0,(float)m->fogTexture.width,(float)m->fogTexture.height},
+                   distantFog,(Vector2){0},0,Fade(WHITE,0.22f));
+    for (int i=0; i<48; i++) {
+        float phase = (float)i*37.7f;
+        float x = fmodf(phase*13.0f+17.0f*sinf(t*0.4f+phase),1672.0f);
+        float y = fmodf(phase*29.0f-t*(8.0f+(i%5)*3.0f)+9400.0f,941.0f);
+        float radius = (i%7==0 ? 2.2f : 1.2f)*s;
+        DrawCircleV((Vector2){dst.x+x*s,dst.y+y*s},radius,
+                    Fade((Color){255,64,78,255},0.35f+0.25f*sinf(t*1.3f+phase)*sinf(t*1.3f+phase)));
+    }
     DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,0.25f));
     if (m->page == 0) {
         for (int i=0; i<4; i++) {

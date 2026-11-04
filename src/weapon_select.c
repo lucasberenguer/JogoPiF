@@ -24,9 +24,9 @@ bool InitWeaponSelect(WeaponSelect *s) {
     for (int i=0; i<WEAPON_COUNT; i++) {
         s->cards[i] = LoadTexture(paths[i]);
         if (!s->cards[i].id) { UnloadWeaponSelect(s); return false; }
-        SetTextureFilter(s->cards[i], TEXTURE_FILTER_BILINEAR);
+        SetTextureFilter(s->cards[i], TEXTURE_FILTER_POINT);
     }
-    SetTextureFilter(s->frame, TEXTURE_FILTER_BILINEAR);
+    SetTextureFilter(s->frame, TEXTURE_FILTER_POINT);
     return true;
 }
 

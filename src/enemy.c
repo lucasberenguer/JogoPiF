@@ -6,6 +6,33 @@
 #define ENEMY_SPEED 92.0f
 #define ENEMY_ATTACK_RANGE 64.0f
 #define ENEMY_ATTACK_DAMAGE 12
+#define ENEMY_HURT_RADIUS 20.0f
+
+int EnemyOptionalDropChance(EnemyType type) {
+    switch (type) {
+        case ENEMY_COMMON_MELEE: return 20;
+        case ENEMY_COMMON_RANGED: return 25;
+        case ENEMY_SPECIAL: return 45;
+        case ENEMY_ELITE: return 65;
+        case ENEMY_BOSS: return 100;
+        default: return 0;
+    }
+}
+
+bool EnemyShouldDrop(EnemyType type, int roll) {
+    return roll >= 0 && roll < 10000 && roll < EnemyOptionalDropChance(type)*100;
+}
+
+int EnemyAnimationFrame(const Enemy *enemy) {
+    int count = enemy->state == ENEMY_ATTACK || enemy->state == ENEMY_DIE ? 5 : 4;
+    float speed = enemy->state == ENEMY_DIE ? 5.9f :
+                  enemy->state == ENEMY_ATTACK ? 8.0f :
+                  enemy->state == ENEMY_HURT ? 12.0f : 7.5f;
+    float elapsed = enemy->state == ENEMY_WALK ? enemy->walkTime : enemy->stateTime;
+    int frame = (int)(elapsed*speed);
+    return enemy->state == ENEMY_IDLE || enemy->state == ENEMY_WALK
+        ? frame % count : (frame < count ? frame : count-1);
+}
 
 bool InitEnemies(EnemyGroup *group) {
     *group = (EnemyGroup){0};
@@ -49,6 +76,7 @@ void ResetEnemies(EnemyGroup *group, const Clearing *clearing) {
             }
         }
         enemy->health = ENEMY_MAX_HEALTH;
+        enemy->type = ENEMY_COMMON_MELEE;
         enemy->state = ENEMY_IDLE;
         enemy->facing = i%2 ? 2 : 3;
         enemy->lastKatanaSwing = -1;
@@ -71,7 +99,10 @@ void DamageEnemy(Enemy *enemy, int damage) {
     if (enemy->health <= 0) {
         enemy->health = 0;
         enemy->state = ENEMY_DIE;
-        enemy->pickupAvailable = true;
+        if (!enemy->dropRolled) {
+            enemy->dropRolled = true;
+            enemy->pickupAvailable = EnemyShouldDrop(enemy->type, GetRandomValue(0, 9999));
+        }
     } else {
         enemy->state = ENEMY_HURT;
     }
@@ -98,7 +129,8 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
     group->playerHitCooldown = fmaxf(0.0f, group->playerHitCooldown-dt);
     for (int i=0; i<ENEMY_COUNT; i++) {
         Enemy *enemy = &group->list[i];
-        if (enemy->pickupAvailable && *playerHealth > 0 && *playerHealth < playerMaxHealth &&
+        if (enemy->state == ENEMY_GONE && enemy->pickupAvailable &&
+            *playerHealth > 0 && *playerHealth < playerMaxHealth &&
             Vector2Distance(enemy->position, player) < 26.0f) {
             *playerHealth += 15;
             if (*playerHealth > playerMaxHealth) *playerHealth = playerMaxHealth;
@@ -155,7 +187,7 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
     for (int i=0; i<ENEMY_COUNT; i++) {
         const Enemy *enemy = &group->list[i];
         if ((enemy->position.y >= player.y) != foreground) continue;
-        if (enemy->pickupAvailable) {
+        if (enemy->state == ENEMY_GONE && enemy->pickupAvailable) {
             DrawCircleV((Vector2){enemy->position.x, enemy->position.y-9}, 9.0f,
                         Fade(GOLD, 0.65f));
             DrawCircleV((Vector2){enemy->position.x, enemy->position.y-9}, 6.0f, RED);
@@ -163,9 +195,7 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
         if (enemy->state == ENEMY_GONE) continue;
         int row = enemy->state == ENEMY_WALK ? 1 : enemy->state == ENEMY_ATTACK ? 2 :
                   enemy->state == ENEMY_HURT ? 3 : enemy->state == ENEMY_DIE ? 4 : 0;
-        int count = row >= 2 && row != 3 ? 5 : 4;
-        float speed = row == 4 ? 5.9f : row == 2 ? 8.0f : row == 3 ? 12.0f : 7.5f;
-        int frame = (int)((row==1 ? enemy->walkTime : enemy->stateTime)*speed)%count;
+        int frame = EnemyAnimationFrame(enemy);
         Texture2D tex = group->sprites;
         if (enemy->facing==1 && row<=1) tex = group->backSprites;
         if (enemy->facing==0 && row<=1) tex = group->frontSprites;
@@ -180,5 +210,17 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
             DrawRectangle((int)enemy->position.x-24,(int)enemy->position.y-85,
                           48*enemy->health/ENEMY_MAX_HEALTH,5,RED);
         }
+    }
+}
+
+void DrawEnemyDebug(const EnemyGroup *group) {
+    for (int i=0; i<ENEMY_COUNT; i++) {
+        const Enemy *enemy = &group->list[i];
+        if (enemy->state == ENEMY_GONE) continue;
+        Vector2 center = EnemyCenter(enemy);
+        DrawCircleLines((int)center.x,(int)center.y,ENEMY_HURT_RADIUS,GREEN);
+        DrawCircleV(enemy->position,3.0f,YELLOW);
+        DrawText(TextFormat("E%d F%d",enemy->state,EnemyAnimationFrame(enemy)),
+                 (int)enemy->position.x-28,(int)enemy->position.y-97,12,GOLD);
     }
 }

@@ -199,6 +199,7 @@ int main(void) {
     float walkTime = 0.0f;
     bool walking = false;
     bool showCollisionGuide = false;
+    bool showSpriteDebug = false;
     float pedestalMessageTime = 0.0f;
     const float katanaAttackDuration = 0.42f;
     const float katanaAttackRecovery = 0.22f;
@@ -277,6 +278,7 @@ int main(void) {
         bool entering = entryFadeRemaining > 0.0f;
         if (entering) entryFadeRemaining = fmaxf(0.0f, entryFadeRemaining - deltaTime);
         if (!entering && IsKeyPressed(KEY_F3)) showCollisionGuide = !showCollisionGuide;
+        if (!entering && IsKeyPressed(KEY_F6)) showSpriteDebug = !showSpriteDebug;
         if (!entering && IsKeyPressed(KEY_F4)) {
             playerHealth -= 5;
             if (playerHealth < 0) playerHealth = 0;
@@ -469,6 +471,14 @@ int main(void) {
                 DrawClearingForeground(&clearing, player);
                 if (showCollisionGuide) {
                     DrawClearingCollisionGuide(&clearing);
+                }
+                if (showSpriteDebug) {
+                    DrawEnemyDebug(&enemies);
+                    DrawCircleV(player, 3.0f, YELLOW);
+                    DrawCircleLines((int)player.x, (int)player.y-35, 20.0f, SKYBLUE);
+                    DrawText(TextFormat("P face:%d frame:%d scale:%.2f", facing, frame,
+                                        camera.zoom*0.9375f),
+                             (int)player.x-55, (int)player.y-100, 12, WHITE);
                 }
             EndMode2D();
 
