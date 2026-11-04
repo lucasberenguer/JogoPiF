@@ -49,6 +49,8 @@ void ResetGun(Gun *gun) {
     gun->flashRemaining = 0.0f;
     gun->poseRemaining = 0.0f;
     gun->aim = (Vector2){1.0f, 0.0f};
+    gun->flashAim = gun->aim;
+    gun->flashMuzzle = (Vector2){0};
 }
 
 void UpdateGun(Gun *gun, const Clearing *clearing, Vector2 player,
@@ -67,6 +69,8 @@ void UpdateGun(Gun *gun, const Clearing *clearing, Vector2 player,
             if (gun->shots[i].life <= 0.0f) {
                 gun->shots[i] = (GunShot){gun->muzzle, gun->aim, SHOT_LIFE};
                 gun->flashRemaining = 0.11f;
+                gun->flashMuzzle = gun->muzzle;
+                gun->flashAim = gun->aim;
                 gun->poseRemaining = GUN_POSE_DURATION;
                 break;
             }
@@ -112,10 +116,10 @@ void DrawGun(const Gun *gun) {
             (Vector2){0},0,Fade(WHITE, impact->remaining/0.18f));
     }
     if (gun->flashRemaining > 0.0f) {
-        float angle = atan2f(gun->aim.y, gun->aim.x)*RAD2DEG;
+        float angle = atan2f(gun->flashAim.y, gun->flashAim.x)*RAD2DEG;
         DrawTexturePro(gun->flash,
             (Rectangle){0,0,(float)gun->flash.width,(float)gun->flash.height},
-            (Rectangle){gun->muzzle.x,gun->muzzle.y,44,44},
+            (Rectangle){gun->flashMuzzle.x,gun->flashMuzzle.y,44,44},
             (Vector2){22,22},angle,Fade(WHITE,gun->flashRemaining/0.11f));
     }
 }

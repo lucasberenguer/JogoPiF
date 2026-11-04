@@ -206,6 +206,8 @@ int main(void) {
     float katanaAttackRemaining = 0.0f;
     float katanaAttackCooldown = 0.0f;
     int katanaAttackFacing = 0;
+    int gunAttackFacing = 0;
+    int bibleAttackFacing = 0;
     int katanaAttackId = 0;
     int screen = 0; /* 0: menu, 1: escolha da arma, 2: clareira */
     int currentWeapon = -1;
@@ -291,9 +293,14 @@ int main(void) {
         if (katanaAttackCooldown > 0.0f) katanaAttackCooldown -= deltaTime;
         if (katanaAttackRemaining > 0.0f)
             katanaAttackRemaining = fmaxf(0.0f, katanaAttackRemaining - deltaTime);
-        if (currentWeapon == WEAPON_BIBLE)
+        bool bibleActivationStarted = false;
+        if (currentWeapon == WEAPON_BIBLE) {
+            float previousActivation = bible.activationRemaining;
             UpdateBible(&bible, entering ? 0.0f : deltaTime,
                         !entering && IsMouseButtonPressed(MOUSE_BUTTON_LEFT));
+            bibleActivationStarted = previousActivation <= 0.0f &&
+                                     bible.activationRemaining > 0.0f;
+        }
 
         Vector2 direction = {
             entering ? 0.0f : (float) IsKeyDown(KEY_D) - (float) IsKeyDown(KEY_A),
@@ -375,10 +382,13 @@ int main(void) {
                 facing = fabsf(aimDelta.x) >= fabsf(aimDelta.y)
                     ? (aimDelta.x < 0.0f ? 2 : 3)
                     : (aimDelta.y < 0.0f ? 1 : 0);
+            float previousPose = gun.poseRemaining;
             UpdateGun(&gun, &clearing, player, aimWorld,
                       entering ? 0.0f : deltaTime,
                       !entering && !dodging && IsMouseButtonPressed(MOUSE_BUTTON_LEFT));
+            if (gun.poseRemaining > previousPose) gunAttackFacing = facing;
         }
+        if (bibleActivationStarted) bibleAttackFacing = facing;
         if (!entering) {
             Vector2 playerCenter = {player.x, player.y-35.0f};
             for (int i=0; i<ENEMY_COUNT; i++) {
@@ -435,22 +445,26 @@ int main(void) {
                         if (cutFrame > 3) cutFrame = 3;
                     }
                     int poseFrame = frame;
+                    int bodyFacing = facing;
                     Texture2D bodyTexture = protagonist;
                     if (attacking) {
                         bodyTexture = katanaBody;
                         poseFrame = cutFrame;
+                        bodyFacing = katanaAttackFacing;
                     } else if (firing) {
                         bodyTexture = gun.body;
                         poseFrame = (int)((1.0f - gun.poseRemaining / 0.32f) * 4.0f);
                         if (poseFrame > 3) poseFrame = 3;
+                        bodyFacing = gunAttackFacing;
                     } else if (invoking) {
                         bodyTexture = bible.activation;
                         poseFrame = (int)((1.0f - bible.activationRemaining / 0.54f) * 6.0f);
                         if (poseFrame > 5) poseFrame = 5;
+                        bodyFacing = bibleAttackFacing;
                     }
                     DrawTexturePro(bodyTexture,
                         (Rectangle) { poseFrame * 64.0f,
-                                      (attacking ? katanaAttackFacing : facing) * 80.0f,
+                                      bodyFacing * 80.0f,
                                       64.0f, 80.0f },
                         (Rectangle) { player.x - 30.0f, player.y - 72.0f, 60.0f, 75.0f },
                         (Vector2) { 0, 0 }, 0.0f, WHITE);

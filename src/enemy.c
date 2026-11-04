@@ -197,8 +197,17 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
                   enemy->state == ENEMY_HURT ? 3 : enemy->state == ENEMY_DIE ? 4 : 0;
         int frame = EnemyAnimationFrame(enemy);
         Texture2D tex = group->sprites;
-        if (enemy->facing==1 && row<=1) tex = group->backSprites;
-        if (enemy->facing==0 && row<=1) tex = group->frontSprites;
+        if (enemy->facing < 2 && enemy->state != ENEMY_DIE) {
+            tex = enemy->facing == 1 ? group->backSprites : group->frontSprites;
+            if (enemy->state == ENEMY_ATTACK) {
+                row = 1; /* Sem arte de ataque frontal/traseiro: movimento seguro. */
+                frame = (int)(enemy->stateTime*6.5f);
+                if (frame > 3) frame = 3;
+            } else if (enemy->state == ENEMY_HURT) {
+                row = 0;
+                frame = 0;
+            }
+        }
         Rectangle src = {frame*80.0f, row*80.0f,
                          enemy->facing==2 && tex.id==group->sprites.id ? -80.0f : 80.0f, 80.0f};
         Color tint = enemy->state == ENEMY_HURT ? (Color){255,160,160,255} : WHITE;

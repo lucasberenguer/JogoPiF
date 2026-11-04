@@ -23,6 +23,8 @@ typedef struct Gun {
     GunImpact impacts[GUN_MAX_IMPACTS];
     Vector2 muzzle;
     Vector2 aim;
+    Vector2 flashMuzzle;
+    Vector2 flashAim;
     float flashRemaining;
     float poseRemaining;
 } Gun;
