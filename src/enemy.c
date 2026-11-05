@@ -39,6 +39,24 @@ bool InitEnemies(EnemyGroup *group) {
     group->sprites = LoadTexture("assets/inimigo_encapuzado.png");
     group->backSprites = LoadTexture("assets/inimigo_encapuzado_costas.png");
     group->frontSprites = LoadTexture("assets/inimigo_encapuzado_frente.png");
+    group->skeleton = LoadTexture("assets/esqueleto.png");
+    group->mage = LoadTexture("assets/esqueleto_mago.png");
+    group->boss[0] = LoadTexture("assets/coveiro_raizes.png");
+    group->boss[1] = LoadTexture("assets/coveiro_pa.png");
+    group->boss[2] = LoadTexture("assets/coveiro_investida.png");
+    group->effects[0]=LoadTexture("assets/coveiro_efeito_raizes.png");
+    group->effects[1]=LoadTexture("assets/coveiro_efeito_pa.png");
+    group->effects[2]=LoadTexture("assets/coveiro_efeito_investida.png");
+    if (!group->skeleton.id || !group->mage.id || !group->boss[0].id ||
+        !group->boss[1].id || !group->boss[2].id || !group->effects[0].id ||
+        !group->effects[1].id || !group->effects[2].id) {
+        UnloadEnemies(group);
+        return false;
+    }
+    SetTextureFilter(group->skeleton, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->mage, TEXTURE_FILTER_POINT);
+    for (int i=0;i<3;i++) SetTextureFilter(group->boss[i], TEXTURE_FILTER_POINT);
+    for (int i=0;i<3;i++) SetTextureFilter(group->effects[i], TEXTURE_FILTER_POINT);
     if (!group->sprites.id || !group->backSprites.id || !group->frontSprites.id) {
         UnloadEnemies(group);
         return false;
@@ -50,6 +68,10 @@ bool InitEnemies(EnemyGroup *group) {
 }
 
 void UnloadEnemies(EnemyGroup *group) {
+    if (group->skeleton.id) UnloadTexture(group->skeleton);
+    if (group->mage.id) UnloadTexture(group->mage);
+    for (int i=0;i<3;i++) if (group->boss[i].id) UnloadTexture(group->boss[i]);
+    for (int i=0;i<3;i++) if (group->effects[i].id) UnloadTexture(group->effects[i]);
     if (group->sprites.id) UnloadTexture(group->sprites);
     if (group->backSprites.id) UnloadTexture(group->backSprites);
     if (group->frontSprites.id) UnloadTexture(group->frontSprites);
@@ -58,13 +80,22 @@ void UnloadEnemies(EnemyGroup *group) {
 
 void ResetEnemies(EnemyGroup *group, const Clearing *clearing) {
     group->playerHitCooldown = 0.0f;
+    group->cemetery = clearing->cemetery;
+    for (int i=0;i<ENEMY_PROJECTILES;i++) group->projectiles[i]=(EnemyProjectile){0};
     const Vector2 spawns[ENEMY_COUNT] = {
         {355, 330}, {1270, 340}, {440, 655}, {1280, 675}
     };
     for (int i=0; i<ENEMY_COUNT; i++) {
         Enemy *enemy = &group->list[i];
         *enemy = (Enemy){0};
+        if (!clearing->cemetery && i>=4) { enemy->state=ENEMY_GONE; continue; }
         enemy->position = spawns[i];
+        if (clearing->cemetery) {
+            float w=clearing->background.width, h=clearing->background.height;
+            const Vector2 layout[ENEMY_COUNT]={{.35f,.38f},{.64f,.40f},{.32f,.62f},
+                {.70f,.62f},{.28f,.50f},{.75f,.49f},{.52f,.73f}};
+            enemy->position=(Vector2){layout[i].x*w,layout[i].y*h};
+        }
         if (IsClearingBlocked(clearing, enemy->position)) {
             for (int step=1; step<=12; step++) {
                 Vector2 candidate = {spawns[i].x + (i%2 ? -1 : 1)*step*20.0f,
@@ -77,6 +108,11 @@ void ResetEnemies(EnemyGroup *group, const Clearing *clearing) {
         }
         enemy->health = ENEMY_MAX_HEALTH;
         enemy->type = ENEMY_COMMON_MELEE;
+        if (clearing->cemetery && i>=4) enemy->type=i==6?ENEMY_BOSS:ENEMY_COMMON_RANGED;
+        enemy->maxHealth = enemy->type==ENEMY_BOSS?480:ENEMY_MAX_HEALTH;
+        enemy->health=enemy->maxHealth;
+        enemy->dormant=enemy->type==ENEMY_BOSS;
+        enemy->bossAttack=enemy->type==ENEMY_BOSS?2:0;
         enemy->state = ENEMY_IDLE;
         enemy->facing = i%2 ? 2 : 3;
         enemy->lastKatanaSwing = -1;
@@ -85,7 +121,7 @@ void ResetEnemies(EnemyGroup *group, const Clearing *clearing) {
 }
 
 bool EnemyCanBeHit(const Enemy *enemy) {
-    return enemy->state != ENEMY_DIE && enemy->state != ENEMY_GONE && enemy->health > 0;
+    return !enemy->dormant && enemy->state != ENEMY_DIE && enemy->state != ENEMY_GONE && enemy->health > 0;
 }
 
 Vector2 EnemyCenter(const Enemy *enemy) {
@@ -95,7 +131,7 @@ Vector2 EnemyCenter(const Enemy *enemy) {
 void DamageEnemy(Enemy *enemy, int damage) {
     if (!EnemyCanBeHit(enemy) || damage<=0) return;
     enemy->health -= damage;
-    enemy->stateTime = 0.0f;
+    if (enemy->type!=ENEMY_BOSS) enemy->stateTime = 0.0f;
     if (enemy->health <= 0) {
         enemy->health = 0;
         enemy->state = ENEMY_DIE;
@@ -103,8 +139,23 @@ void DamageEnemy(Enemy *enemy, int damage) {
             enemy->dropRolled = true;
             enemy->pickupAvailable = EnemyShouldDrop(enemy->type, GetRandomValue(0, 9999));
         }
-    } else {
+    } else if (enemy->type != ENEMY_BOSS) {
         enemy->state = ENEMY_HURT;
+    }
+}
+
+static void HitPlayer(EnemyGroup *g, bool dodging, int *health, int damage) {
+    if (dodging || g->playerHitCooldown>0 || *health<=0) return;
+    *health -= damage;
+    if (*health<0) *health=0;
+    g->playerHitCooldown=.65f;
+}
+
+static void SpawnProjectile(EnemyGroup *g, Vector2 p, Vector2 direction, int kind) {
+    for (int i=0;i<ENEMY_PROJECTILES;i++) if (!g->projectiles[i].active) {
+        g->projectiles[i]=(EnemyProjectile){true,p,
+            Vector2Scale(direction,kind==1?310.0f:210.0f),kind==1?2.0f:4.0f,kind};
+        break;
     }
 }
 
@@ -127,6 +178,22 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                    Vector2 player, float dt, bool playerDodging,
                    int *playerHealth, int playerMaxHealth) {
     group->playerHitCooldown = fmaxf(0.0f, group->playerHitCooldown-dt);
+    for (int i=0;i<ENEMY_PROJECTILES;i++) {
+        EnemyProjectile *p=&group->projectiles[i];
+        if (!p->active) continue;
+        p->life-=dt;
+        /* Sweep in small steps so fast projectiles cannot cross narrow obstacles. */
+        Vector2 delta=Vector2Scale(p->velocity,dt);
+        int steps=(int)(Vector2Length(delta)/4)+1;
+        for (int s=0;s<steps && p->active;s++) {
+            p->position=Vector2Add(p->position,Vector2Scale(delta,1.0f/steps));
+            if (IsClearingBlocked(clearing,p->position) || p->life<=0) p->active=false;
+            else if (Vector2Distance(p->position,player)<(p->kind==1?29:19)) {
+                HitPlayer(group,playerDodging,playerHealth,p->kind==1?22:10);
+                p->active=false;
+            }
+        }
+    }
     for (int i=0; i<ENEMY_COUNT; i++) {
         Enemy *enemy = &group->list[i];
         if (enemy->state == ENEMY_GONE && enemy->pickupAvailable &&
@@ -149,6 +216,32 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             continue;
         }
         if (enemy->state == ENEMY_ATTACK) {
+            if (group->cemetery && enemy->type==ENEMY_BOSS) {
+                float t=enemy->stateTime;
+                if (!enemy->attackConnected && t>=.8f) {
+                    enemy->attackConnected=true;
+                    if (enemy->bossAttack==1)
+                        SpawnProjectile(group,enemy->position,enemy->attackDirection,1);
+                }
+                if (enemy->bossAttack==0 && t>=.8f && t<1.2f &&
+                    Vector2Distance(player,enemy->attackTarget)<95)
+                    HitPlayer(group,playerDodging,playerHealth,24);
+                if (enemy->bossAttack==2 && t>=.8f && t<1.35f) {
+                    MoveEnemy(clearing,enemy,Vector2Scale(enemy->attackDirection,430*dt));
+                    if (Vector2Distance(player,enemy->position)<58)
+                        HitPlayer(group,playerDodging,playerHealth,20);
+                }
+                if (t>=2.0f) {enemy->state=ENEMY_IDLE;enemy->stateTime=0;}
+                continue;
+            }
+            if (group->cemetery && enemy->type==ENEMY_COMMON_RANGED) {
+                if (!enemy->attackConnected && enemy->stateTime>=.55f) {
+                    enemy->attackConnected=true;
+                    SpawnProjectile(group,enemy->position,enemy->attackDirection,0);
+                }
+                if (enemy->stateTime>=.95f) {enemy->state=ENEMY_IDLE;enemy->stateTime=0;}
+                continue;
+            }
             if (!enemy->attackConnected && enemy->stateTime >= 0.32f) {
                 enemy->attackConnected = true;
                 if (!playerDodging && group->playerHitCooldown <= 0.0f && *playerHealth > 0 &&
@@ -164,6 +257,35 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         if (*playerHealth <= 0) { enemy->state = ENEMY_IDLE; continue; }
         Vector2 toPlayer = Vector2Subtract(player, enemy->position);
         float distance = Vector2Length(toPlayer);
+        if (group->cemetery && enemy->type==ENEMY_BOSS) {
+            bool guardsAlive=false;
+            for (int n=0;n<ENEMY_COUNT-1;n++)
+                if (group->list[n].state!=ENEMY_GONE) guardsAlive=true;
+            enemy->dormant=guardsAlive;
+            if (guardsAlive) continue;
+            if (enemy->attackCooldown<=0) {
+                enemy->bossAttack=(enemy->bossAttack+1)%3;
+                enemy->state=ENEMY_ATTACK;enemy->stateTime=0;enemy->attackConnected=false;
+                enemy->attackTarget=player;
+                enemy->attackDirection=Vector2Normalize(toPlayer);
+                enemy->facing=fabsf(toPlayer.x)>fabsf(toPlayer.y)?(toPlayer.x<0?2:3):(toPlayer.y<0?1:0);
+                enemy->attackCooldown=3.2f;
+            }
+            continue;
+        }
+        if (group->cemetery && enemy->type==ENEMY_COMMON_RANGED) {
+            enemy->facing=fabsf(toPlayer.x)>fabsf(toPlayer.y)?(toPlayer.x<0?2:3):(toPlayer.y<0?1:0);
+            if (distance<480 && enemy->attackCooldown<=0) {
+                enemy->state=ENEMY_ATTACK;enemy->stateTime=0;enemy->attackConnected=false;
+                enemy->attackDirection=Vector2Normalize(toPlayer);
+                enemy->attackCooldown=2.1f;
+            } else if (distance>340 || distance<170) {
+                enemy->state=ENEMY_WALK;enemy->walkTime+=dt;
+                MoveEnemy(clearing,enemy,Vector2Scale(Vector2Normalize(toPlayer),
+                    (distance<170?-70:70)*dt));
+            } else enemy->state=ENEMY_IDLE;
+            continue;
+        }
         if (distance > 0.001f) {
             enemy->facing = fabsf(toPlayer.x) > fabsf(toPlayer.y)*0.65f
                 ? (toPlayer.x < 0 ? 2 : 3) : (toPlayer.y < 0 ? 1 : 0);
@@ -193,6 +315,38 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
             DrawCircleV((Vector2){enemy->position.x, enemy->position.y-9}, 6.0f, RED);
         }
         if (enemy->state == ENEMY_GONE) continue;
+        if (group->cemetery) {
+            Texture2D tex=enemy->type==ENEMY_BOSS?group->boss[enemy->bossAttack]:
+                enemy->type==ENEMY_COMMON_RANGED?group->mage:group->skeleton;
+            int cols=enemy->type==ENEMY_BOSS?9:enemy->type==ENEMY_COMMON_RANGED?4:5;
+            int rows=enemy->type==ENEMY_BOSS?4:enemy->type==ENEMY_COMMON_RANGED?4:5;
+            int frame=enemy->state==ENEMY_ATTACK?(int)(enemy->stateTime/2.0f*cols):
+                (int)(enemy->walkTime*7)%cols;
+            if (frame>=cols) frame=cols-1;
+            if (enemy->state==ENEMY_IDLE) frame=0;
+            int row=enemy->type==ENEMY_BOSS?enemy->facing:
+                enemy->state==ENEMY_DIE?rows-1:enemy->state==ENEMY_ATTACK?2:
+                enemy->state==ENEMY_WALK?1:0;
+            float cw=(float)tex.width/cols,ch=(float)tex.height/rows;
+            float size=enemy->type==ENEMY_BOSS?150:80;
+            Color tint=enemy->state==ENEMY_HURT?RED:enemy->state==ENEMY_DIE?
+                Fade(WHITE,1-enemy->stateTime/.85f):WHITE;
+            DrawTexturePro(tex,(Rectangle){frame*cw,row*ch,cw,ch},
+                (Rectangle){enemy->position.x-size/2,enemy->position.y-size,size,size},
+                (Vector2){0},0,tint);
+            DrawRectangle((int)enemy->position.x-30,(int)(enemy->position.y-size)-8,60,5,DARKGRAY);
+            DrawRectangle((int)enemy->position.x-30,(int)(enemy->position.y-size)-8,
+                60*enemy->health/enemy->maxHealth,5,RED);
+            if (enemy->type==ENEMY_BOSS && enemy->state==ENEMY_ATTACK) {
+                Color warning=enemy->stateTime<.8f?Fade(VIOLET,.45f):VIOLET;
+                if (enemy->bossAttack==0 && enemy->stateTime<1.2f)
+                    DrawCircleLines((int)enemy->attackTarget.x,(int)enemy->attackTarget.y,95,warning);
+                if (enemy->bossAttack==2 && enemy->stateTime<.8f)
+                    DrawLineEx(enemy->position,Vector2Add(enemy->position,
+                        Vector2Scale(enemy->attackDirection,240)),5,warning);
+            }
+            continue;
+        }
         int row = enemy->state == ENEMY_WALK ? 1 : enemy->state == ENEMY_ATTACK ? 2 :
                   enemy->state == ENEMY_HURT ? 3 : enemy->state == ENEMY_DIE ? 4 : 0;
         int frame = EnemyAnimationFrame(enemy);
@@ -218,6 +372,38 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
             DrawRectangle((int)enemy->position.x-24,(int)enemy->position.y-85,48,5,DARKGRAY);
             DrawRectangle((int)enemy->position.x-24,(int)enemy->position.y-85,
                           48*enemy->health/ENEMY_MAX_HEALTH,5,RED);
+        }
+    }
+}
+
+static void DrawEffect(Texture2D tex, Vector2 position, int frame, float size) {
+    float w=(float)tex.width/4,h=(float)tex.height/2;
+    DrawTexturePro(tex,(Rectangle){(frame%4)*w,(frame/4)*h,w,h},
+        (Rectangle){position.x-size/2,position.y-size*.75f,size,size*.75f},
+        (Vector2){0},0,WHITE);
+}
+
+void DrawEnemyProjectiles(const EnemyGroup *group) {
+    if (group->cemetery) {
+        const Enemy *boss=&group->list[ENEMY_COUNT-1];
+        if (boss->state==ENEMY_ATTACK && boss->stateTime>=.8f) {
+            int frame=(int)((boss->stateTime-.8f)/1.2f*8);
+            if (frame>7) frame=7;
+            if (boss->bossAttack==0)
+                DrawEffect(group->effects[0],boss->attackTarget,frame,190);
+            if (boss->bossAttack==2)
+                DrawEffect(group->effects[2],boss->position,frame,140);
+        }
+    }
+    for (int i=0;i<ENEMY_PROJECTILES;i++) {
+        const EnemyProjectile *p=&group->projectiles[i];
+        if (!p->active) continue;
+        if (p->kind==1) {
+            DrawEffect(group->effects[1],p->position,(int)(GetTime()*16)%8,84);
+        } else {
+            DrawCircleV(p->position,14,Fade(GREEN,.3f));
+            DrawCircleV(p->position,8,LIME);
+            DrawCircleV(p->position,3,RAYWHITE);
         }
     }
 }

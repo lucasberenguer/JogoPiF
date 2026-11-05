@@ -1,6 +1,34 @@
 #include "clearing.h"
 #include <stddef.h>
 
+bool InitCemetery(Clearing *map) {
+    *map = (Clearing){0};
+    map->background = LoadTexture("assets/cemiterio.png");
+    if (!map->background.id) return false;
+    SetTextureFilter(map->background, TEXTURE_FILTER_POINT);
+    map->cemetery = true;
+    float w = (float)map->background.width, h = (float)map->background.height;
+    map->playableBounds = (Rectangle){w*.07f,h*.17f,w*.88f,h*.72f};
+    map->spawn = (Vector2){w*.50f,h*.22f};
+    map->pedestal = (Vector2){-1000,-1000};
+    map->exit = (Rectangle){w*.90f,h*.46f,w*.05f,h*.12f};
+    /* Normalized footprints: collide with bases, not the entire drawing. */
+    const Rectangle bases[] = {
+        {.81f,.19f,.13f,.15f}, {.12f,.23f,.10f,.07f},
+        {.08f,.35f,.09f,.09f}, {.08f,.47f,.09f,.05f},
+        {.06f,.59f,.07f,.05f}, {.07f,.67f,.09f,.06f},
+        {.15f,.60f,.05f,.05f}, {.15f,.80f,.12f,.07f},
+        {.56f,.82f,.12f,.07f}, {.70f,.83f,.09f,.06f},
+        {.65f,.69f,.04f,.05f}, {.73f,.71f,.05f,.04f},
+        {.73f,.31f,.09f,.05f}, {.80f,.40f,.08f,.05f},
+        {.80f,.58f,.08f,.05f}
+    };
+    map->obstacleCount = (int)(sizeof(bases)/sizeof(bases[0]));
+    for (int i=0;i<map->obstacleCount;i++)
+        map->obstacles[i]=(Rectangle){bases[i].x*w,bases[i].y*h,bases[i].width*w,bases[i].height*h};
+    return true;
+}
+
 bool InitClearing(Clearing *clearing) {
     clearing->background = LoadTexture("assets/clareira.png");
     if (clearing->background.id == 0) {
@@ -69,6 +97,10 @@ bool InitClearing(Clearing *clearing) {
         (float) clearing->background.height - 166.0f
     };
     clearing->spawn = (Vector2) { 790.0f, 894.0f };
+    /* Bottom dirt opening marked in the map; below the initial spawn. */
+    clearing->exit = (Rectangle){clearing->background.width*.36f,
+        clearing->background.height*.97f,clearing->background.width*.21f,
+        clearing->background.height*.03f};
     clearing->pedestal = (Vector2) { 869.0f, 162.0f };
     return true;
 }
@@ -78,6 +110,7 @@ void DrawClearing(const Clearing *clearing) {
 }
 
 void DrawClearingForeground(const Clearing *clearing, Vector2 player) {
+    if (!clearing->foregroundMaskPixels) return;
     int x = (int) player.x;
     int y = (int) player.y;
     bool behindBranch = x >= 0 && y >= 0 &&
@@ -97,14 +130,25 @@ void DrawClearingForeground(const Clearing *clearing, Vector2 player) {
 }
 
 void DrawClearingCollisionGuide(const Clearing *clearing) {
-    DrawTexture(clearing->collisionGuide, 0, 0, WHITE);
+    if (clearing->collisionGuide.id) DrawTexture(clearing->collisionGuide, 0, 0, WHITE);
+    for (int i=0;i<clearing->obstacleCount;i++)
+        DrawRectangleLinesEx(clearing->obstacles[i],2,RED);
+    DrawRectangleLinesEx(clearing->exit,2,GREEN);
     DrawRectangleLinesEx(clearing->playableBounds, 3.0f, RED);
     DrawCircleLines((int) clearing->pedestal.x,
                     (int) clearing->pedestal.y, 72.0f, BLUE);
 }
 
 bool IsClearingBlocked(const Clearing *clearing, Vector2 point) {
+    /* Open only the marked passage through the old bottom boundary/mask. */
+    if (!clearing->cemetery && clearing->exit.width > 0 &&
+        CheckCollisionPointRec(point,(Rectangle){clearing->exit.x,
+            clearing->background.height*.94f,clearing->exit.width,
+            clearing->background.height*.06f})) return false;
     if (!CheckCollisionPointRec(point, clearing->playableBounds)) return true;
+    for (int i=0;i<clearing->obstacleCount;i++)
+        if (CheckCollisionCircleRec(point, 8.0f, clearing->obstacles[i])) return true;
+    if (!clearing->collisionPixels) return false;
 
     int x = (int) point.x;
     int y = (int) point.y;

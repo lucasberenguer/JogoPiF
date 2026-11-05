@@ -3,7 +3,8 @@
 #include "raylib.h"
 #include "clearing.h"
 
-#define ENEMY_COUNT 4
+#define ENEMY_COUNT 7
+#define ENEMY_PROJECTILES 32
 typedef enum EnemyType {
     ENEMY_COMMON_MELEE, ENEMY_COMMON_RANGED, ENEMY_SPECIAL,
     ENEMY_ELITE, ENEMY_BOSS
@@ -25,13 +26,28 @@ typedef struct Enemy {
     bool attackConnected;
     bool pickupAvailable;
     bool dropRolled;
+    int maxHealth;
+    int bossAttack;
+    bool dormant;
+    Vector2 attackDirection;
+    Vector2 attackTarget;
 } Enemy;
+typedef struct EnemyProjectile {
+    bool active;
+    Vector2 position, velocity;
+    float life;
+    int kind;
+} EnemyProjectile;
 typedef struct EnemyGroup {
     Texture2D sprites;
     Texture2D backSprites;
     Texture2D frontSprites;
     Enemy list[ENEMY_COUNT];
     float playerHitCooldown;
+    bool cemetery;
+    Texture2D skeleton, mage, boss[3];
+    Texture2D effects[3];
+    EnemyProjectile projectiles[ENEMY_PROJECTILES];
 } EnemyGroup;
 
 bool InitEnemies(EnemyGroup *group);
@@ -48,4 +64,5 @@ int EnemyOptionalDropChance(EnemyType type);
 bool EnemyShouldDrop(EnemyType type, int roll);
 int EnemyAnimationFrame(const Enemy *enemy);
 void DrawEnemyDebug(const EnemyGroup *group);
+void DrawEnemyProjectiles(const EnemyGroup *group);
 #endif

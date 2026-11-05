@@ -226,6 +226,11 @@ int main(void) {
                 if (currentWeapon >= 0) screen = 2;
             }
             if (screen == 2) {
+                if (clearing.cemetery) {
+                    UnloadClearing(&clearing);
+                    clearing = (Clearing){0};
+                    if (!InitClearing(&clearing)) break;
+                }
                 player = clearing.spawn;
                 playerHealth = playerMaxHealth;
                 dodgeRemaining = 0.0f;
@@ -250,6 +255,11 @@ int main(void) {
             int choice = UpdateWeaponSelect(&weaponSelect);
             if (choice == -2) { screen = 0; continue; }
             if (choice >= 0) {
+                if (clearing.cemetery) {
+                    UnloadClearing(&clearing);
+                    clearing = (Clearing){0};
+                    if (!InitClearing(&clearing)) break;
+                }
                 currentWeapon = choice;
                 if (!SaveMenuCheckpoint(currentWeapon))
                     TraceLog(LOG_WARNING, "Nao foi possivel salvar a arma escolhida");
@@ -281,6 +291,22 @@ int main(void) {
         if (entering) entryFadeRemaining = fmaxf(0.0f, entryFadeRemaining - deltaTime);
         if (!entering && IsKeyPressed(KEY_F3)) showCollisionGuide = !showCollisionGuide;
         if (!entering && IsKeyPressed(KEY_F6)) showSpriteDebug = !showSpriteDebug;
+        bool nearExit = CheckCollisionPointRec(player, clearing.exit);
+        if (!entering && playerHealth > 0 && !clearing.cemetery &&
+            (nearExit || IsKeyPressed(KEY_F7))) {
+            Clearing next = {0};
+            if (InitCemetery(&next)) {
+                UnloadClearing(&clearing);
+                clearing = next;
+                player = clearing.spawn;
+                ResetEnemies(&enemies, &clearing);
+                ResetGun(&gun);
+                ResetBible(&bible);
+                dodgeRemaining = katanaAttackRemaining = 0;
+                entryFadeRemaining = entryFadeDuration;
+                continue;
+            }
+        }
         if (!entering && IsKeyPressed(KEY_F4)) {
             playerHealth -= 5;
             if (playerHealth < 0) playerHealth = 0;
@@ -482,6 +508,7 @@ int main(void) {
                 if (currentWeapon == WEAPON_BIBLE) DrawBible(&bible, player, true);
                 if (currentWeapon == WEAPON_GUN) DrawGun(&gun);
                 DrawEnemies(&enemies, player, true);
+                DrawEnemyProjectiles(&enemies);
                 DrawClearingForeground(&clearing, player);
                 if (showCollisionGuide) {
                     DrawClearingCollisionGuide(&clearing);
@@ -498,14 +525,18 @@ int main(void) {
 
             DrawRectangle(12, 12, 490, 130, Fade(BLACK, 0.72f));
             DrawText("WASD: mover  |  Espaco/botao direito: esquiva", 24, 23, 17, RAYWHITE);
-            DrawText("F3: colisao  |  ESC: menu", 24, 76, 17, RAYWHITE);
+            DrawText("F3: colisao | F7: cemiterio (teste) | ESC: menu", 24, 76, 17, RAYWHITE);
             DrawText("F4/F5: testar dano e cura", 24, 104, 17, RAYWHITE);
             if (pedestalMessageTime > 0.0f) {
                 DrawText("O pedestal ainda esta selado", 24, 53, 18, GOLD);
             } else if (nearPedestal) {
                 DrawText("E: pedestal (ainda selado)", 24, 53, 18, GOLD);
             } else {
-                DrawText("Explore a clareira", 24, 53, 18, RAYWHITE);
+                DrawText(nearExit ? (clearing.cemetery
+                    ? "Vila: proxima etapa do desenvolvimento"
+                    : "Caminhe pela saida para entrar no cemiterio")
+                    : clearing.cemetery ? "Cemiterio das Raizes" : "Explore a clareira",
+                    24, 53, 18, RAYWHITE);
             }
             DrawHud(&hud, playerHealth, playerMaxHealth,
                     dodgeCooldown, dodgeRecovery);

@@ -13,9 +13,14 @@ typedef struct Clearing {
     Rectangle playableBounds;
     Vector2 spawn;
     Vector2 pedestal;
+    bool cemetery;
+    Rectangle obstacles[20];
+    int obstacleCount;
+    Rectangle exit;
 } Clearing;
 
 bool InitClearing(Clearing *clearing);
+bool InitCemetery(Clearing *clearing);
 void DrawClearing(const Clearing *clearing);
 void DrawClearingForeground(const Clearing *clearing, Vector2 player);
 void DrawClearingCollisionGuide(const Clearing *clearing);
