@@ -15,16 +15,22 @@ static Vector2 BookCenter(const Bible *b, Vector2 player, int index) {
 bool InitBible(Bible *b) {
     *b = (Bible){0};
     b->sprites = LoadTexture("assets/biblia_orbita.png");
-    b->activation = LoadTexture("assets/biblia_ativacao.png");
-    if (!b->sprites.id || !b->activation.id) { UnloadBible(b); return false; }
+    b->activation = LoadTexture("assets/biblia_ativacao_nova.png");
+    b->idle = LoadTexture("assets/biblia_idle.png");
+    b->walk = LoadTexture("assets/biblia_caminhada.png");
+    if (!b->sprites.id || !b->activation.id || !b->idle.id || !b->walk.id) { UnloadBible(b); return false; }
     SetTextureFilter(b->sprites, TEXTURE_FILTER_POINT);
     SetTextureFilter(b->activation, TEXTURE_FILTER_POINT);
+    SetTextureFilter(b->idle, TEXTURE_FILTER_POINT);
+    SetTextureFilter(b->walk, TEXTURE_FILTER_POINT);
     return true;
 }
 
 void UnloadBible(Bible *b) {
     if (b->sprites.id) UnloadTexture(b->sprites);
     if (b->activation.id) UnloadTexture(b->activation);
+    if (b->idle.id) UnloadTexture(b->idle);
+    if (b->walk.id) UnloadTexture(b->walk);
     *b = (Bible){0};
 }
 
@@ -40,7 +46,7 @@ void UpdateBible(Bible *b, float dt, bool activate) {
     if (activate && b->boostCooldown <= 0.0f) {
         b->boostRemaining = 1.25f;
         b->boostCooldown = 5.0f;
-        b->activationRemaining = 0.54f;
+        b->activationRemaining = BIBLE_ACTIVATION_DURATION;
     }
     bool boosted = b->boostRemaining > 0.0f;
     b->angle += (boosted ? 4.2f : 1.35f) * dt;
@@ -86,7 +92,7 @@ void DrawBible(const Bible *b, Vector2 player, bool foreground) {
 
 void DrawBibleActivation(const Bible *b, Vector2 player) {
     if (b->activationRemaining <= 0.0f) return;
-    float progress = 1.0f - b->activationRemaining / 0.54f;
+    float progress = 1.0f - b->activationRemaining / BIBLE_ACTIVATION_DURATION;
     Vector2 center = {player.x, player.y - 35.0f};
     float radius = 32.0f + 55.0f * progress;
     Color glow = Fade(GOLD, 0.75f * (1.0f - progress));

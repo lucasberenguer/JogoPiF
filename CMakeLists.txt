@@ -24,6 +24,7 @@ set(SOURCES
     src/bible.c
     src/gun.c
     src/enemy.c
+    src/encounter.c
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
@@ -35,6 +36,12 @@ if(BUILD_TESTING)
     target_include_directories(enemy_audit_test PRIVATE src)
     target_link_libraries(enemy_audit_test PRIVATE raylib)
     add_test(NAME enemy_audit COMMAND enemy_audit_test)
+    add_executable(encounter_test tests/encounter_test.c src/encounter.c src/enemy.c src/clearing.c src/menu.c)
+    target_include_directories(encounter_test PRIVATE src)
+    target_link_libraries(encounter_test PRIVATE raylib)
+    set_target_properties(encounter_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/audit")
+    add_test(NAME clearing_encounter COMMAND encounter_test)
+    set_tests_properties(clearing_encounter PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
 endif()
 
 # Mantem os assets atualizados no diretorio do binario a cada build.

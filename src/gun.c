@@ -5,7 +5,6 @@
 
 #define SHOT_SPEED 760.0f
 #define SHOT_LIFE 1.25f
-#define GUN_POSE_DURATION 0.32f
 #define SHOT_RADIUS 8.0f
 #define SHOT_DAMAGE 11
 
@@ -21,45 +20,41 @@ static void AddImpact(Gun *gun, Vector2 at) {
 bool InitGun(Gun *gun) {
     *gun = (Gun){0};
     gun->projectile = LoadTexture("assets/arma_fogo_projetil.png");
-    gun->flash = LoadTexture("assets/arma_fogo_clarao.png");
     gun->impact = LoadTexture("assets/arma_fogo_impacto.png");
-    gun->body = LoadTexture("assets/arma_fogo_ataque_novo.png");
+    gun->body = LoadTexture("assets/arma_fogo_disparo.png");
     gun->idleBody = LoadTexture("assets/arma_fogo_idle_novo.png");
-    if (!gun->projectile.id || !gun->flash.id || !gun->impact.id ||
-        !gun->body.id || !gun->idleBody.id) {
+    gun->walkBody = LoadTexture("assets/arma_fogo_caminhada.png");
+    if (!gun->projectile.id || !gun->impact.id ||
+        !gun->body.id || !gun->idleBody.id || !gun->walkBody.id) {
         UnloadGun(gun);
         return false;
     }
     SetTextureFilter(gun->projectile, TEXTURE_FILTER_POINT);
-    SetTextureFilter(gun->flash, TEXTURE_FILTER_POINT);
     SetTextureFilter(gun->impact, TEXTURE_FILTER_POINT);
     SetTextureFilter(gun->body, TEXTURE_FILTER_POINT);
     SetTextureFilter(gun->idleBody, TEXTURE_FILTER_POINT);
+    SetTextureFilter(gun->walkBody, TEXTURE_FILTER_POINT);
     return true;
 }
 
 void UnloadGun(Gun *gun) {
     if (gun->projectile.id) UnloadTexture(gun->projectile);
-    if (gun->flash.id) UnloadTexture(gun->flash);
     if (gun->impact.id) UnloadTexture(gun->impact);
     if (gun->body.id) UnloadTexture(gun->body);
     if (gun->idleBody.id) UnloadTexture(gun->idleBody);
+    if (gun->walkBody.id) UnloadTexture(gun->walkBody);
     *gun = (Gun){0};
 }
 
 void ResetGun(Gun *gun) {
     memset(gun->shots, 0, sizeof(gun->shots));
     memset(gun->impacts, 0, sizeof(gun->impacts));
-    gun->flashRemaining = 0.0f;
     gun->poseRemaining = 0.0f;
     gun->aim = (Vector2){1.0f, 0.0f};
-    gun->flashAim = gun->aim;
-    gun->flashMuzzle = (Vector2){0};
 }
 
 void UpdateGun(Gun *gun, const Clearing *clearing, Vector2 player,
                Vector2 aimWorld, float dt, bool triggerPressed) {
-    gun->flashRemaining = fmaxf(0.0f, gun->flashRemaining-dt);
     gun->poseRemaining = fmaxf(0.0f, gun->poseRemaining-dt);
     for (int i=0; i<GUN_MAX_IMPACTS; i++)
         gun->impacts[i].remaining = fmaxf(0.0f, gun->impacts[i].remaining-dt);
@@ -68,13 +63,13 @@ void UpdateGun(Gun *gun, const Clearing *clearing, Vector2 player,
     if (Vector2LengthSqr(delta) > 4.0f) gun->aim = Vector2Normalize(delta);
     gun->muzzle = Vector2Add(origin, Vector2Scale(gun->aim, 32.0f));
 
+    int newShot = -1;
     if (triggerPressed) {
         for (int i=0; i<GUN_MAX_SHOTS; i++) {
             if (gun->shots[i].life <= 0.0f) {
-                gun->shots[i] = (GunShot){gun->muzzle, gun->aim, SHOT_LIFE};
-                gun->flashRemaining = 0.11f;
-                gun->flashMuzzle = gun->muzzle;
-                gun->flashAim = gun->aim;
+                gun->shots[i] = (GunShot){gun->muzzle, gun->aim, SHOT_LIFE,
+                                         GUN_POSE_DURATION * 2.0f / GUN_POSE_FRAMES};
+                newShot = i;
                 gun->poseRemaining = GUN_POSE_DURATION;
                 break;
             }
@@ -83,7 +78,14 @@ void UpdateGun(Gun *gun, const Clearing *clearing, Vector2 player,
     for (int i=0; i<GUN_MAX_SHOTS; i++) {
         GunShot *shot = &gun->shots[i];
         if (shot->life <= 0.0f) continue;
-        Vector2 travel = Vector2Scale(shot->direction, SHOT_SPEED*dt);
+        float activeDt = i == newShot ? 0.0f : dt;
+        if (shot->delay > 0.0f) {
+            float anticipation = fminf(activeDt, shot->delay);
+            shot->delay -= anticipation;
+            activeDt -= anticipation;
+            if (shot->delay > 0.0f || activeDt <= 0.0f) continue;
+        }
+        Vector2 travel = Vector2Scale(shot->direction, SHOT_SPEED*activeDt);
         int steps = (int)(Vector2Length(travel)/7.0f)+1;
         Vector2 step = Vector2Scale(travel, 1.0f/steps);
         for (int j=0; j<steps; j++) {
@@ -95,14 +97,14 @@ void UpdateGun(Gun *gun, const Clearing *clearing, Vector2 player,
             }
             shot->position = next;
         }
-        if (shot->life > 0.0f) shot->life = fmaxf(0.0f, shot->life-dt);
+        if (shot->life > 0.0f) shot->life = fmaxf(0.0f, shot->life-activeDt);
     }
 }
 
 void DrawGun(const Gun *gun) {
     for (int i=0; i<GUN_MAX_SHOTS; i++) {
         const GunShot *shot = &gun->shots[i];
-        if (shot->life <= 0.0f) continue;
+        if (shot->life <= 0.0f || shot->delay > 0.0f) continue;
         Vector2 tail = Vector2Subtract(shot->position, Vector2Scale(shot->direction, 18.0f));
         DrawLineEx(tail, shot->position, 2.0f, Fade(GOLD, 0.45f));
         float angle = atan2f(shot->direction.y, shot->direction.x)*RAD2DEG;
@@ -119,20 +121,13 @@ void DrawGun(const Gun *gun) {
             (Rectangle){impact->position.x-24,impact->position.y-24,48,48},
             (Vector2){0},0,Fade(WHITE, impact->remaining/0.18f));
     }
-    if (gun->flashRemaining > 0.0f) {
-        float angle = atan2f(gun->flashAim.y, gun->flashAim.x)*RAD2DEG;
-        DrawTexturePro(gun->flash,
-            (Rectangle){0,0,(float)gun->flash.width,(float)gun->flash.height},
-            (Rectangle){gun->flashMuzzle.x,gun->flashMuzzle.y,44,44},
-            (Vector2){22,22},angle,Fade(WHITE,gun->flashRemaining/0.11f));
-    }
 }
 
 int GunHitCircle(Gun *gun, Vector2 enemy, float enemyRadius) {
     float limit = SHOT_RADIUS + enemyRadius;
     for (int i=0; i<GUN_MAX_SHOTS; i++) {
         GunShot *shot = &gun->shots[i];
-        if (shot->life <= 0.0f) continue;
+        if (shot->life <= 0.0f || shot->delay > 0.0f) continue;
         if (Vector2DistanceSqr(shot->position, enemy) <= limit*limit) {
             AddImpact(gun, shot->position);
             shot->life = 0.0f;

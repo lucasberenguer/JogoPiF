@@ -17,21 +17,47 @@ static Rectangle ButtonBounds(int i) {
 }
 
 bool SaveMenuCheckpoint(int weapon) {
-    char data[64];
     if (weapon < 0 || weapon > 2) return false;
-    snprintf(data, sizeof(data), "PIF-CLEARING-2 %d\n", weapon);
+    RunProgress progress=NewRunProgress(weapon);
+    return SaveClearingCheckpoint(&progress);
+}
+
+bool SaveClearingCheckpoint(const RunProgress *p) {
+    char data[256];
+    snprintf(data,sizeof(data),"PIF-CLEARING-3 %d %d %d %d %.6f %.6f %.6f %d %d %d %d\n",
+        p->weapon,p->stage,p->health,p->maxHealth,p->damage,p->speed,p->bossPower,
+        p->weaponLevel[0],p->weaponLevel[1],p->weaponLevel[2],p->strongWeapon);
     return SaveFileText(SavePath(), data);
 }
 
-int LoadMenuCheckpointWeapon(void) {
-    if (!FileExists(SavePath())) return -1;
+bool LoadClearingCheckpoint(RunProgress *p) {
+    if (!FileExists(SavePath())) return false;
     char *data = LoadFileText(SavePath());
-    if (!data) return -1;
+    if (!data) return false;
+    RunProgress loaded={0};
+    int fields=sscanf(data,"PIF-CLEARING-3 %d %d %d %d %f %f %f %d %d %d %d",
+        &loaded.weapon,&loaded.stage,&loaded.health,&loaded.maxHealth,&loaded.damage,
+        &loaded.speed,&loaded.bossPower,&loaded.weaponLevel[0],&loaded.weaponLevel[1],
+        &loaded.weaponLevel[2],&loaded.strongWeapon);
     int weapon = -1;
-    if (sscanf(data, "PIF-CLEARING-2 %d", &weapon) != 1 || weapon < 0 || weapon > 2)
-        weapon = -1;
+    if (fields!=11 && sscanf(data,"PIF-CLEARING-2 %d",&weapon)==1 && weapon>=0 && weapon<3)
+        loaded=NewRunProgress(weapon);
+    else if (fields!=11) loaded.weapon=-1;
     UnloadFileText(data);
-    return weapon;
+    bool valid=loaded.weapon>=0 && loaded.weapon<3 && loaded.stage>=1 && loaded.stage<=7 &&
+        loaded.health>0 && loaded.health<=loaded.maxHealth && loaded.maxHealth<=10000 &&
+        isfinite(loaded.damage) && loaded.damage>=1 && loaded.damage<=100 &&
+        isfinite(loaded.speed) && loaded.speed>=100 && loaded.speed<=1000 &&
+        isfinite(loaded.bossPower) && loaded.bossPower>=1 && loaded.bossPower<=100 &&
+        loaded.strongWeapon>=-1 && loaded.strongWeapon<3;
+    for (int i=0;i<3;i++) if (loaded.weaponLevel[i]<0 || loaded.weaponLevel[i]>3) valid=false;
+    if (valid) *p=loaded;
+    return valid;
+}
+
+int LoadMenuCheckpointWeapon(void) {
+    RunProgress progress;
+    return LoadClearingCheckpoint(&progress) ? progress.weapon : -1;
 }
 
 bool InitMenu(Menu *m) {

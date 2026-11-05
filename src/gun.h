@@ -5,10 +5,13 @@
 
 #define GUN_MAX_SHOTS 48
 #define GUN_MAX_IMPACTS 16
+#define GUN_POSE_DURATION 0.32f
+#define GUN_POSE_FRAMES 8
 typedef struct GunShot {
     Vector2 position;
     Vector2 direction;
     float life;
+    float delay;
 } GunShot;
 typedef struct GunImpact {
     Vector2 position;
@@ -16,17 +19,14 @@ typedef struct GunImpact {
 } GunImpact;
 typedef struct Gun {
     Texture2D projectile;
-    Texture2D flash;
     Texture2D impact;
     Texture2D body;
     Texture2D idleBody;
+    Texture2D walkBody;
     GunShot shots[GUN_MAX_SHOTS];
     GunImpact impacts[GUN_MAX_IMPACTS];
     Vector2 muzzle;
     Vector2 aim;
-    Vector2 flashMuzzle;
-    Vector2 flashAim;
-    float flashRemaining;
     float poseRemaining;
 } Gun;
 
