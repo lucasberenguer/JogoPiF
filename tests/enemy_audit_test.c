@@ -43,7 +43,7 @@ int main(void) {
     map.playableBounds=(Rectangle){0,0,1670,942};
     EnemyGroup group={0};
     ResetEnemies(&group,&map);
-    for (int i=4;i<ENEMY_COUNT;i++) assert(group.list[i].state==ENEMY_GONE);
+    assert(EnemiesRemaining(&group)==6);
     map.cemetery=true;
     ResetEnemies(&group,&map);
     assert(group.list[4].type==ENEMY_COMMON_RANGED);

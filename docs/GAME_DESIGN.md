@@ -1,6 +1,6 @@
 # Jogo PIF — base de design
 
-Estado: decisões de jogo discutidas com o criador até 2 de novembro de 2026. Este documento descreve o jogo pretendido; o repositório ainda contém apenas uma janela raylib inicial. Valores e conteúdos marcados como **a definir** serão decididos no protótipo.
+Este documento descreve o jogo pretendido. O protótipo já implementa o ciclo da clareira: cinco ondas, escolhas de bônus, selos, primeiro chefe e salvamento no início das etapas. Valores e conteúdos marcados como **a definir** serão decididos no protótipo.
 
 ## Premissa
 
@@ -33,14 +33,14 @@ Jogo PIF é um roguelite de ação 2D com visão superior. O jogador atravessa u
 | Ação | Controle | Regra |
 | --- | --- | --- |
 | Mover | WASD | Movimento livre na arena. |
-| Atacar | Botão esquerdo do mouse | Katana e arma de fogo repetem ataques enquanto o botão está pressionado, respeitando a cadência. |
-| Esquivar | Espaço ou botão direito do mouse | Impulso curto na direção do movimento, com recarga. |
+| Atacar | Botão esquerdo do mouse | Katana e arma de fogo atacam uma vez por clique, respeitando a cadência. |
+| Esquivar | Espaço ou botão direito do mouse | Impulso curto com recarga. Com a Bíblia, a esquiva usa Espaço. |
 | Ativar ultimate | Q | Disponível quando a barra estiver cheia. |
 | Interagir/selar | E | Usado perto de um corpo ou objeto interativo. |
 
 Uma única arma fica equipada por vez:
 
-- **Bíblia:** gira automaticamente ao redor do personagem. Um clique esquerdo, quando a habilidade está pronta, acelera sua rotação por um período.
+- **Bíblia:** gira automaticamente ao redor do personagem. Um clique direito, quando a habilidade está pronta, acelera sua rotação por um período.
 - **Katana:** golpe em área acionado pelo jogador.
 - **Arma de fogo:** tiros em linha reta na direção apontada pelo jogador.
 

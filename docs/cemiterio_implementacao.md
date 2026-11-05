@@ -73,3 +73,6 @@ Trabalhar em incrementos integrados: primeiro navegaÃ§Ã£o e escala; depois um es
 - Validar visual em jogo: sprites, transparÃªncia, pÃ©s, tamanho e avisos. Esse aceite ainda estÃ¡ pendente.
 
 ValidaÃ§Ã£o automÃ¡tica executada: compilaÃ§Ã£o CMake/Ninja e CTest, incluindo formaÃ§Ã£o dos grupos, invulnerabilidade inicial do chefe, sequÃªncia inicial de raÃ­zes, preparaÃ§Ã£o nÃ£o interrompida por dano, esquiva e intervalo de imunidade. NÃ£o substitui teste interativo.
+
+## Integração com as atualizações da equipe
+As ondas, recompensas, chefe e checkpoint ampliado da clareira foram preservados. O grupo compartilhado suporta 24 posições; o cemitério usa as sete primeiras. Seus comportamentos ficam em src/cemetery_enemy.c, acessados pela interface de enemy.c. O controlador de encontros da clareira é suspenso durante o cemitério para não criar ondas ou recompensas da clareira nessa fase. Continuar restaura o checkpoint da clareira; salvar a fase do cemitério continua pendente. A descrição antiga de checkpoint apenas de arma foi superada pelo sistema novo da equipe.

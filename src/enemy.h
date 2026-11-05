@@ -3,18 +3,36 @@
 #include "raylib.h"
 #include "clearing.h"
 
-#define ENEMY_COUNT 7
-#define ENEMY_PROJECTILES 32
+#define ENEMY_COUNT 24
+#define ENEMY_PROJECTILE_COUNT 48
+#define ENEMY_ROOT_COUNT 8
+typedef struct EnemyRoot {
+    Vector2 position;
+    float age;
+    bool active;
+    bool hit;
+} EnemyRoot;
+typedef struct EnemyProjectile {
+    Vector2 position;
+    Vector2 direction;
+    float remaining;
+    int damage;
+} EnemyProjectile;
 typedef enum EnemyType {
     ENEMY_COMMON_MELEE, ENEMY_COMMON_RANGED, ENEMY_SPECIAL,
     ENEMY_ELITE, ENEMY_BOSS
 } EnemyType;
 typedef enum EnemyState {
-    ENEMY_IDLE, ENEMY_WALK, ENEMY_ATTACK, ENEMY_HURT, ENEMY_DIE, ENEMY_GONE
+    ENEMY_IDLE, ENEMY_WALK, ENEMY_ATTACK, ENEMY_HURT, ENEMY_DIE, ENEMY_GONE,
+    ENEMY_SPAWNING, ENEMY_FALLEN
 } EnemyState;
 typedef struct Enemy {
     Vector2 position; /* ponto dos pes */
     int health;
+    int maxHealth;
+    float speed;
+    float power;
+    Vector2 attackDirection;
     EnemyType type;
     EnemyState state;
     int facing;
@@ -26,43 +44,57 @@ typedef struct Enemy {
     bool attackConnected;
     bool pickupAvailable;
     bool dropRolled;
-    int maxHealth;
+    bool cemeteryUnit, dormant;
     int bossAttack;
-    bool dormant;
-    Vector2 attackDirection;
     Vector2 attackTarget;
 } Enemy;
-typedef struct EnemyProjectile {
+typedef struct CemeteryProjectile {
     bool active;
-    Vector2 position, velocity;
+    Vector2 position,velocity;
     float life;
     int kind;
-} EnemyProjectile;
+} CemeteryProjectile;
 typedef struct EnemyGroup {
     Texture2D sprites;
     Texture2D backSprites;
     Texture2D frontSprites;
+    Texture2D rangedSprites;
+    Texture2D bossSprites, bossAttack, roots;
     Enemy list[ENEMY_COUNT];
+    EnemyProjectile projectiles[ENEMY_PROJECTILE_COUNT];
+    EnemyRoot rootAttacks[ENEMY_ROOT_COUNT];
     float playerHitCooldown;
     bool cemetery;
-    Texture2D skeleton, mage, boss[3];
-    Texture2D effects[3];
-    EnemyProjectile projectiles[ENEMY_PROJECTILES];
+    Texture2D skeleton,mage,boss[3],effects[3];
+    CemeteryProjectile cemeteryProjectiles[32];
 } EnemyGroup;
 
 bool InitEnemies(EnemyGroup *group);
 void UnloadEnemies(EnemyGroup *group);
 void ResetEnemies(EnemyGroup *group, const Clearing *clearing);
+void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
+                    Vector2 player, float playerPower);
+void StartClearingBoss(EnemyGroup *group, const Clearing *clearing, Vector2 player,
+                       float power);
+void ClearEnemyAttacks(EnemyGroup *group);
+int EnemiesRemaining(const EnemyGroup *group);
+float EnemyHurtRadius(const Enemy *enemy);
 void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                    Vector2 player, float deltaTime, bool playerDodging,
                    int *playerHealth, int playerMaxHealth);
 void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground);
 void DamageEnemy(Enemy *enemy, int damage);
+void KnockbackEnemy(Enemy *enemy, const Clearing *clearing,
+                    Vector2 source, float distance);
 bool EnemyCanBeHit(const Enemy *enemy);
 Vector2 EnemyCenter(const Enemy *enemy);
 int EnemyOptionalDropChance(EnemyType type);
 bool EnemyShouldDrop(EnemyType type, int roll);
 int EnemyAnimationFrame(const Enemy *enemy);
 void DrawEnemyDebug(const EnemyGroup *group);
-void DrawEnemyProjectiles(const EnemyGroup *group);
+void CemeteryResetEnemies(EnemyGroup *,const Clearing *);
+void CemeteryDamageEnemy(Enemy *,int);
+void CemeteryUpdateEnemies(EnemyGroup *,const Clearing *,Vector2,float,bool,int *,int);
+void CemeteryDrawEnemies(const EnemyGroup *,Vector2,bool);
+void DrawEnemyProjectiles(const EnemyGroup *);
 #endif
