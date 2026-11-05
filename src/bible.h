@@ -17,6 +17,7 @@ void UnloadBible(Bible *bible);
 void ResetBible(Bible *bible);
 void UpdateBible(Bible *bible, float deltaTime, bool activate);
 void DrawBible(const Bible *bible, Vector2 player, bool foreground);
+void DrawBibleActivation(const Bible *bible, Vector2 player);
 bool BibleTouchesCircle(const Bible *bible, Vector2 player,
                         Vector2 enemy, float enemyRadius);
 int BibleContactDamage(void);

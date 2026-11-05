@@ -52,6 +52,32 @@ static Vector2 FacingVector(int facing) {
     }
 }
 
+typedef struct KatanaSprites {
+    Texture2D idle;
+    Texture2D attack[3];
+} KatanaSprites;
+
+static void UnloadKatanaSprites(KatanaSprites *sprites) {
+    if (sprites->idle.id) UnloadTexture(sprites->idle);
+    for (int i = 0; i < 3; i++)
+        if (sprites->attack[i].id) UnloadTexture(sprites->attack[i]);
+    *sprites = (KatanaSprites){0};
+}
+
+static bool InitKatanaSprites(KatanaSprites *sprites) {
+    *sprites = (KatanaSprites){0};
+    sprites->idle = LoadTexture("assets/katana_idle_novo.png");
+    for (int i = 0; i < 3; i++)
+        sprites->attack[i] = LoadTexture(TextFormat("assets/katana_golpe_%d.png", i + 1));
+    if (!sprites->idle.id) { UnloadKatanaSprites(sprites); return false; }
+    SetTextureFilter(sprites->idle, TEXTURE_FILTER_POINT);
+    for (int i = 0; i < 3; i++) {
+        if (!sprites->attack[i].id) { UnloadKatanaSprites(sprites); return false; }
+        SetTextureFilter(sprites->attack[i], TEXTURE_FILTER_POINT);
+    }
+    return true;
+}
+
 int main(void) {
     InitWindow(1280, 720, "Jogo PIF - Clareira");
     const int monitor = GetCurrentMonitor();
@@ -85,32 +111,19 @@ int main(void) {
     }
     SetTextureFilter(dodgeSprites, TEXTURE_FILTER_POINT);
 
-    Texture2D katanaCut = LoadTexture("assets/katana_corte.png");
-    if (katanaCut.id == 0) {
-        TraceLog(LOG_ERROR, "Nao foi possivel carregar assets/katana_corte.png");
+    KatanaSprites katanaSprites = {0};
+    if (!InitKatanaSprites(&katanaSprites)) {
+        TraceLog(LOG_ERROR, "Nao foi possivel carregar os sprites da katana");
         UnloadTexture(dodgeSprites);
         UnloadTexture(protagonist);
         UnloadClearing(&clearing);
         CloseWindow();
         return 1;
     }
-    SetTextureFilter(katanaCut, TEXTURE_FILTER_POINT);
-    Texture2D katanaBody = LoadTexture("assets/katana_corpo.png");
-    if (katanaBody.id == 0) {
-        TraceLog(LOG_ERROR, "Nao foi possivel carregar assets/katana_corpo.png");
-        UnloadTexture(katanaCut);
-        UnloadTexture(dodgeSprites);
-        UnloadTexture(protagonist);
-        UnloadClearing(&clearing);
-        CloseWindow();
-        return 1;
-    }
-    SetTextureFilter(katanaBody, TEXTURE_FILTER_POINT);
 
     Hud hud = { 0 };
     if (!InitHud(&hud)) {
-        UnloadTexture(katanaBody);
-        UnloadTexture(katanaCut);
+        UnloadKatanaSprites(&katanaSprites);
         UnloadTexture(dodgeSprites);
         UnloadTexture(protagonist);
         UnloadClearing(&clearing);
@@ -120,8 +133,7 @@ int main(void) {
 
     Menu menu = { 0 };
     if (!InitMenu(&menu)) {
-        UnloadTexture(katanaBody);
-        UnloadTexture(katanaCut);
+        UnloadKatanaSprites(&katanaSprites);
         UnloadHud(&hud);
         UnloadTexture(dodgeSprites);
         UnloadTexture(protagonist);
@@ -131,8 +143,7 @@ int main(void) {
     }
     WeaponSelect weaponSelect = { 0 };
     if (!InitWeaponSelect(&weaponSelect)) {
-        UnloadTexture(katanaBody);
-        UnloadTexture(katanaCut);
+        UnloadKatanaSprites(&katanaSprites);
         UnloadMenu(&menu);
         UnloadHud(&hud);
         UnloadTexture(dodgeSprites);
@@ -143,11 +154,10 @@ int main(void) {
     }
     Bible bible = { 0 };
     if (!InitBible(&bible)) {
-        UnloadTexture(katanaBody);
+        UnloadKatanaSprites(&katanaSprites);
         UnloadWeaponSelect(&weaponSelect);
         UnloadMenu(&menu);
         UnloadHud(&hud);
-        UnloadTexture(katanaCut);
         UnloadTexture(dodgeSprites);
         UnloadTexture(protagonist);
         UnloadClearing(&clearing);
@@ -156,12 +166,11 @@ int main(void) {
     }
     Gun gun = { 0 };
     if (!InitGun(&gun)) {
-        UnloadTexture(katanaBody);
+        UnloadKatanaSprites(&katanaSprites);
         UnloadBible(&bible);
         UnloadWeaponSelect(&weaponSelect);
         UnloadMenu(&menu);
         UnloadHud(&hud);
-        UnloadTexture(katanaCut);
         UnloadTexture(dodgeSprites);
         UnloadTexture(protagonist);
         UnloadClearing(&clearing);
@@ -175,8 +184,7 @@ int main(void) {
         UnloadWeaponSelect(&weaponSelect);
         UnloadMenu(&menu);
         UnloadHud(&hud);
-        UnloadTexture(katanaBody);
-        UnloadTexture(katanaCut);
+        UnloadKatanaSprites(&katanaSprites);
         UnloadTexture(dodgeSprites);
         UnloadTexture(protagonist);
         UnloadClearing(&clearing);
@@ -202,7 +210,7 @@ int main(void) {
     bool showSpriteDebug = false;
     float pedestalMessageTime = 0.0f;
     const float katanaAttackDuration = 0.42f;
-    const float katanaAttackRecovery = 0.22f;
+    const float katanaAttackRecovery = 1.0f;
     float katanaAttackRemaining = 0.0f;
     float katanaAttackCooldown = 0.0f;
     int katanaAttackFacing = 0;
@@ -238,6 +246,7 @@ int main(void) {
                 ResetEnemies(&enemies, &clearing);
                 katanaAttackRemaining = 0.0f;
                 katanaAttackCooldown = 0.0f;
+                katanaAttackId = 0;
                 entryFadeRemaining = entryFadeDuration;
             }
             BeginDrawing();
@@ -265,6 +274,7 @@ int main(void) {
                 ResetEnemies(&enemies, &clearing);
                 katanaAttackRemaining = 0.0f;
                 katanaAttackCooldown = 0.0f;
+                katanaAttackId = 0;
                 entryFadeRemaining = entryFadeDuration;
                 screen = 2;
             }
@@ -401,9 +411,10 @@ int main(void) {
                 } else if (currentWeapon == WEAPON_BIBLE && enemy->bibleHitCooldown <= 0.0f &&
                            BibleTouchesCircle(&bible, player, center, 20.0f)) {
                     DamageEnemy(enemy, BibleContactDamage());
+                    KnockbackEnemy(enemy, &clearing, player, 36.0f);
                     enemy->bibleHitCooldown = 0.55f;
                 } else if (currentWeapon == WEAPON_KATANA && katanaAttackRemaining > 0.0f &&
-                           katanaAttackRemaining <= katanaAttackDuration*0.72f &&
+                           katanaAttackRemaining <= katanaAttackDuration*0.5f &&
                            enemy->lastKatanaSwing != katanaAttackId) {
                     Vector2 delta = Vector2Subtract(center, playerCenter);
                     float distance = Vector2Length(delta);
@@ -429,6 +440,7 @@ int main(void) {
                 DrawClearing(&clearing);
                 DrawEnemies(&enemies, player, false);
                 if (currentWeapon == WEAPON_BIBLE) DrawBible(&bible, player, false);
+                if (currentWeapon == WEAPON_BIBLE) DrawBibleActivation(&bible, player);
                 if (dodging) {
                     DrawTexturePro(dodgeSprites,
                         (Rectangle) { dodgeFrame * 112.0f, facing * 80.0f, 112.0f, 80.0f },
@@ -438,46 +450,50 @@ int main(void) {
                     bool attacking = currentWeapon == WEAPON_KATANA && katanaAttackRemaining > 0.0f;
                     bool firing = currentWeapon == WEAPON_GUN && gun.poseRemaining > 0.0f;
                     bool invoking = currentWeapon == WEAPON_BIBLE && bible.activationRemaining > 0.0f;
-                    int cutFrame = 0;
-                    if (attacking) {
-                        float progress = 1.0f - katanaAttackRemaining / katanaAttackDuration;
-                        cutFrame = (int)(progress * 4.0f);
-                        if (cutFrame > 3) cutFrame = 3;
-                    }
                     int poseFrame = frame;
                     int bodyFacing = facing;
                     Texture2D bodyTexture = protagonist;
                     if (attacking) {
-                        bodyTexture = katanaBody;
-                        poseFrame = cutFrame;
+                        bodyTexture = katanaSprites.attack[(katanaAttackId - 1) % 3];
+                        float progress = 1.0f - katanaAttackRemaining / katanaAttackDuration;
+                        poseFrame = (int)(progress * 6.0f);
+                        if (poseFrame > 5) poseFrame = 5;
                         bodyFacing = katanaAttackFacing;
+                    } else if (currentWeapon == WEAPON_KATANA) {
+                        bodyTexture = katanaSprites.idle;
+                        poseFrame = walking ? 1 + (int)(walkTime * 7.0f) % 3 : 0;
                     } else if (firing) {
                         bodyTexture = gun.body;
-                        poseFrame = (int)((1.0f - gun.poseRemaining / 0.32f) * 4.0f);
-                        if (poseFrame > 3) poseFrame = 3;
+                        poseFrame = (int)((1.0f - gun.poseRemaining / 0.32f) * 5.0f);
+                        if (poseFrame > 4) poseFrame = 4;
                         bodyFacing = gunAttackFacing;
+                    } else if (currentWeapon == WEAPON_GUN) {
+                        bodyTexture = gun.idleBody;
+                        poseFrame = walking ? 1 + (int)(walkTime * 7.0f) % 3 : 0;
                     } else if (invoking) {
                         bodyTexture = bible.activation;
                         poseFrame = (int)((1.0f - bible.activationRemaining / 0.54f) * 6.0f);
                         if (poseFrame > 5) poseFrame = 5;
                         bodyFacing = bibleAttackFacing;
                     }
-                    DrawTexturePro(bodyTexture,
-                        (Rectangle) { poseFrame * 64.0f,
-                                      bodyFacing * 80.0f,
-                                      64.0f, 80.0f },
-                        (Rectangle) { player.x - 30.0f, player.y - 72.0f, 60.0f, 75.0f },
-                        (Vector2) { 0, 0 }, 0.0f, WHITE);
-                    if (attacking) {
-                        Vector2 forward = FacingVector(katanaAttackFacing);
-                        Vector2 center = {player.x + forward.x * 40.0f,
-                                          player.y - 34.0f + forward.y * 40.0f};
-                        DrawTexturePro(katanaCut,
-                            (Rectangle){cutFrame * 192.0f, katanaAttackFacing * 192.0f,
-                                        192.0f, 192.0f},
-                            (Rectangle){center.x - 80.0f, center.y - 80.0f, 160.0f, 160.0f},
-                            (Vector2){0, 0}, 0.0f, WHITE);
+                    Rectangle bodyDestination = {player.x - 30.0f, player.y - 72.0f, 60.0f, 75.0f};
+                    Rectangle bodySource = {poseFrame * 64.0f, bodyFacing * 80.0f, 64.0f, 80.0f};
+                    if (currentWeapon == WEAPON_KATANA) {
+                        bodySource = (Rectangle){poseFrame * 160.0f, bodyFacing * 112.0f,
+                                                 160.0f, 112.0f};
+                        bodyDestination = (Rectangle){player.x - 80.0f,
+                                                       player.y - 108.0f, 160.0f, 112.0f};
+                    } else if (currentWeapon == WEAPON_GUN) {
+                        // A arte da arma tem o corpo mais estreito que o sprite normal.
+                        // Usa a mesma escala para espera, caminhada e disparo.
+                        float width = bodyFacing < 2 ? 68.0f : 76.0f;
+                        bodyDestination = (Rectangle){player.x - width * 0.5f,
+                            player.y - 72.0f, width, 75.0f};
                     }
+                    DrawTexturePro(bodyTexture,
+                        bodySource,
+                        bodyDestination,
+                        (Vector2) { 0, 0 }, 0.0f, WHITE);
                 }
                 if (currentWeapon == WEAPON_BIBLE) DrawBible(&bible, player, true);
                 if (currentWeapon == WEAPON_GUN) DrawGun(&gun);
@@ -535,8 +551,7 @@ int main(void) {
     UnloadWeaponSelect(&weaponSelect);
     UnloadMenu(&menu);
     UnloadHud(&hud);
-    UnloadTexture(katanaBody);
-    UnloadTexture(katanaCut);
+    UnloadKatanaSprites(&katanaSprites);
     UnloadTexture(dodgeSprites);
     UnloadTexture(protagonist);
     UnloadClearing(&clearing);

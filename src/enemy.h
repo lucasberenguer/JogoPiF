@@ -4,6 +4,12 @@
 #include "clearing.h"
 
 #define ENEMY_COUNT 4
+#define ENEMY_PROJECTILE_COUNT 16
+typedef struct EnemyProjectile {
+    Vector2 position;
+    Vector2 direction;
+    float remaining;
+} EnemyProjectile;
 typedef enum EnemyType {
     ENEMY_COMMON_MELEE, ENEMY_COMMON_RANGED, ENEMY_SPECIAL,
     ENEMY_ELITE, ENEMY_BOSS
@@ -30,7 +36,9 @@ typedef struct EnemyGroup {
     Texture2D sprites;
     Texture2D backSprites;
     Texture2D frontSprites;
+    Texture2D rangedSprites;
     Enemy list[ENEMY_COUNT];
+    EnemyProjectile projectiles[ENEMY_PROJECTILE_COUNT];
     float playerHitCooldown;
 } EnemyGroup;
 
@@ -42,6 +50,8 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                    int *playerHealth, int playerMaxHealth);
 void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground);
 void DamageEnemy(Enemy *enemy, int damage);
+void KnockbackEnemy(Enemy *enemy, const Clearing *clearing,
+                    Vector2 source, float distance);
 bool EnemyCanBeHit(const Enemy *enemy);
 Vector2 EnemyCenter(const Enemy *enemy);
 int EnemyOptionalDropChance(EnemyType type);

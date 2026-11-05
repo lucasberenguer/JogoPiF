@@ -1,12 +1,16 @@
 #include "enemy.h"
 #include "raymath.h"
 #include <math.h>
+#include <string.h>
 
 #define ENEMY_MAX_HEALTH 60
 #define ENEMY_SPEED 92.0f
 #define ENEMY_ATTACK_RANGE 64.0f
 #define ENEMY_ATTACK_DAMAGE 12
 #define ENEMY_HURT_RADIUS 20.0f
+#define RANGED_MIN_DISTANCE 170.0f
+#define RANGED_MAX_DISTANCE 300.0f
+#define RANGED_SHOT_SPEED 330.0f
 
 int EnemyOptionalDropChance(EnemyType type) {
     switch (type) {
@@ -24,7 +28,8 @@ bool EnemyShouldDrop(EnemyType type, int roll) {
 }
 
 int EnemyAnimationFrame(const Enemy *enemy) {
-    int count = enemy->state == ENEMY_ATTACK || enemy->state == ENEMY_DIE ? 5 : 4;
+    int count = enemy->type == ENEMY_COMMON_RANGED ? 4 :
+                enemy->state == ENEMY_ATTACK || enemy->state == ENEMY_DIE ? 5 : 4;
     float speed = enemy->state == ENEMY_DIE ? 5.9f :
                   enemy->state == ENEMY_ATTACK ? 8.0f :
                   enemy->state == ENEMY_HURT ? 12.0f : 7.5f;
@@ -39,13 +44,16 @@ bool InitEnemies(EnemyGroup *group) {
     group->sprites = LoadTexture("assets/inimigo_encapuzado.png");
     group->backSprites = LoadTexture("assets/inimigo_encapuzado_costas.png");
     group->frontSprites = LoadTexture("assets/inimigo_encapuzado_frente.png");
-    if (!group->sprites.id || !group->backSprites.id || !group->frontSprites.id) {
+    group->rangedSprites = LoadTexture("assets/inimigo_ranged.png");
+    if (!group->sprites.id || !group->backSprites.id || !group->frontSprites.id ||
+        !group->rangedSprites.id) {
         UnloadEnemies(group);
         return false;
     }
     SetTextureFilter(group->sprites, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->backSprites, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->frontSprites, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->rangedSprites, TEXTURE_FILTER_POINT);
     return true;
 }
 
@@ -53,11 +61,13 @@ void UnloadEnemies(EnemyGroup *group) {
     if (group->sprites.id) UnloadTexture(group->sprites);
     if (group->backSprites.id) UnloadTexture(group->backSprites);
     if (group->frontSprites.id) UnloadTexture(group->frontSprites);
+    if (group->rangedSprites.id) UnloadTexture(group->rangedSprites);
     *group = (EnemyGroup){0};
 }
 
 void ResetEnemies(EnemyGroup *group, const Clearing *clearing) {
     group->playerHitCooldown = 0.0f;
+    memset(group->projectiles, 0, sizeof(group->projectiles));
     const Vector2 spawns[ENEMY_COUNT] = {
         {355, 330}, {1270, 340}, {440, 655}, {1280, 675}
     };
@@ -76,7 +86,7 @@ void ResetEnemies(EnemyGroup *group, const Clearing *clearing) {
             }
         }
         enemy->health = ENEMY_MAX_HEALTH;
-        enemy->type = ENEMY_COMMON_MELEE;
+        enemy->type = i == 1 ? ENEMY_COMMON_RANGED : ENEMY_COMMON_MELEE;
         enemy->state = ENEMY_IDLE;
         enemy->facing = i%2 ? 2 : 3;
         enemy->lastKatanaSwing = -1;
@@ -123,6 +133,26 @@ static void MoveEnemy(const Clearing *clearing, Enemy *enemy, Vector2 delta) {
     }
 }
 
+void KnockbackEnemy(Enemy *enemy, const Clearing *clearing,
+                    Vector2 source, float distance) {
+    if (!EnemyCanBeHit(enemy)) return;
+    Vector2 away = Vector2Subtract(enemy->position, source);
+    if (Vector2LengthSqr(away) < 0.001f) return;
+    MoveEnemy(clearing, enemy, Vector2Scale(Vector2Normalize(away), distance));
+}
+
+static void FireRangedProjectile(EnemyGroup *group, const Enemy *enemy, Vector2 player) {
+    Vector2 origin = EnemyCenter(enemy);
+    Vector2 toward = Vector2Subtract((Vector2){player.x, player.y - 35.0f}, origin);
+    if (Vector2LengthSqr(toward) < 0.001f) return;
+    for (int i = 0; i < ENEMY_PROJECTILE_COUNT; i++) {
+        if (group->projectiles[i].remaining <= 0.0f) {
+            group->projectiles[i] = (EnemyProjectile){origin, Vector2Normalize(toward), 1.5f};
+            return;
+        }
+    }
+}
+
 void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                    Vector2 player, float dt, bool playerDodging,
                    int *playerHealth, int playerMaxHealth) {
@@ -151,7 +181,9 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         if (enemy->state == ENEMY_ATTACK) {
             if (!enemy->attackConnected && enemy->stateTime >= 0.32f) {
                 enemy->attackConnected = true;
-                if (!playerDodging && group->playerHitCooldown <= 0.0f && *playerHealth > 0 &&
+                if (enemy->type == ENEMY_COMMON_RANGED) {
+                    FireRangedProjectile(group, enemy, player);
+                } else if (!playerDodging && group->playerHitCooldown <= 0.0f && *playerHealth > 0 &&
                     Vector2Distance(enemy->position, player) <= ENEMY_ATTACK_RANGE+8.0f) {
                     *playerHealth -= ENEMY_ATTACK_DAMAGE;
                     if (*playerHealth < 0) *playerHealth = 0;
@@ -168,7 +200,22 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             enemy->facing = fabsf(toPlayer.x) > fabsf(toPlayer.y)*0.65f
                 ? (toPlayer.x < 0 ? 2 : 3) : (toPlayer.y < 0 ? 1 : 0);
         }
-        if (distance <= ENEMY_ATTACK_RANGE && enemy->attackCooldown <= 0.0f) {
+        if (enemy->type == ENEMY_COMMON_RANGED) {
+            if (distance <= RANGED_MAX_DISTANCE && enemy->attackCooldown <= 0.0f) {
+                enemy->state = ENEMY_ATTACK;
+                enemy->stateTime = 0.0f;
+                enemy->attackConnected = false;
+                enemy->attackCooldown = 1.65f;
+            } else if (distance < RANGED_MIN_DISTANCE || distance > RANGED_MAX_DISTANCE) {
+                enemy->state = ENEMY_WALK;
+                enemy->walkTime += dt;
+                Vector2 step = Vector2Scale(Vector2Normalize(toPlayer), ENEMY_SPEED * dt);
+                MoveEnemy(clearing, enemy, distance < RANGED_MIN_DISTANCE ?
+                          Vector2Negate(step) : step);
+            } else {
+                enemy->state = ENEMY_IDLE;
+            }
+        } else if (distance <= ENEMY_ATTACK_RANGE && enemy->attackCooldown <= 0.0f) {
             enemy->state = ENEMY_ATTACK;
             enemy->stateTime = 0.0f;
             enemy->attackConnected = false;
@@ -180,6 +227,31 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         } else {
             enemy->state = ENEMY_IDLE;
         }
+    }
+    for (int i = 0; i < ENEMY_PROJECTILE_COUNT; i++) {
+        EnemyProjectile *shot = &group->projectiles[i];
+        if (shot->remaining <= 0.0f) continue;
+        Vector2 movement = Vector2Scale(shot->direction, RANGED_SHOT_SPEED * dt);
+        int steps = (int)(Vector2Length(movement) / 6.0f) + 1;
+        Vector2 step = Vector2Scale(movement, 1.0f / steps);
+        for (int j = 0; j < steps && shot->remaining > 0.0f; j++) {
+            Vector2 next = Vector2Add(shot->position, step);
+            if (IsClearingBlocked(clearing, next)) {
+                shot->remaining = 0.0f;
+            } else {
+                shot->position = next;
+                Vector2 playerCenter = {player.x, player.y - 35.0f};
+                if (Vector2DistanceSqr(next, playerCenter) <= 24.0f * 24.0f) {
+                    if (!playerDodging && group->playerHitCooldown <= 0.0f && *playerHealth > 0) {
+                        *playerHealth -= ENEMY_ATTACK_DAMAGE;
+                        if (*playerHealth < 0) *playerHealth = 0;
+                        group->playerHitCooldown = 0.65f;
+                    }
+                    shot->remaining = 0.0f;
+                }
+            }
+        }
+        if (shot->remaining > 0.0f) shot->remaining = fmaxf(0.0f, shot->remaining - dt);
     }
 }
 
@@ -197,6 +269,13 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
                   enemy->state == ENEMY_HURT ? 3 : enemy->state == ENEMY_DIE ? 4 : 0;
         int frame = EnemyAnimationFrame(enemy);
         Texture2D tex = group->sprites;
+        if (enemy->type == ENEMY_COMMON_RANGED) {
+            Rectangle src = {(enemy->facing * 4 + frame) * 80.0f, row * 80.0f,
+                             80.0f, 80.0f};
+            DrawTexturePro(group->rangedSprites, src,
+                (Rectangle){enemy->position.x - 38, enemy->position.y - 75, 76, 76},
+                (Vector2){0}, 0, WHITE);
+        } else {
         if (enemy->facing < 2 && enemy->state != ENEMY_DIE) {
             tex = enemy->facing == 1 ? group->backSprites : group->frontSprites;
             if (enemy->state == ENEMY_ATTACK) {
@@ -214,11 +293,19 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
         DrawTexturePro(tex, src,
             (Rectangle){enemy->position.x-38, enemy->position.y-75, 76, 76},
             (Vector2){0},0,tint);
+        }
         if (EnemyCanBeHit(enemy) && enemy->health < ENEMY_MAX_HEALTH) {
             DrawRectangle((int)enemy->position.x-24,(int)enemy->position.y-85,48,5,DARKGRAY);
             DrawRectangle((int)enemy->position.x-24,(int)enemy->position.y-85,
                           48*enemy->health/ENEMY_MAX_HEALTH,5,RED);
         }
+    }
+    if (foreground) for (int i = 0; i < ENEMY_PROJECTILE_COUNT; i++) {
+        const EnemyProjectile *shot = &group->projectiles[i];
+        if (shot->remaining <= 0.0f) continue;
+        Vector2 tail = Vector2Subtract(shot->position, Vector2Scale(shot->direction, 16.0f));
+        DrawLineEx(tail, shot->position, 3.0f, GOLD);
+        DrawCircleV(shot->position, 3.0f, RAYWHITE);
     }
 }
 

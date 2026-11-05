@@ -42,10 +42,9 @@ bool InitMenu(Menu *m) {
     m->necromancer = LoadTexture("assets/menu_necromante.png");
     m->fog = LoadTexture("assets/menu_nevoa.png");
     m->fogTexture = LoadTexture("assets/menu_nevoa_textura.png");
-    static const int capeFrames[] = {0, 10, 6, 8, 11, 2, 7, 12, 4, 9, 13, 5};
-    for (int i=0; i<12; i++) {
+    for (int i=0; i<10; i++) {
         char path[64];
-        snprintf(path, sizeof(path), "assets/menu_heroi_%d.png", capeFrames[i]);
+        snprintf(path, sizeof(path), "assets/menu_capa_%02d.png", i);
         m->hero[i] = LoadTexture(path);
     }
     const char *paths[4] = {"assets/menu_iniciar.png", "assets/menu_continuar.png",
@@ -53,14 +52,14 @@ bool InitMenu(Menu *m) {
     if (!m->background.id || !m->moon.id || !m->seal.id || !m->necromancer.id || !m->fog.id || !m->fogTexture.id) {
         UnloadMenu(m); return false;
     }
-    for (int i=0; i<12; i++) if (!m->hero[i].id) { UnloadMenu(m); return false; }
+    for (int i=0; i<10; i++) if (!m->hero[i].id) { UnloadMenu(m); return false; }
     SetTextureFilter(m->background, TEXTURE_FILTER_POINT);
     SetTextureFilter(m->moon, TEXTURE_FILTER_POINT);
     SetTextureFilter(m->seal, TEXTURE_FILTER_POINT);
     SetTextureFilter(m->necromancer, TEXTURE_FILTER_POINT);
     SetTextureFilter(m->fog, TEXTURE_FILTER_POINT);
     SetTextureFilter(m->fogTexture, TEXTURE_FILTER_POINT);
-    for (int i=0; i<12; i++) SetTextureFilter(m->hero[i], TEXTURE_FILTER_POINT);
+    for (int i=0; i<10; i++) SetTextureFilter(m->hero[i], TEXTURE_FILTER_POINT);
     for (int i=0; i<4; i++) {
         m->buttons[i] = LoadTexture(paths[i]);
         if (!m->buttons[i].id) { UnloadMenu(m); return false; }
@@ -72,7 +71,7 @@ bool InitMenu(Menu *m) {
 
 void UnloadMenu(Menu *m) {
     for (int i=0; i<4; i++) if (m->buttons[i].id) UnloadTexture(m->buttons[i]);
-    for (int i=0; i<12; i++) if (m->hero[i].id) UnloadTexture(m->hero[i]);
+    for (int i=0; i<10; i++) if (m->hero[i].id) UnloadTexture(m->hero[i]);
     if (m->fog.id) UnloadTexture(m->fog);
     if (m->fogTexture.id) UnloadTexture(m->fogTexture);
     if (m->necromancer.id) UnloadTexture(m->necromancer);
@@ -137,7 +136,8 @@ void DrawMenu(const Menu *m) {
     Rectangle necro = {dst.x+1020*s,dst.y+225*s,390*s,260*s};
     DrawTexturePro(m->necromancer,(Rectangle){0,0,(float)m->necromancer.width,(float)m->necromancer.height},
                    necro,(Vector2){0},0,WHITE);
-    int frame = ((int)(t*10.0f))%12;
+    static const int capeLoop[] = {0,1,2,3,4,5,6,7,8,9,8,7,6,5,4,3,2,1};
+    int frame = capeLoop[((int)(t*10.0f))%(int)(sizeof(capeLoop)/sizeof(capeLoop[0]))];
     Texture2D hero = m->hero[frame];
     Rectangle protagonist = {dst.x+50*s,dst.y+345*s,620*s,568*s};
     DrawTexturePro(hero,(Rectangle){0,0,(float)hero.width,(float)hero.height},

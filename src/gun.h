@@ -19,6 +19,7 @@ typedef struct Gun {
     Texture2D flash;
     Texture2D impact;
     Texture2D body;
+    Texture2D idleBody;
     GunShot shots[GUN_MAX_SHOTS];
     GunImpact impacts[GUN_MAX_IMPACTS];
     Vector2 muzzle;

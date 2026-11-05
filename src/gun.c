@@ -23,8 +23,10 @@ bool InitGun(Gun *gun) {
     gun->projectile = LoadTexture("assets/arma_fogo_projetil.png");
     gun->flash = LoadTexture("assets/arma_fogo_clarao.png");
     gun->impact = LoadTexture("assets/arma_fogo_impacto.png");
-    gun->body = LoadTexture("assets/arma_fogo_corpo.png");
-    if (!gun->projectile.id || !gun->flash.id || !gun->impact.id || !gun->body.id) {
+    gun->body = LoadTexture("assets/arma_fogo_ataque_novo.png");
+    gun->idleBody = LoadTexture("assets/arma_fogo_idle_novo.png");
+    if (!gun->projectile.id || !gun->flash.id || !gun->impact.id ||
+        !gun->body.id || !gun->idleBody.id) {
         UnloadGun(gun);
         return false;
     }
@@ -32,6 +34,7 @@ bool InitGun(Gun *gun) {
     SetTextureFilter(gun->flash, TEXTURE_FILTER_POINT);
     SetTextureFilter(gun->impact, TEXTURE_FILTER_POINT);
     SetTextureFilter(gun->body, TEXTURE_FILTER_POINT);
+    SetTextureFilter(gun->idleBody, TEXTURE_FILTER_POINT);
     return true;
 }
 
@@ -40,6 +43,7 @@ void UnloadGun(Gun *gun) {
     if (gun->flash.id) UnloadTexture(gun->flash);
     if (gun->impact.id) UnloadTexture(gun->impact);
     if (gun->body.id) UnloadTexture(gun->body);
+    if (gun->idleBody.id) UnloadTexture(gun->idleBody);
     *gun = (Gun){0};
 }
 

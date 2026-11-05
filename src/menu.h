@@ -5,7 +5,7 @@ typedef enum MenuAction { MENU_NONE, MENU_START, MENU_CONTINUE, MENU_QUIT } Menu
 typedef struct Menu {
     Texture2D background;
     Texture2D moon, seal, necromancer, fog, fogTexture;
-    Texture2D hero[12];
+    Texture2D hero[10];
     Texture2D buttons[4];
     float effectTime;
     int page;

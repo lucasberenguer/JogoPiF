@@ -84,6 +84,23 @@ void DrawBible(const Bible *b, Vector2 player, bool foreground) {
     }
 }
 
+void DrawBibleActivation(const Bible *b, Vector2 player) {
+    if (b->activationRemaining <= 0.0f) return;
+    float progress = 1.0f - b->activationRemaining / 0.54f;
+    Vector2 center = {player.x, player.y - 35.0f};
+    float radius = 32.0f + 55.0f * progress;
+    Color glow = Fade(GOLD, 0.75f * (1.0f - progress));
+    DrawCircleLines((int)center.x, (int)center.y, radius, glow);
+    DrawCircleLines((int)center.x, (int)center.y, radius + 4.0f,
+                    Fade(WHITE, 0.42f * (1.0f - progress)));
+    for (int i = 0; i < 8; i++) {
+        float angle = i * (2.0f * BIBLE_PI / 8.0f) + b->angle;
+        Vector2 point = {center.x + cosf(angle) * radius,
+                         center.y + sinf(angle) * radius};
+        DrawCircleV(point, 2.5f, glow);
+    }
+}
+
 bool BibleTouchesCircle(const Bible *b, Vector2 player,
                         Vector2 enemy, float enemyRadius) {
     float limit = BIBLE_HIT_RADIUS + enemyRadius;
