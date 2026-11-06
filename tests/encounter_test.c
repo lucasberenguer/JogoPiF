@@ -185,6 +185,35 @@ int main(void) {
     UpdateEncounter(&encounter,&enemies,&clearing,player,&health);
     assert(encounter.phase==ENCOUNTER_CLEAR);
     assert(strcmp(encounter.presentation.announcement,"CEMITERIO LIMPO")==0);
+
+    /* Audit only the test executable's checkpoint, never the player's save. */
+    const char *saveFile=TextFormat("%s/partida_pif.sav",GetApplicationDirectory());
+    const char *invalidSaves[]={
+        "", "PIF-RUN-5 0 1", "PIF-RUN-5 9 1 100 100 1 240 1 0 0 0 -1 0",
+        "PIF-RUN-5 0 99 100 100 1 240 1 0 0 0 -1 0",
+        "PIF-RUN-5 0 1 100 100 nan 240 1 0 0 0 -1 0",
+        "PIF-RUN-5 0 1 100 100 1 inf 1 0 0 0 -1 0",
+        "PIF-RUN-5 0 1 101 100 1 240 1 0 0 0 -1 0",
+        "PIF-RUN-5 0 1 100 100 1 240 1 0 0 0 -1 2",
+        "PIF-RUN-5 0 1 100 100 1 240 1 4 0 0 -1 0"
+    };
+    for (unsigned i=0;i<sizeof(invalidSaves)/sizeof(invalidSaves[0]);i++) {
+        assert(SaveFileText(saveFile,(char *)invalidSaves[i]));
+        RunProgress rejected=NewRunProgress(2);
+        assert(!LoadClearingCheckpoint(&rejected));
+        assert(rejected.weapon==2); /* Failure must not partly overwrite the caller. */
+    }
+    assert(SaveFileText(saveFile,"PIF-CLEARING-3 1 7 80 100 1 240 1 0 0 0 -1"));
+    RunProgress migrated;
+    assert(LoadClearingCheckpoint(&migrated));
+    assert(migrated.map==0 && migrated.stage==CLEARING_COMPLETE_STAGE);
+    assert(SaveFileText(saveFile,"PIF-CLEARING-3 1 6 80 100 1 240 1 0 0 0 -1"));
+    assert(LoadClearingCheckpoint(&migrated) && migrated.stage==CLEARING_BOSS_STAGE);
+    assert(SaveFileText(saveFile,"PIF-CLEARING-4 1 4 80 100 1 240 1 0 0 0 -1"));
+    assert(LoadClearingCheckpoint(&migrated) && migrated.stage==4 && migrated.map==0);
+    assert(SaveFileText(saveFile,"PIF-CLEARING-2 2"));
+    assert(LoadClearingCheckpoint(&migrated) && migrated.weapon==2 && migrated.stage==1);
+    assert(SaveClearingCheckpoint(&encounter.progress));
     UnloadEnemies(&enemies);
     UnloadClearing(&clearing);
     CloseWindow();
