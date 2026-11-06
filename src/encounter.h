@@ -4,6 +4,8 @@
 #include "run_progress.h"
 #include "presentation.h"
 
+enum { ENCOUNTER_BOSS_HUD_HEIGHT = 58 };
+
 typedef enum EncounterPhase { ENCOUNTER_FIGHT, ENCOUNTER_REWARD, ENCOUNTER_SEAL,
                              ENCOUNTER_CLEAR, ENCOUNTER_DEFEAT } EncounterPhase;
 typedef struct Reward { int kind; int weapon; int amount; } Reward;
@@ -22,6 +24,7 @@ void BeginEncounter(Encounter *encounter, EnemyGroup *enemies, const Clearing *c
 bool UpdateEncounter(Encounter *encounter, EnemyGroup *enemies, const Clearing *clearing,
                      Vector2 player, int *health);
 bool EncounterPaused(const Encounter *encounter);
+bool EncounterBossVisible(const Encounter *encounter, const EnemyGroup *enemies);
 float EncounterDamage(const Encounter *encounter);
 bool ChooseEncounterReward(Encounter *encounter, EnemyGroup *enemies, const Clearing *clearing,
                            Vector2 player, int *health, int choice);

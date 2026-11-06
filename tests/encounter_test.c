@@ -27,14 +27,37 @@ static void Capture(const char *name, Encounter *encounter, EnemyGroup *enemies,
     UnloadRenderTexture(target);
 }
 
+static void CheckLegacyCheckpoints(void) {
+    char path[1024];
+    snprintf(path, sizeof(path), "%s/partida_pif.sav", GetApplicationDirectory());
+    const int legacyStages[] = {6, 7, 8, 11, 12, 13, 14};
+    const int maps[] = {0, 0, 1, 1, 1, 1, 1};
+    const int stages[] = {CLEARING_BOSS_STAGE, CLEARING_COMPLETE_STAGE, 1, 4,
+                          CLEARING_BOSS_STAGE, CLEARING_BOSS_STAGE, CLEARING_COMPLETE_STAGE};
+    for (int i = 0; i < (int)(sizeof(legacyStages)/sizeof(legacyStages[0])); i++) {
+        char contents[128];
+        snprintf(contents, sizeof(contents), "PIF-CLEARING-3 2 %d 90 120 1.25 240 1.2 0 0 2 -1\n",
+                 legacyStages[i]);
+        assert(SaveFileText(path, contents));
+        RunProgress progress;
+        assert(LoadClearingCheckpoint(&progress));
+        assert(progress.stage == stages[i] && progress.map == maps[i]);
+        assert(progress.weapon == 2 && progress.health == 90 && progress.weaponLevel[2] == 2);
+    }
+}
+
 int main(void) {
     SetTraceLogLevel(LOG_WARNING);
     SetConfigFlags(FLAG_WINDOW_HIDDEN);
     InitWindow(1280,720,"Encounter audit");
     assert(IsWindowReady());
+    CheckLegacyCheckpoints();
     Clearing clearing={0};
     EnemyGroup enemies={0};
     assert(InitClearing(&clearing));
+    Vector2 pedestalApproach;
+    assert(FindFreeMapPosition(&clearing, clearing.pedestal, &pedestalApproach));
+    assert(CheckCollisionPointCircle(pedestalApproach, clearing.pedestal, 72));
     assert(InitEnemies(&enemies));
     Encounter encounter={0};
     Vector2 player={835,540};
@@ -43,7 +66,7 @@ int main(void) {
     Capture("audit/clearing_collision_updated.png",&encounter,&enemies,&clearing,clearing.spawn);
     for (int wave=1;wave<=CLEARING_WAVES;wave++) {
         assert(encounter.progress.stage==wave);
-        assert(EnemiesRemaining(&enemies)==6+(wave-1)*3);
+        assert(EnemiesRemaining(&enemies)==7+(wave-1)*4);
         assert(EncounterPaused(&encounter));
         UpdateStagePresentation(&encounter.presentation,.1f);
         assert(EncounterPaused(&encounter));
@@ -60,7 +83,7 @@ int main(void) {
             enemy->state=ENEMY_IDLE;
             DamageEnemy(enemy,enemy->health);
         }
-        assert(specials>=1 && specials<=1+(wave-1)/2);
+        assert(specials>=1+(wave-1)/2 && specials<=1+(wave-1)/2+(wave>=3));
         UpdateEnemies(&enemies,&clearing,player,.9f,true,&health,100);
         assert(EnemiesRemaining(&enemies)==specials);
         for (int i=0;i<ENEMY_COUNT;i++) if (enemies.list[i].state==ENEMY_FALLEN) {
@@ -112,6 +135,10 @@ int main(void) {
     assert(health<100);
     Capture("audit/boss_roots.png",&encounter,&enemies,&clearing,player);
     DamageEnemy(boss,boss->health);
+    assert(boss->health==boss->maxHealth/2 && !EnemyCanBeHit(boss));
+    UpdateEnemies(&enemies,&clearing,player,1.0f,true,&health,100);
+    assert(boss->guardianPhase==GUARDIAN_PHASE_TWO && EnemyCanBeHit(boss));
+    DamageEnemy(boss,boss->health);
     UpdateEnemies(&enemies,&clearing,player,.9f,true,&health,100);
     assert(boss->state==ENEMY_FALLEN && !EnemyCanBeHit(boss));
     for (int i=0;i<ENEMY_ROOT_COUNT;i++) assert(!enemies.rootAttacks[i].active);
@@ -123,6 +150,10 @@ int main(void) {
     RunProgress revanche;
     assert(LoadClearingCheckpoint(&revanche));
     assert(revanche.stage==CLEARING_BOSS_STAGE && revanche.bossPower>1);
+    DamageEnemy(boss,boss->health);
+    assert(boss->health==boss->maxHealth/2 && !EnemyCanBeHit(boss));
+    UpdateEnemies(&enemies,&clearing,player,1.0f,true,&health,100);
+    assert(boss->guardianPhase==GUARDIAN_PHASE_TWO && EnemyCanBeHit(boss));
     DamageEnemy(boss,boss->health);
     UpdateEnemies(&enemies,&clearing,player,.9f,true,&health,100);
     assert(OpenEncounterSeal(&encounter,&enemies,boss->position));
@@ -151,12 +182,12 @@ int main(void) {
     Capture("audit/cemetery_collision_updated.png",&encounter,&enemies,&clearing,player);
     for (int wave=1;wave<=CLEARING_WAVES;wave++) {
         assert(encounter.progress.stage==wave);
-        assert(EnemiesRemaining(&enemies)==6+(wave-1)*3);
+        assert(EnemiesRemaining(&enemies)==7+(wave-1)*4);
         UpdateStagePresentation(&encounter.presentation,10);
         for (int i=0;i<ENEMY_COUNT;i++) {
             Enemy *enemy=&enemies.list[i];
             if (enemy->state==ENEMY_GONE) continue;
-            assert(enemy->cemeteryUnit && !IsMapActorBlocked(&clearing,enemy->position));
+            assert(!IsMapActorBlocked(&clearing,enemy->position));
             enemy->state=ENEMY_IDLE;
             DamageEnemy(enemy,enemy->health);
         }
@@ -176,7 +207,12 @@ int main(void) {
     UpdateStagePresentation(&encounter.presentation,.7f);
     Capture("audit/cemetery_boss_intro.png",&encounter,&enemies,&clearing,player);
     UpdateStagePresentation(&encounter.presentation,10);
+    assert(EncounterBossVisible(&encounter,&enemies) && enemies.list[0].health==1500);
+    Capture("audit/cemetery_boss_hud.png",&encounter,&enemies,&clearing,player);
     enemies.list[0].state=ENEMY_IDLE;
+    DamageEnemy(&enemies.list[0],enemies.list[0].health);
+    UpdateEnemies(&enemies,&clearing,player,1.0f,true,&health,encounter.progress.maxHealth);
+    assert(enemies.list[0].guardianPhase==GUARDIAN_PHASE_TWO);
     DamageEnemy(&enemies.list[0],enemies.list[0].health);
     UpdateEnemies(&enemies,&clearing,player,.9f,true,&health,encounter.progress.maxHealth);
     assert(enemies.list[0].state==ENEMY_FALLEN);

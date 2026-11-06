@@ -3,13 +3,60 @@
 #include <math.h>
 #include <string.h>
 
-#define ENEMY_SPEED 92.0f
+#define ENEMY_SPEED 98.0f
 #define ENEMY_ATTACK_RANGE 64.0f
 #define ENEMY_ATTACK_DAMAGE 12
 #define ENEMY_HURT_RADIUS 20.0f
 #define RANGED_MIN_DISTANCE 170.0f
 #define RANGED_MAX_DISTANCE 300.0f
-#define RANGED_SHOT_SPEED 330.0f
+#define RANGED_SHOT_SPEED 365.0f
+#define ARENA_BOSS_BASE_HEALTH 1500
+#define GUARDIAN_PHASE_TRANSITION_TIME 1.0f
+#define GUARDIAN_ROOT_ECHO_TIME .95f
+#define GUARDIAN_CURSE_ECHO_TIME .62f
+#define GUARDIAN_ROOT_WARNING 0.8f
+#define GUARDIAN_ROOT_RADIUS 74.0f
+#define GUARDIAN_ROOT_DAMAGE 30
+#define GUARDIAN_WAVE_WARNING .65f
+#define GUARDIAN_WAVE_RADIUS 60.0f
+#define GUARDIAN_WAVE_DAMAGE 36
+#define GUARDIAN_WAVE_FPS 12.0f
+#define GUARDIAN_WAVE_FRAMES 8
+#define GUARDIAN_WAVE_TILE_WIDTH 352
+#define GUARDIAN_WAVE_TILE_HEIGHT 288
+#define GUARDIAN_CURSE_WARNING 1.0f
+#define GUARDIAN_CURSE_FPS 12.0f
+#define GUARDIAN_CURSE_CHARGE_FRAMES 8
+#define GUARDIAN_CURSE_IMPACT_FRAMES 7
+#define GUARDIAN_CURSE_TILE_WIDTH 384
+#define GUARDIAN_CURSE_TILE_HEIGHT 320
+#define GUARDIAN_MELEE_RANGE 118.0f
+#define GUARDIAN_MELEE_DAMAGE 26
+#define GUARDIAN_MELEE_COOLDOWN 1.65f
+#define GUARDIAN_MELEE_FPS 10.0f
+#define GUARDIAN_MELEE_FRAMES 8
+#define GUARDIAN_MELEE_HIT_FRAME 4
+
+typedef struct GuardianHazard {
+    float warning, hitStart, hitEnd, duration, radius;
+    int damage;
+    Color warningColor;
+} GuardianHazard;
+
+static const GuardianHazard guardianHazards[GUARDIAN_ATTACK_COUNT] = {
+    [GUARDIAN_ROOTS] = {GUARDIAN_ROOT_WARNING, GUARDIAN_ROOT_WARNING, 1.3f, 1.6f,
+                        GUARDIAN_ROOT_RADIUS, GUARDIAN_ROOT_DAMAGE, ORANGE},
+    [GUARDIAN_ROOT_WAVE] = {GUARDIAN_WAVE_WARNING,
+        GUARDIAN_WAVE_WARNING + 2.0f / GUARDIAN_WAVE_FPS,
+        GUARDIAN_WAVE_WARNING + 5.0f / GUARDIAN_WAVE_FPS,
+        GUARDIAN_WAVE_WARNING + GUARDIAN_WAVE_FRAMES / GUARDIAN_WAVE_FPS,
+        GUARDIAN_WAVE_RADIUS, GUARDIAN_WAVE_DAMAGE, GOLD},
+    [GUARDIAN_CURSE] = {GUARDIAN_CURSE_WARNING,
+        GUARDIAN_CURSE_WARNING + 1.0f / GUARDIAN_CURSE_FPS,
+        GUARDIAN_CURSE_WARNING + 6.0f / GUARDIAN_CURSE_FPS,
+        GUARDIAN_CURSE_WARNING + GUARDIAN_CURSE_IMPACT_FRAMES / GUARDIAN_CURSE_FPS,
+        110.0f, 42, VIOLET},
+};
 
 int EnemyOptionalDropChance(EnemyType type) {
     switch (type) {
@@ -28,6 +75,10 @@ bool EnemyShouldDrop(EnemyType type, int roll) {
 
 int EnemyAnimationFrame(const Enemy *enemy) {
     if (enemy->type == ENEMY_BOSS) {
+        if (enemy->state == ENEMY_ATTACK && enemy->guardianMelee)
+            return (int)fminf(enemy->stateTime * GUARDIAN_MELEE_FPS, GUARDIAN_MELEE_FRAMES - 1);
+        if (enemy->state == ENEMY_ATTACK && enemy->bossAttack != GUARDIAN_ROOTS)
+            return 0;
         int count = enemy->state == ENEMY_ATTACK ? 9 : 6;
         int frame = (int)(enemy->stateTime * (enemy->state == ENEMY_ATTACK ? 6.0f : 7.0f));
         return enemy->state == ENEMY_ATTACK ? (frame < count ? frame : count-1) : frame % count;
@@ -69,11 +120,16 @@ bool InitEnemies(EnemyGroup *group) {
     group->rangedSprites = LoadTexture("assets/inimigo_ranged.png");
     group->bossSprites = LoadTexture("assets/boss_clareira.png");
     group->bossPortrait = LoadTexture("assets/guardiao_intro_pixel_v2.png");
-    group->cemeteryPortrait=LoadTexture("assets/coveiro_intro_pixel.png");
+    group->cemeteryPortrait = LoadTexture("assets/coveiro_intro_pixel.png");
     group->bossAttack = LoadTexture("assets/boss_clareira_especial_1.png");
     group->roots = LoadTexture("assets/boss_clareira_raizes_area.png");
+    group->rootWave = LoadTexture("assets/boss_clareira_onda.png");
+    group->curse = LoadTexture("assets/boss_clareira_maldicao.png");
+    group->guardianMelee = LoadTexture("assets/boss_clareira_corpo_a_corpo.png");
     if (!group->sprites.id || !group->backSprites.id || !group->frontSprites.id ||
-        !group->rangedSprites.id || !group->bossSprites.id || !group->bossAttack.id || !group->roots.id || !group->bossPortrait.id || !group->cemeteryPortrait.id) {
+        !group->rangedSprites.id || !group->bossSprites.id || !group->bossAttack.id ||
+        !group->roots.id || !group->rootWave.id || !group->curse.id || !group->guardianMelee.id ||
+        !group->bossPortrait.id || !group->cemeteryPortrait.id) {
         UnloadEnemies(group);
         return false;
     }
@@ -83,9 +139,12 @@ bool InitEnemies(EnemyGroup *group) {
     SetTextureFilter(group->rangedSprites, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->bossSprites, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->bossPortrait, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->cemeteryPortrait,TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->cemeteryPortrait, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->bossAttack, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->roots, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->rootWave, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->curse, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->guardianMelee, TEXTURE_FILTER_POINT);
     return true;
 }
 
@@ -104,12 +163,13 @@ void UnloadEnemies(EnemyGroup *group) {
     if (group->cemeteryPortrait.id) UnloadTexture(group->cemeteryPortrait);
     if (group->bossAttack.id) UnloadTexture(group->bossAttack);
     if (group->roots.id) UnloadTexture(group->roots);
+    if (group->rootWave.id) UnloadTexture(group->rootWave);
+    if (group->curse.id) UnloadTexture(group->curse);
+    if (group->guardianMelee.id) UnloadTexture(group->guardianMelee);
     *group = (EnemyGroup){0};
 }
 
 void ResetEnemies(EnemyGroup *group, const Clearing *clearing) {
-    if (clearing->cemetery) { CemeteryResetEnemies(group,clearing); return; }
-    group->cemetery=false;
     StartEnemyWave(group, clearing, 1, clearing->spawn, 1.0f);
 }
 
@@ -121,6 +181,8 @@ void ClearEnemyAttacks(EnemyGroup *group) {
 
 static Vector2 SpawnPosition(const Clearing *clearing, Vector2 player) {
     Rectangle bounds = clearing->playableBounds;
+    Vector2 fallback = clearing->spawn;
+    bool hasFallback = false;
     for (int attempt = 0; attempt < 800; attempt++) {
         float x = bounds.x + GetRandomValue(35, (int)bounds.width - 35);
         float y = bounds.y + GetRandomValue(35, (int)bounds.height - 35);
@@ -129,23 +191,28 @@ static Vector2 SpawnPosition(const Clearing *clearing, Vector2 player) {
             x < bounds.x + bounds.width*.75f && y > bounds.y + bounds.height*.25f &&
             y < bounds.y + bounds.height*.75f) continue;
         Vector2 point = {x, y};
-        if (!IsMapActorBlocked(clearing, point) && Vector2Distance(point, player) > 230.0f)
-            return point;
+        if (Vector2Distance(point, player) <= 230.0f || IsMapActorBlocked(clearing, point)) continue;
+        if (!hasFallback) {
+            fallback = point;
+            hasFallback = true;
+        }
+
+        // Prefer a clear approach so the enemy can start chasing immediately.
+        if (MapHasClearPath(clearing, point, player)) return point;
     }
-    Vector2 fallback=clearing->spawn;
-    FindFreeMapPosition(clearing,fallback,&fallback);
+    if (!hasFallback) FindFreeMapPosition(clearing, fallback, &fallback);
     return fallback;
 }
 
 void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
                     Vector2 player, float playerPower) {
-    if (clearing->cemetery) { CemeteryStartWave(group,clearing,wave,player,playerPower); return; }
-    group->cemetery=false;
+    group->cemetery=clearing->cemetery;
     ClearEnemyAttacks(group);
     group->playerHitCooldown = 0;
-    int total = 6 + (wave - 1) * 3;
+    int total = 7 + (wave - 1) * 4;
     if (total > ENEMY_COUNT) total = ENEMY_COUNT;
-    int specials = GetRandomValue(1, 1 + (wave - 1) / 2);
+    int minimumSpecials = 1 + (wave - 1) / 2;
+    int specials = GetRandomValue(minimumSpecials, minimumSpecials + (wave >= 3));
     for (int i=0; i<ENEMY_COUNT; i++) {
         Enemy *enemy = &group->list[i];
         *enemy = (Enemy){.state = ENEMY_GONE};
@@ -156,26 +223,26 @@ void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
         enemy->maxHealth = (int)((enemy->type == ENEMY_SPECIAL ? 100 : 45) *
                                 (1.0f + (wave-1)*.12f) * adjustment);
         enemy->health = enemy->maxHealth;
-        enemy->speed = ENEMY_SPEED * (1.0f + (wave-1)*.025f);
-        enemy->power = 1.0f + (wave-1)*.06f;
+        enemy->speed = ENEMY_SPEED * (1.0f + (wave-1)*.045f);
+        enemy->power = 1.0f + (wave-1)*.09f;
         enemy->state = ENEMY_SPAWNING;
-        enemy->stateTime = -i*.35f;
+        enemy->stateTime = -i*(.30f - (wave-1)*.025f);
         enemy->facing = i%2 ? 2 : 3;
         enemy->lastKatanaSwing = -1;
         enemy->attackCooldown = 0.8f;
     }
 }
 
-void StartClearingBoss(EnemyGroup *group, const Clearing *clearing, Vector2 player, float power) {
-    if (clearing->cemetery) { CemeteryStartBoss(group,clearing,player,power); return; }
-    group->cemetery=false;
+void StartArenaBoss(EnemyGroup *group, const Clearing *clearing, Vector2 player, float power) {
+    group->cemetery=clearing->cemetery;
     ClearEnemyAttacks(group);
     group->playerHitCooldown = 0;
     for (int i=0; i<ENEMY_COUNT; i++) group->list[i] = (Enemy){.state = ENEMY_GONE};
     Enemy *boss = &group->list[0];
     *boss = (Enemy){.type = ENEMY_BOSS, .state = ENEMY_SPAWNING,
-        .position = SpawnPosition(clearing, player), .maxHealth = (int)(650*power),
-        .speed = 65, .power = power, .attackCooldown = 2, .lastKatanaSwing = -1};
+        .position = SpawnPosition(clearing, player), .maxHealth = (int)(ARENA_BOSS_BASE_HEALTH*fmaxf(1, power)),
+        .speed = 100, .power = power, .attackCooldown = 1.25f, .lastKatanaSwing = -1,
+        .bossAttack = (clearing->cemetery ? COVEIRO_ATTACK_COUNT : GUARDIAN_ATTACK_COUNT) - 1};
     boss->health = boss->maxHealth;
 }
 
@@ -188,7 +255,7 @@ int EnemiesRemaining(const EnemyGroup *group) {
 float EnemyHurtRadius(const Enemy *enemy) { return enemy->type == ENEMY_BOSS ? 48.0f : ENEMY_HURT_RADIUS; }
 
 bool EnemyCanBeHit(const Enemy *enemy) {
-    if (enemy->dormant) return false;
+    if (enemy->guardianPhase == GUARDIAN_PHASE_TRANSITION) return false;
     return enemy->state != ENEMY_DIE && enemy->state != ENEMY_GONE &&
            enemy->state != ENEMY_SPAWNING && enemy->state != ENEMY_FALLEN && enemy->health > 0;
 }
@@ -198,10 +265,16 @@ Vector2 EnemyCenter(const Enemy *enemy) {
 }
 
 void DamageEnemy(Enemy *enemy, int damage) {
-    if (enemy->cemeteryUnit) { CemeteryDamageEnemy(enemy,damage); return; }
     if (!EnemyCanBeHit(enemy) || damage<=0) return;
     enemy->health -= damage;
-    if (enemy->health <= 0) {
+    if (enemy->type == ENEMY_BOSS && enemy->guardianPhase == GUARDIAN_PHASE_ONE &&
+        enemy->health <= enemy->maxHealth / 2) {
+        enemy->health = enemy->maxHealth / 2;
+        enemy->guardianPhase = GUARDIAN_PHASE_TRANSITION;
+        enemy->guardianMelee = false;
+        enemy->state = ENEMY_IDLE;
+        enemy->stateTime = 0.0f;
+    } else if (enemy->health <= 0) {
         enemy->stateTime = 0.0f;
         enemy->health = 0;
         enemy->state = ENEMY_DIE;
@@ -215,7 +288,7 @@ void DamageEnemy(Enemy *enemy, int damage) {
     }
 }
 
-static void MoveEnemy(const Clearing *clearing, Enemy *enemy, Vector2 delta) {
+void MoveEnemy(const Clearing *clearing, Enemy *enemy, Vector2 delta) {
     MoveMapActor(clearing, &enemy->position, delta);
 }
 
@@ -229,23 +302,97 @@ void KnockbackEnemy(Enemy *enemy, const Clearing *clearing,
 }
 
 static void FireRangedProjectile(EnemyGroup *group, const Enemy *enemy, Vector2 player) {
-    Vector2 origin = EnemyCenter(enemy);
-    Vector2 toward = Vector2Subtract((Vector2){player.x, player.y - 35.0f}, origin);
+    Vector2 origin = group->cemetery ? enemy->position : EnemyCenter(enemy);
+    Vector2 toward = group->cemetery ? enemy->attackDirection :
+                     Vector2Subtract((Vector2){player.x, player.y - 35.0f}, origin);
     if (Vector2LengthSqr(toward) < 0.001f) return;
     for (int i = 0; i < ENEMY_PROJECTILE_COUNT; i++) {
         if (group->projectiles[i].remaining <= 0.0f) {
-            group->projectiles[i] = (EnemyProjectile){origin, Vector2Normalize(toward), 1.5f,
-                (int)(ENEMY_ATTACK_DAMAGE*enemy->power)};
+            group->projectiles[i] = (EnemyProjectile){origin, Vector2Normalize(toward),
+                group->cemetery ? 4.0f : 1.5f,
+                (int)((group->cemetery ? 10 : ENEMY_ATTACK_DAMAGE)*enemy->power)};
             return;
         }
+    }
+}
+
+static bool GuardianEnraged(const Enemy *enemy) {
+    return enemy->guardianPhase == GUARDIAN_PHASE_TWO;
+}
+
+static void PlaceGuardianRoot(EnemyGroup *group, Vector2 position, GuardianAttack attack, float delay) {
+    for (int i = 0; i < ENEMY_ROOT_COUNT; i++) {
+        if (group->rootAttacks[i].active) continue;
+        group->rootAttacks[i] = (EnemyRoot){.position = position, .age = -delay,
+                                           .active = true, .attack = attack};
+        return;
+    }
+}
+
+static void StartGuardianCast(EnemyGroup *group, const Clearing *clearing,
+                              Enemy *enemy, Vector2 player) {
+    enemy->attackCooldown = GuardianEnraged(enemy) ? 1.95f : 3.0f;
+    enemy->bossAttack = (enemy->bossAttack + 1) % GUARDIAN_ATTACK_COUNT;
+    if (enemy->bossAttack == GUARDIAN_ROOTS) {
+        Vector2 flank = Vector2Scale(Vector2Rotate(enemy->attackDirection, PI / 2), 120);
+        const Vector2 targets[] = {player, Vector2Add(player, flank), Vector2Subtract(player, flank)};
+        for (int i = 0; i < 3; i++) {
+            if (!IsClearingBlocked(clearing, targets[i])) PlaceGuardianRoot(group, targets[i], GUARDIAN_ROOTS, 0);
+        }
+        return;
+    }
+
+    if (enemy->bossAttack == GUARDIAN_CURSE) {
+        if (!IsClearingBlocked(clearing, player))
+            PlaceGuardianRoot(group, player, GUARDIAN_CURSE, 0);
+        return;
+    }
+
+    int segments = GuardianEnraged(enemy) ? 6 : 5;
+    float stagger = GuardianEnraged(enemy) ? .08f : .10f;
+    for (int i = 0; i < segments; i++) {
+        float distance = 85 + i * 105;
+        Vector2 position = Vector2Add(enemy->position, Vector2Scale(enemy->attackDirection, distance));
+        // Probe between eruptions too, so the wave ends at walls and rocks.
+        for (float sample = (i == 0 ? 12 : distance - 96); sample < distance; sample += 9) {
+            Vector2 point = Vector2Add(enemy->position, Vector2Scale(enemy->attackDirection, sample));
+            if (IsClearingBlocked(clearing, point)) return;
+        }
+        if (IsClearingBlocked(clearing, position)) return;
+        PlaceGuardianRoot(group, position, GUARDIAN_ROOT_WAVE, i * stagger);
+    }
+}
+
+static void UpdateGuardianMelee(EnemyGroup *group, const Clearing *clearing, Enemy *enemy, Vector2 player,
+                                bool playerDodging, int *playerHealth) {
+    if (!enemy->attackConnected && EnemyAnimationFrame(enemy) >= GUARDIAN_MELEE_HIT_FRAME) {
+        enemy->attackConnected = true;
+        Vector2 offset = Vector2Subtract(player, enemy->position);
+        float distance = Vector2Length(offset);
+        if (!playerDodging && *playerHealth > 0 && group->playerHitCooldown <= 0 &&
+            distance <= GUARDIAN_MELEE_RANGE &&
+            Vector2DotProduct(offset, enemy->attackDirection) >= distance * .48f &&
+            MapHasClearPath(clearing, enemy->position, player)) {
+            *playerHealth = (int)fmaxf(0, *playerHealth - GUARDIAN_MELEE_DAMAGE * enemy->power);
+            group->playerHitCooldown = .65f;
+        }
+    }
+    if (enemy->stateTime >= GUARDIAN_MELEE_FRAMES / GUARDIAN_MELEE_FPS) {
+        enemy->state = ENEMY_IDLE;
+        enemy->stateTime = 0;
+        enemy->guardianMelee = false;
     }
 }
 
 void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                    Vector2 player, float dt, bool playerDodging,
                    int *playerHealth, int playerMaxHealth) {
-    if (group->cemetery) { CemeteryUpdateEnemies(group,clearing,player,dt,playerDodging,playerHealth,playerMaxHealth); return; }
     group->playerHitCooldown = fmaxf(0.0f, group->playerHitCooldown-dt);
+    if (group->cemetery && group->list[0].type == ENEMY_BOSS &&
+        (group->list[0].guardianPhase == GUARDIAN_PHASE_TRANSITION || group->list[0].state == ENEMY_DIE))
+        ClearEnemyAttacks(group);
+    if (group->cemetery)
+        CemeteryUpdateProjectiles(group, clearing, player, dt, playerDodging, playerHealth);
     for (int i=0; i<ENEMY_COUNT; i++) {
         Enemy *enemy = &group->list[i];
         if (enemy->state == ENEMY_GONE && enemy->pickupAvailable &&
@@ -258,11 +405,25 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         if (enemy->state == ENEMY_GONE) continue;
         if (enemy->state == ENEMY_FALLEN) continue;
         enemy->stateTime += dt;
+        if (enemy->guardianPhase == GUARDIAN_PHASE_TRANSITION) {
+            ClearEnemyAttacks(group);
+            if (enemy->stateTime >= GUARDIAN_PHASE_TRANSITION_TIME) {
+                enemy->guardianPhase = GUARDIAN_PHASE_TWO;
+                enemy->stateTime = 0;
+                /* The Coveiro opens with a charge and the Guardian with a curse. */
+                enemy->bossAttack = group->cemetery ? COVEIRO_SHOVEL : GUARDIAN_ROOT_WAVE;
+                enemy->attackCooldown = .20f;
+                enemy->guardianMeleeCooldown = .90f;
+            }
+            continue;
+        }
         if (enemy->state == ENEMY_SPAWNING) {
             if (enemy->stateTime >= 1.0f) { enemy->state = ENEMY_IDLE; enemy->stateTime = 0; }
             continue;
         }
         enemy->attackCooldown = fmaxf(0.0f, enemy->attackCooldown-dt);
+        if (enemy->type == ENEMY_BOSS)
+            enemy->guardianMeleeCooldown = fmaxf(0.0f, enemy->guardianMeleeCooldown - dt);
         enemy->bibleHitCooldown = fmaxf(0.0f, enemy->bibleHitCooldown-dt);
         if (enemy->state == ENEMY_DIE) {
             if (enemy->type == ENEMY_BOSS) ClearEnemyAttacks(group);
@@ -276,8 +437,25 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             if (enemy->stateTime >= 0.32f) { enemy->state = ENEMY_IDLE; enemy->stateTime = 0; }
             continue;
         }
+        if (group->cemetery && enemy->type == ENEMY_BOSS) {
+            CemeteryUpdateBoss(group, clearing, enemy, player, dt, playerDodging, playerHealth);
+            continue;
+        }
         if (enemy->state == ENEMY_ATTACK) {
             if (enemy->type == ENEMY_BOSS) {
+                if (enemy->guardianMelee) {
+                    UpdateGuardianMelee(group, clearing, enemy, player, playerDodging, playerHealth);
+                    continue;
+                }
+                bool roots = enemy->bossAttack == GUARDIAN_ROOTS;
+                bool curse = enemy->bossAttack == GUARDIAN_CURSE;
+                float echoTime = roots ? GUARDIAN_ROOT_ECHO_TIME : GUARDIAN_CURSE_ECHO_TIME;
+                if (GuardianEnraged(enemy) && (roots || curse) &&
+                    !enemy->attackConnected && enemy->stateTime >= echoTime) {
+                    enemy->attackConnected = true;
+                    if (!IsClearingBlocked(clearing, player))
+                        PlaceGuardianRoot(group, player, roots ? GUARDIAN_ROOTS : GUARDIAN_CURSE, 0);
+                }
                 if (enemy->stateTime >= 1.5f) { enemy->state = ENEMY_IDLE; enemy->stateTime = 0; }
                 continue;
             }
@@ -286,7 +464,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                     MoveEnemy(clearing, enemy, Vector2Scale(enemy->attackDirection, 360 * dt));
                     if (!enemy->attackConnected && !playerDodging && group->playerHitCooldown <= 0 &&
                         Vector2Distance(player, enemy->position) < 65 && *playerHealth > 0 &&
-                        MapHasClearPath(clearing,enemy->position,player)) {
+                        MapHasClearPath(clearing, enemy->position, player)) {
                         *playerHealth = (int)fmaxf(0, *playerHealth - 18*enemy->power);
                         group->playerHitCooldown = .65f;
                         enemy->attackConnected = true;
@@ -295,19 +473,20 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 if (enemy->stateTime >= 1.1f) { enemy->state = ENEMY_IDLE; enemy->stateTime = 0; }
                 continue;
             }
-            if (!enemy->attackConnected && enemy->stateTime >= 0.32f) {
+            bool mage = group->cemetery && enemy->type == ENEMY_COMMON_RANGED;
+            if (!enemy->attackConnected && enemy->stateTime >= (mage ? .55f : .32f)) {
                 enemy->attackConnected = true;
                 if (enemy->type == ENEMY_COMMON_RANGED) {
                     FireRangedProjectile(group, enemy, player);
                 } else if (!playerDodging && group->playerHitCooldown <= 0.0f && *playerHealth > 0 &&
                     Vector2Distance(enemy->position, player) <= ENEMY_ATTACK_RANGE+8.0f &&
-                    MapHasClearPath(clearing,enemy->position,player)) {
+                    MapHasClearPath(clearing, enemy->position, player)) {
                     *playerHealth -= (int)(ENEMY_ATTACK_DAMAGE * enemy->power);
                     if (*playerHealth < 0) *playerHealth = 0;
                     group->playerHitCooldown = 0.65f;
                 }
             }
-            if (enemy->stateTime >= 0.62f) { enemy->state = ENEMY_IDLE; enemy->stateTime = 0; }
+            if (enemy->stateTime >= (mage ? .95f : .62f)) { enemy->state = ENEMY_IDLE; enemy->stateTime = 0; }
             continue;
         }
         if (*playerHealth <= 0) { enemy->state = ENEMY_IDLE; continue; }
@@ -318,33 +497,37 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 ? (toPlayer.x < 0 ? 2 : 3) : (toPlayer.y < 0 ? 1 : 0);
         }
         if (enemy->type == ENEMY_BOSS || enemy->type == ENEMY_SPECIAL) {
-            float range = enemy->type == ENEMY_BOSS ? 460 : 280;
-            if (distance <= range && enemy->attackCooldown <= 0) {
+            float range = enemy->type == ENEMY_BOSS ? 560 : 280;
+            bool melee = enemy->type == ENEMY_BOSS && distance <= GUARDIAN_MELEE_RANGE &&
+                         enemy->guardianMeleeCooldown <= 0;
+            if (melee || (distance <= range && enemy->attackCooldown <= 0)) {
                 enemy->state = ENEMY_ATTACK;
                 enemy->stateTime = 0;
                 enemy->attackConnected = false;
                 enemy->attackDirection = distance > .01f ? Vector2Normalize(toPlayer) : (Vector2){0,1};
-                enemy->attackCooldown = enemy->type == ENEMY_BOSS ? 4.0f : 3.0f;
-                if (enemy->type == ENEMY_BOSS) {
-                    Vector2 centers[3] = {player, {player.x-100,player.y+45}, {player.x+100,player.y-45}};
-                    for (int j=0; j<3; j++) if (!IsClearingBlocked(clearing, centers[j])) {
-                        for (int k=0; k<ENEMY_ROOT_COUNT; k++) if (!group->rootAttacks[k].active) {
-                            group->rootAttacks[k] = (EnemyRoot){.position=centers[j], .active=true};
-                            break;
-                        }
-                    }
+                if (melee) {
+                    const Vector2 directions[] = {{0,1}, {0,-1}, {-1,0}, {1,0}};
+                    enemy->guardianMelee = true;
+                    enemy->guardianMeleeCooldown = GuardianEnraged(enemy) ? 1.25f : GUARDIAN_MELEE_COOLDOWN;
+                    enemy->attackDirection = directions[enemy->facing];
+                } else if (enemy->type == ENEMY_BOSS) {
+                    StartGuardianCast(group, clearing, enemy, player);
+                } else {
+                    enemy->attackCooldown = 2.75f / fminf(enemy->power, 1.36f);
                 }
-            } else if (distance > (enemy->type == ENEMY_BOSS ? 210 : 100)) {
+            } else if (distance > (enemy->type == ENEMY_BOSS ? 110 : 100)) {
                 enemy->state = ENEMY_WALK;
                 enemy->walkTime += dt;
-                MoveEnemy(clearing, enemy, Vector2Scale(Vector2Normalize(toPlayer), enemy->speed*dt));
+                float speed = enemy->speed * (GuardianEnraged(enemy) ? 1.5f : 1.0f);
+                MoveEnemy(clearing, enemy, Vector2Scale(Vector2Normalize(toPlayer), speed*dt));
             } else enemy->state = ENEMY_IDLE;
         } else if (enemy->type == ENEMY_COMMON_RANGED) {
             if (distance <= RANGED_MAX_DISTANCE && enemy->attackCooldown <= 0.0f) {
                 enemy->state = ENEMY_ATTACK;
                 enemy->stateTime = 0.0f;
                 enemy->attackConnected = false;
-                enemy->attackCooldown = 1.65f;
+                enemy->attackDirection = Vector2Normalize(toPlayer);
+                enemy->attackCooldown = 1.5f / fminf(enemy->power, 1.36f);
             } else if (distance < RANGED_MIN_DISTANCE || distance > RANGED_MAX_DISTANCE) {
                 enemy->state = ENEMY_WALK;
                 enemy->walkTime += dt;
@@ -358,7 +541,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             enemy->state = ENEMY_ATTACK;
             enemy->stateTime = 0.0f;
             enemy->attackConnected = false;
-            enemy->attackCooldown = 1.35f;
+            enemy->attackCooldown = 1.25f / fminf(enemy->power, 1.36f);
         } else if (distance > ENEMY_ATTACK_RANGE*0.85f) {
             enemy->state = ENEMY_WALK;
             enemy->walkTime += dt;
@@ -371,19 +554,21 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         EnemyRoot *root = &group->rootAttacks[i];
         if (!root->active) continue;
         root->age += dt;
-        if (root->age >= .8f && root->age < 1.3f && !root->hit && !playerDodging &&
+        const GuardianHazard *hazard = &guardianHazards[root->attack];
+        if (root->age >= hazard->hitStart && root->age < hazard->hitEnd && !root->hit && !playerDodging &&
             group->playerHitCooldown <= 0 && *playerHealth > 0 &&
-            Vector2Distance(player, root->position) < 62) {
-            *playerHealth = (int)fmaxf(0, *playerHealth - 24 * group->list[0].power);
+            Vector2Distance(player, root->position) < hazard->radius) {
+            *playerHealth = (int)fmaxf(0, *playerHealth - hazard->damage * group->list[0].power);
             group->playerHitCooldown = .65f;
             root->hit = true;
         }
-        if (root->age >= 1.6f) root->active = false;
+        if (root->age >= hazard->duration) root->active = false;
     }
     for (int i = 0; i < ENEMY_PROJECTILE_COUNT; i++) {
         EnemyProjectile *shot = &group->projectiles[i];
         if (shot->remaining <= 0.0f) continue;
-        Vector2 movement = Vector2Scale(shot->direction, RANGED_SHOT_SPEED * dt);
+        float speed = group->cemetery ? 210 : RANGED_SHOT_SPEED;
+        Vector2 movement = Vector2Scale(shot->direction, speed * dt);
         int steps = (int)(Vector2Length(movement) / 6.0f) + 1;
         Vector2 step = Vector2Scale(movement, 1.0f / steps);
         for (int j = 0; j < steps && shot->remaining > 0.0f; j++) {
@@ -392,8 +577,9 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 shot->remaining = 0.0f;
             } else {
                 shot->position = next;
-                Vector2 playerCenter = {player.x, player.y - 35.0f};
-                if (Vector2DistanceSqr(next, playerCenter) <= 24.0f * 24.0f) {
+                Vector2 playerCenter = {player.x, player.y - (group->cemetery ? 0 : 35.0f)};
+                float radius = group->cemetery ? 19 : 24;
+                if (Vector2DistanceSqr(next, playerCenter) <= radius * radius) {
                     if (!playerDodging && group->playerHitCooldown <= 0.0f && *playerHealth > 0) {
                         *playerHealth -= shot->damage;
                         if (*playerHealth < 0) *playerHealth = 0;
@@ -407,16 +593,79 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
     }
 }
 
+static void DrawGuardianWaveFrame(Texture2D texture, Vector2 position, float elapsed,
+                                  bool eruption, bool flip) {
+    int frame = (int)(elapsed * GUARDIAN_WAVE_FPS);
+    if (frame >= GUARDIAN_WAVE_FRAMES) return;
+    const float scale = .50f;
+    const float width = GUARDIAN_WAVE_TILE_WIDTH * scale;
+    const float height = GUARDIAN_WAVE_TILE_HEIGHT * scale;
+    float ground = (eruption ? 217 : 252) * scale;
+    DrawTexturePro(texture,
+        (Rectangle){frame * GUARDIAN_WAVE_TILE_WIDTH, eruption ? GUARDIAN_WAVE_TILE_HEIGHT : 0,
+                    flip ? -GUARDIAN_WAVE_TILE_WIDTH : GUARDIAN_WAVE_TILE_WIDTH, GUARDIAN_WAVE_TILE_HEIGHT},
+        (Rectangle){position.x - width / 2, position.y - ground, width, height},
+        (Vector2){0}, 0, WHITE);
+}
+
+static void DrawGuardianCurse(Texture2D texture, const EnemyRoot *root, const GuardianHazard *hazard) {
+    bool charging = root->age < hazard->warning;
+    if (root->age < hazard->hitEnd) {
+        DrawCircleV(root->position, hazard->radius, Fade(PURPLE, charging ? .23f : .36f));
+        DrawCircleLines((int)root->position.x, (int)root->position.y, hazard->radius, hazard->warningColor);
+    }
+    float elapsed = root->age - hazard->warning;
+    if (charging) elapsed += GUARDIAN_CURSE_CHARGE_FRAMES / GUARDIAN_CURSE_FPS;
+    if (elapsed < 0) return;
+    int count = charging ? GUARDIAN_CURSE_CHARGE_FRAMES : GUARDIAN_CURSE_IMPACT_FRAMES;
+    int frame = (int)(elapsed * GUARDIAN_CURSE_FPS);
+    if (frame >= count) frame = count - 1;
+    const float scale = .80f;
+    DrawTexturePro(texture,
+        (Rectangle){frame * GUARDIAN_CURSE_TILE_WIDTH, charging ? 0 : GUARDIAN_CURSE_TILE_HEIGHT,
+                    GUARDIAN_CURSE_TILE_WIDTH, GUARDIAN_CURSE_TILE_HEIGHT},
+        (Rectangle){root->position.x - GUARDIAN_CURSE_TILE_WIDTH * scale / 2,
+                    root->position.y - 250 * scale,
+                    GUARDIAN_CURSE_TILE_WIDTH * scale, GUARDIAN_CURSE_TILE_HEIGHT * scale},
+        (Vector2){0}, 0, WHITE);
+}
+
+static void DrawRangedProjectiles(const EnemyGroup *group) {
+    for (int i = 0; i < ENEMY_PROJECTILE_COUNT; i++) {
+        const EnemyProjectile *shot = &group->projectiles[i];
+        if (shot->remaining <= 0.0f) continue;
+        if (group->cemetery) {
+            DrawCircleV(shot->position, 14, Fade(GREEN, .3f));
+            DrawCircleV(shot->position, 8, LIME);
+            DrawCircleV(shot->position, 3, RAYWHITE);
+            continue;
+        }
+        Vector2 tail = Vector2Subtract(shot->position, Vector2Scale(shot->direction, 16.0f));
+        DrawLineEx(tail, shot->position, 3.0f, GOLD);
+        DrawCircleV(shot->position, 3.0f, RAYWHITE);
+    }
+}
+
 void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
-    if (group->cemetery) { CemeteryDrawEnemies(group,player,foreground); return; }
+    if (group->cemetery) {
+        CemeteryDrawEnemies(group,player,foreground);
+        if (foreground) DrawRangedProjectiles(group);
+        return;
+    }
     if (!foreground) for (int i=0; i<ENEMY_ROOT_COUNT; i++) {
         const EnemyRoot *root = &group->rootAttacks[i];
         if (!root->active) continue;
-        if (root->age < .8f) {
-            DrawCircleV(root->position, 62, Fade(RED, .18f));
-            DrawCircleLines((int)root->position.x, (int)root->position.y, 62, ORANGE);
+        const GuardianHazard *hazard = &guardianHazards[root->attack];
+        if (root->attack == GUARDIAN_CURSE) {
+            DrawGuardianCurse(group->curse, root, hazard);
+        } else if (root->age < hazard->warning) {
+            DrawCircleV(root->position, hazard->radius, Fade(RED, .18f));
+            DrawCircleLines((int)root->position.x, (int)root->position.y, hazard->radius, hazard->warningColor);
+        } else if (root->attack == GUARDIAN_ROOT_WAVE) {
+            DrawGuardianWaveFrame(group->rootWave, root->position, root->age - hazard->warning, true,
+                                  group->list[0].attackDirection.x < 0);
         } else {
-            int frame = (int)((root->age - .8f)*10);
+            int frame = (int)((root->age - hazard->warning)*10);
             if (frame > 7) frame = 7;
             DrawTexturePro(group->roots, (Rectangle){frame*288.0f,0,288,256},
                 (Rectangle){root->position.x-90,root->position.y-145,180,160}, (Vector2){0},0,WHITE);
@@ -437,11 +686,26 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
             continue;
         }
         if (enemy->type == ENEMY_BOSS) {
-            bool attack = enemy->state == ENEMY_ATTACK;
-            float w = attack ? 384 : 256, h = attack ? 288 : 272;
-            DrawTexturePro(attack ? group->bossAttack : group->bossSprites,
+            if (enemy->guardianPhase == GUARDIAN_PHASE_TRANSITION) {
+                float progress = fminf(enemy->stateTime / GUARDIAN_PHASE_TRANSITION_TIME, 1);
+                DrawCircleV(enemy->position, 50 + 120 * progress, Fade(PURPLE, .35f * (1 - progress)));
+                DrawCircleLines((int)enemy->position.x, (int)enemy->position.y,
+                                50 + 120 * progress, Fade(VIOLET, 1 - progress));
+            } else if (GuardianEnraged(enemy) && enemy->health > 0) {
+                DrawCircleV(enemy->position, 43, Fade(PURPLE, .26f));
+            }
+            bool melee = enemy->state == ENEMY_ATTACK && enemy->guardianMelee;
+            bool castingWave = enemy->state == ENEMY_ATTACK && !melee && enemy->bossAttack == GUARDIAN_ROOT_WAVE;
+            bool attack = enemy->state == ENEMY_ATTACK && !melee && enemy->bossAttack == GUARDIAN_ROOTS;
+            if (castingWave)
+                DrawGuardianWaveFrame(group->rootWave, enemy->position, enemy->stateTime, false,
+                                      enemy->attackDirection.x < 0);
+            bool widePose = attack || melee;
+            float w = widePose ? 384 : 256, h = widePose ? 288 : 272;
+            Texture2D texture = melee ? group->guardianMelee : attack ? group->bossAttack : group->bossSprites;
+            DrawTexturePro(texture,
                 (Rectangle){EnemyAnimationFrame(enemy)*w, enemy->facing*h,w,h},
-                (Rectangle){enemy->position.x-w*.325f, enemy->position.y-(attack?280:264)*.65f,
+                (Rectangle){enemy->position.x-w*.325f, enemy->position.y-(widePose?280:264)*.65f,
                             w*.65f,h*.65f}, (Vector2){0},0,
                 enemy->state == ENEMY_FALLEN || enemy->state == ENEMY_DIE ? Fade(WHITE,.45f) : WHITE);
             if (enemy->state == ENEMY_FALLEN) DrawText("E: selar",(int)enemy->position.x-30,(int)enemy->position.y+10,18,GOLD);
@@ -487,13 +751,7 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
                           48*enemy->health/enemy->maxHealth,5,RED);
         }
     }
-    if (foreground) for (int i = 0; i < ENEMY_PROJECTILE_COUNT; i++) {
-        const EnemyProjectile *shot = &group->projectiles[i];
-        if (shot->remaining <= 0.0f) continue;
-        Vector2 tail = Vector2Subtract(shot->position, Vector2Scale(shot->direction, 16.0f));
-        DrawLineEx(tail, shot->position, 3.0f, GOLD);
-        DrawCircleV(shot->position, 3.0f, RAYWHITE);
-    }
+    if (foreground) DrawRangedProjectiles(group);
 }
 
 void DrawEnemyDebug(const EnemyGroup *group) {

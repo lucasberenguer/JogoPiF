@@ -55,11 +55,11 @@ static void DrawCenteredLabel(const char *label, float centerX, float top,
 }
 
 void DrawHud(const Hud *hud, int health, int maxHealth,
-             float dodgeCooldown, float dodgeRecovery) {
+             float dodgeCooldown, float dodgeRecovery, int topOffset) {
     float width = fminf(650.0f, GetScreenWidth() * 0.38f);
     float scale = width / HUD_WIDTH;
     float x = GetScreenWidth() - width - 16.0f;
-    float y = 12.0f;
+    float y = 12.0f + topOffset;
     float healthRatio = maxHealth > 0 ? (float) health / (float) maxHealth : 0.0f;
     const Texture2D *frame = &hud->base;
     if (healthRatio <= 0.0f) frame = &hud->defeated;

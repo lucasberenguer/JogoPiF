@@ -14,7 +14,7 @@ typedef struct Hud {
 
 bool InitHud(Hud *hud);
 void DrawHud(const Hud *hud, int health, int maxHealth,
-             float dodgeCooldown, float dodgeRecovery);
+             float dodgeCooldown, float dodgeRecovery, int topOffset);
 void UnloadHud(Hud *hud);
 
 #endif
