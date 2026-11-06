@@ -49,7 +49,11 @@ bool LoadClearingCheckpoint(RunProgress *p) {
             &loaded.weapon,&loaded.stage,&loaded.health,&loaded.maxHealth,&loaded.damage,
             &loaded.speed,&loaded.bossPower,&loaded.weaponLevel[0],&loaded.weaponLevel[1],
             &loaded.weaponLevel[2],&loaded.strongWeapon);
-        if (fields==11 && loaded.stage>=5) {
+        if (fields==11 && loaded.stage>=8 && loaded.stage<=14) {
+            loaded.map=1;
+            loaded.stage=loaded.stage==14 ? CLEARING_COMPLETE_STAGE :
+                         loaded.stage>=12 ? CLEARING_BOSS_STAGE : loaded.stage-7;
+        } else if (fields==11 && loaded.stage>=5 && loaded.stage<=7) {
             loaded.stage=loaded.stage==7?CLEARING_COMPLETE_STAGE:CLEARING_BOSS_STAGE;
         }
     }

@@ -6,11 +6,20 @@
 #define ENEMY_COUNT 24
 #define ENEMY_PROJECTILE_COUNT 48
 #define ENEMY_ROOT_COUNT 8
+#define CEMETERY_PROJECTILE_COUNT 32
+typedef enum GuardianAttack {
+    GUARDIAN_ROOTS, GUARDIAN_ROOT_WAVE, GUARDIAN_CURSE, GUARDIAN_ATTACK_COUNT
+} GuardianAttack;
+enum { COVEIRO_ROOTS, COVEIRO_SHOVEL, COVEIRO_CHARGE, COVEIRO_ATTACK_COUNT };
+typedef enum GuardianPhase {
+    GUARDIAN_PHASE_ONE, GUARDIAN_PHASE_TRANSITION, GUARDIAN_PHASE_TWO
+} GuardianPhase;
 typedef struct EnemyRoot {
     Vector2 position;
     float age;
     bool active;
     bool hit;
+    GuardianAttack attack;
 } EnemyRoot;
 typedef struct EnemyProjectile {
     Vector2 position;
@@ -44,7 +53,9 @@ typedef struct Enemy {
     bool attackConnected;
     bool pickupAvailable;
     bool dropRolled;
-    bool cemeteryUnit, dormant;
+    GuardianPhase guardianPhase;
+    bool guardianMelee;
+    float guardianMeleeCooldown;
     int bossAttack;
     Vector2 attackTarget;
 } Enemy;
@@ -52,7 +63,6 @@ typedef struct CemeteryProjectile {
     bool active;
     Vector2 position,velocity;
     float life;
-    int kind;
     int damage;
 } CemeteryProjectile;
 typedef struct EnemyGroup {
@@ -60,7 +70,7 @@ typedef struct EnemyGroup {
     Texture2D backSprites;
     Texture2D frontSprites;
     Texture2D rangedSprites;
-    Texture2D bossSprites, bossAttack, roots;
+    Texture2D bossSprites, bossAttack, roots, rootWave, curse, guardianMelee;
     Texture2D bossPortrait, cemeteryPortrait;
     Enemy list[ENEMY_COUNT];
     EnemyProjectile projectiles[ENEMY_PROJECTILE_COUNT];
@@ -68,7 +78,7 @@ typedef struct EnemyGroup {
     float playerHitCooldown;
     bool cemetery;
     Texture2D skeleton,mage,boss[3],effects[3];
-    CemeteryProjectile cemeteryProjectiles[32];
+    CemeteryProjectile cemeteryProjectiles[CEMETERY_PROJECTILE_COUNT];
 } EnemyGroup;
 
 bool InitEnemies(EnemyGroup *group);
@@ -76,7 +86,7 @@ void UnloadEnemies(EnemyGroup *group);
 void ResetEnemies(EnemyGroup *group, const Clearing *clearing);
 void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
                     Vector2 player, float playerPower);
-void StartClearingBoss(EnemyGroup *group, const Clearing *clearing, Vector2 player,
+void StartArenaBoss(EnemyGroup *group, const Clearing *clearing, Vector2 player,
                        float power);
 void ClearEnemyAttacks(EnemyGroup *group);
 int EnemiesRemaining(const EnemyGroup *group);
@@ -88,17 +98,15 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground);
 void DamageEnemy(Enemy *enemy, int damage);
 void KnockbackEnemy(Enemy *enemy, const Clearing *clearing,
                     Vector2 source, float distance);
+void MoveEnemy(const Clearing *clearing, Enemy *enemy, Vector2 delta);
 bool EnemyCanBeHit(const Enemy *enemy);
 Vector2 EnemyCenter(const Enemy *enemy);
 int EnemyOptionalDropChance(EnemyType type);
 bool EnemyShouldDrop(EnemyType type, int roll);
 int EnemyAnimationFrame(const Enemy *enemy);
 void DrawEnemyDebug(const EnemyGroup *group);
-void CemeteryStartWave(EnemyGroup *,const Clearing *,int,Vector2,float);
-void CemeteryStartBoss(EnemyGroup *,const Clearing *,Vector2,float);
-void CemeteryResetEnemies(EnemyGroup *,const Clearing *);
-void CemeteryDamageEnemy(Enemy *,int);
-void CemeteryUpdateEnemies(EnemyGroup *,const Clearing *,Vector2,float,bool,int *,int);
+void CemeteryUpdateBoss(EnemyGroup *, const Clearing *, Enemy *, Vector2, float, bool, int *);
+void CemeteryUpdateProjectiles(EnemyGroup *, const Clearing *, Vector2, float, bool, int *);
 void CemeteryDrawEnemies(const EnemyGroup *,Vector2,bool);
 void DrawEnemyProjectiles(const EnemyGroup *);
 #endif

@@ -368,9 +368,10 @@ int main(void) {
         if (!entering && IsKeyPressed(KEY_F3)) showCollisionGuide = !showCollisionGuide;
         if (!entering && IsKeyPressed(KEY_F6)) showSpriteDebug = !showSpriteDebug;
         bool nearExit = CheckCollisionPointRec(player, clearing.exit);
+        bool nearPedestal = !clearing.cemetery && CheckCollisionPointCircle(player, clearing.pedestal, 72.0f);
         bool clearingComplete=encounter.phase==ENCOUNTER_CLEAR && encounter.progress.stage==CLEARING_COMPLETE_STAGE;
         if (!entering && playerHealth > 0 && !clearing.cemetery &&
-            clearingComplete && nearExit) {
+            clearingComplete && (nearExit || (nearPedestal && IsKeyPressed(KEY_E)))) {
             Clearing next = {0};
             if (InitCemetery(&next)) {
                 UnloadClearing(&clearing);
@@ -530,7 +531,6 @@ int main(void) {
                           &playerHealth, playerMaxHealth);
         }
         int frame = walking ? 1 + (int) (walkTime * 7.0f) % 4 : 0;
-        bool nearPedestal = CheckCollisionPointCircle(player, clearing.pedestal, 72.0f);
         if (!entering && nearPedestal && IsKeyPressed(KEY_E)) pedestalMessageTime = 3.0f;
         if (pedestalMessageTime > 0.0f) pedestalMessageTime -= deltaTime;
 
@@ -620,37 +620,38 @@ int main(void) {
                 }
             EndMode2D();
 
-            DrawRectangle(12, 12, 490, 130, Fade(BLACK, 0.72f));
+            int hudOffset = EncounterBossVisible(&encounter, &enemies) ? ENCOUNTER_BOSS_HUD_HEIGHT : 0;
+            DrawRectangle(12, 12 + hudOffset, 490, 130, Fade(BLACK, 0.72f));
             DrawText(currentWeapon == WEAPON_BIBLE ? "WASD: mover  |  Espaco: esquiva" :
-                     "WASD: mover  |  Espaco/botao direito: esquiva", 24, 23, 17, RAYWHITE);
-            DrawText("F3: colisao | ESC: menu", 24, 76, 17, RAYWHITE);
-            DrawText("F4/F5: testar dano e cura", 24, 104, 17, RAYWHITE);
+                     "WASD: mover  |  Espaco/botao direito: esquiva", 24, 23 + hudOffset, 17, RAYWHITE);
+            DrawText("F3: colisao | ESC: menu", 24, 76 + hudOffset, 17, RAYWHITE);
+            DrawText("F4/F5: testar dano e cura", 24, 104 + hudOffset, 17, RAYWHITE);
             if (pedestalMessageTime > 0.0f) {
-                DrawText(encounter.phase==ENCOUNTER_CLEAR ? "Clareira concluida! Proxima arena em desenvolvimento" :
-                         "Conclua quatro ondas e sele o boss da quinta", 24, 53, 18, GOLD);
+                DrawText(encounter.phase==ENCOUNTER_CLEAR ? "E: entrar no cemiterio" :
+                         "Conclua quatro ondas e sele o boss da quinta", 24, 53 + hudOffset, 18, GOLD);
             } else if (nearPedestal) {
-                DrawText(encounter.phase==ENCOUNTER_CLEAR ? "E: passagem liberada" : "O pedestal esta selado", 24, 53, 18, GOLD);
+                DrawText(encounter.phase==ENCOUNTER_CLEAR ? "E: entrar no cemiterio" : "O pedestal esta selado", 24, 53 + hudOffset, 18, GOLD);
             } else {
                 DrawText(nearExit ? (clearing.cemetery
                     ? "Vila: proxima etapa do desenvolvimento"
                     : clearingComplete ? "Caminhe pela saida para entrar no cemiterio"
                     : "Conclua as ondas e sele o Guardiao para avancar")
                     : clearing.cemetery ? "Cemiterio das Raizes" : "Explore a clareira",
-                    24, 53, 18, RAYWHITE);
+                    24, 53 + hudOffset, 18, RAYWHITE);
             }
             DrawHud(&hud, playerHealth, playerMaxHealth,
-                    dodgeCooldown, dodgeRecovery);
+                    dodgeCooldown, dodgeRecovery, hudOffset);
             DrawText(TextFormat("Arma: %s", WeaponName((Weapon)currentWeapon)),
-                     24, 150, 19, GOLD);
+                     24, 150 + hudOffset, 19, GOLD);
             if (currentWeapon == WEAPON_KATANA)
-                DrawText("Clique esquerdo: corte de katana", 24, 176, 18, RAYWHITE);
+                DrawText("Clique esquerdo: corte de katana", 24, 176 + hudOffset, 18, RAYWHITE);
             if (currentWeapon == WEAPON_BIBLE)
                 DrawText(bible.boostCooldown <= 0.0f
                              ? "Botao direito: acelerar orbitas"
                              : TextFormat("Aceleracao: %.1f s", bible.boostCooldown),
-                         24, 176, 18, RAYWHITE);
+                         24, 176 + hudOffset, 18, RAYWHITE);
             if (currentWeapon == WEAPON_GUN)
-                DrawText("Clique esquerdo: disparar (um tiro por clique)", 24, 176, 18, RAYWHITE);
+                DrawText("Clique esquerdo: disparar (um tiro por clique)", 24, 176 + hudOffset, 18, RAYWHITE);
             DrawEncounter(&encounter,&enemies);
             if (entering) {
                 float t = entryFadeRemaining / entryFadeDuration;

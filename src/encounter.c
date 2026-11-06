@@ -28,7 +28,7 @@ static void StartStage(Encounter *e, EnemyGroup *enemies, const Clearing *cleari
         BeginStagePresentation(&e->presentation,e->progress.stage,clearing->cemetery?"Cemiterio das Raizes":"Clareira do Selo",
             e->progress.stage==CLEARING_BOSS_STAGE?(clearing->cemetery?"Coveiro das Raizes":"Guardiao da Clareira"):NULL);
         if (clearing->cemetery) e->presentation.portraitCenterX=.73f;
-        if (e->progress.stage == CLEARING_BOSS_STAGE) StartClearingBoss(enemies, clearing, player, e->progress.bossPower);
+        if (e->progress.stage == CLEARING_BOSS_STAGE) StartArenaBoss(enemies, clearing, player, e->progress.bossPower);
         else StartEnemyWave(enemies, clearing, e->progress.stage, player, e->progress.damage);
     }
 }
@@ -48,6 +48,11 @@ float EncounterDamage(const Encounter *e) {
     int weapon = e->progress.weapon;
     return e->progress.damage * (1 + .2f*e->progress.weaponLevel[weapon]) *
            (e->progress.strongWeapon == weapon ? 1.5f : 1.0f);
+}
+
+bool EncounterBossVisible(const Encounter *e, const EnemyGroup *enemies) {
+    return e->presentation.remaining <= 0 && e->progress.stage == CLEARING_BOSS_STAGE &&
+           enemies->list[0].type == ENEMY_BOSS && enemies->list[0].health > 0;
 }
 
 static void RollRewards(Encounter *e) {
@@ -152,6 +157,10 @@ bool AnswerEncounterSeal(Encounter *e, EnemyGroup *enemies, int *health, int cho
         enemy->state=ENEMY_IDLE; enemy->stateTime=0; enemy->attackCooldown=1;
         snprintf(e->notice,sizeof(e->notice),"Selo incorreto: o inimigo voltou mais forte");
         if (enemy->type==ENEMY_BOSS) {
+            enemy->guardianPhase = GUARDIAN_PHASE_ONE;
+            enemy->guardianMelee = false;
+            enemy->guardianMeleeCooldown = 0;
+            enemy->bossAttack = (enemies->cemetery ? COVEIRO_ATTACK_COUNT : GUARDIAN_ATTACK_COUNT) - 1;
             e->progress.bossPower=fminf(100,e->progress.bossPower*1.2f);
             e->progress.health=*health;
             SaveClearingCheckpoint(&e->progress);
@@ -213,16 +222,25 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         DrawStagePresentation(&e->presentation,e->progress.map?enemies->cemeteryPortrait:enemies->bossPortrait,1,1);
         return;
     }
+    bool bossVisible = EncounterBossVisible(e, enemies);
+    int statusY = 205 + (bossVisible ? ENCOUNTER_BOSS_HUD_HEIGHT : 0);
     if (e->progress.stage<=CLEARING_WAVES) DrawText(TextFormat("%s - onda %d/5 | Restantes: %d",
-        e->progress.map?"Cemiterio":"Clareira",e->progress.stage,EnemiesRemaining(enemies)),24,205,20,GOLD);
-    else DrawText(e->phase==ENCOUNTER_CLEAR ? (e->progress.map?"Cemiterio limpo":"Clareira limpa - siga pela saida inferior") : (e->progress.map?"Onda 5/5 - Coveiro das Raizes":"Onda 5/5 - Guardiao da Clareira"),24,205,20,GOLD);
-    if (e->notice[0]) DrawText(e->notice,24,232,18,RAYWHITE);
-    if (e->progress.stage==CLEARING_BOSS_STAGE && enemies->list[0].health>0) {
+        e->progress.map?"Cemiterio":"Clareira",e->progress.stage,EnemiesRemaining(enemies)),24,statusY,20,GOLD);
+    else DrawText(e->phase==ENCOUNTER_CLEAR ? (e->progress.map?"Cemiterio limpo":"Clareira limpa - siga pela saida inferior") : (e->progress.map?"Onda 5/5 - Coveiro das Raizes":"Onda 5/5 - Guardiao da Clareira"),24,statusY,20,GOLD);
+    if (e->notice[0]) DrawText(e->notice,24,statusY+27,18,RAYWHITE);
+    if (bossVisible) {
         const Enemy *boss=&enemies->list[0];
+        bool phaseTwo = boss->guardianPhase != GUARDIAN_PHASE_ONE;
+        const char *phase = boss->guardianPhase == GUARDIAN_PHASE_TRANSITION ? "Despertando..." :
+                            phaseTwo ? "Fase 2/2" : "Fase 1/2";
         int w=(int)fminf(600,GetScreenWidth()*.5f), x=(GetScreenWidth()-w)/2;
-        DrawRectangle(x,GetScreenHeight()-55,w,18,DARKGRAY);
-        DrawRectangle(x,GetScreenHeight()-55,w*boss->health/boss->maxHealth,18,MAROON);
-        DrawText(TextFormat("%s  %d/%d",e->progress.map?"Coveiro das Raizes":"Guardiao da Clareira",boss->health,boss->maxHealth),x,GetScreenHeight()-82,20,GOLD);
+        DrawRectangle(x-8,8,w+16,46,Fade(BLACK,.78f));
+        DrawRectangle(x,31,w,16,DARKGRAY);
+        DrawRectangle(x,31,w*boss->health/boss->maxHealth,16,phaseTwo ? PURPLE : MAROON);
+        DrawRectangle(x+w/2,31,2,16,Fade(GOLD,.65f));
+        const char *label = TextFormat("%s  %d/%d  |  %s",e->progress.map?"Coveiro das Raizes":"Guardiao da Clareira",
+                                       boss->health,boss->maxHealth,phase);
+        DrawText(label,(GetScreenWidth()-MeasureText(label,18))/2,10,18,GOLD);
     }
     if (!EncounterPaused(e)) return;
     DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,.86f));
