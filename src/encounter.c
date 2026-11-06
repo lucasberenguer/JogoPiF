@@ -19,25 +19,29 @@ static const char *WeaponTitle(int weapon) {
 }
 
 static void StartStage(Encounter *e, EnemyGroup *enemies, const Clearing *clearing, Vector2 player) {
-    if (e->progress.stage == 7) {
+    if (e->progress.stage == CLEARING_COMPLETE_STAGE) {
         for (int i=0; i<ENEMY_COUNT; i++) enemies->list[i] = (Enemy){.state=ENEMY_GONE};
         ClearEnemyAttacks(enemies);
         e->phase = ENCOUNTER_CLEAR;
     } else {
         e->phase = ENCOUNTER_FIGHT;
-        if (e->progress.stage == 6) StartClearingBoss(enemies, clearing, player, e->progress.bossPower);
+        BeginStagePresentation(&e->presentation,e->progress.stage,clearing->cemetery?"Cemiterio das Raizes":"Clareira do Selo",
+            e->progress.stage==CLEARING_BOSS_STAGE?(clearing->cemetery?"Coveiro das Raizes":"Guardiao da Clareira"):NULL);
+        if (clearing->cemetery) e->presentation.portraitCenterX=.73f;
+        if (e->progress.stage == CLEARING_BOSS_STAGE) StartClearingBoss(enemies, clearing, player, e->progress.bossPower);
         else StartEnemyWave(enemies, clearing, e->progress.stage, player, e->progress.damage);
     }
 }
 
 void BeginEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing,
                     RunProgress progress, Vector2 player) {
+    progress.map=clearing->cemetery?1:0;
     *e = (Encounter){.progress=progress, .sealEnemy=-1};
     StartStage(e, enemies, clearing, player);
 }
 
 bool EncounterPaused(const Encounter *e) {
-    return e->phase == ENCOUNTER_REWARD || e->phase == ENCOUNTER_SEAL || e->phase == ENCOUNTER_DEFEAT;
+    return e->presentation.remaining>0 || e->phase == ENCOUNTER_REWARD || e->phase == ENCOUNTER_SEAL || e->phase == ENCOUNTER_DEFEAT;
 }
 
 float EncounterDamage(const Encounter *e) {
@@ -47,9 +51,9 @@ float EncounterDamage(const Encounter *e) {
 }
 
 static void RollRewards(Encounter *e) {
-    if (e->progress.stage == 5) {
+    if (e->progress.stage == CLEARING_WAVES) {
         e->rewardCount=2;
-        e->rewards[0]=(Reward){REWARD_WEAPON,e->progress.weapon};
+        e->rewards[0]=(Reward){REWARD_WEAPON,e->progress.weapon,0};
         e->rewards[1]=(Reward){REWARD_HEALTH,-1,GetRandomValue(3,6)*10};
         return;
     }
@@ -61,7 +65,7 @@ static void RollRewards(Encounter *e) {
             kind=REWARD_DAMAGE;
         if (i==swap) kind=REWARD_SWAP;
         e->rewards[i]=(Reward){kind, kind==REWARD_SWAP ?
-            (e->progress.weapon+GetRandomValue(1,2))%3 : e->progress.weapon};
+            (e->progress.weapon+GetRandomValue(1,2))%3 : e->progress.weapon,0};
     }
 }
 
@@ -81,7 +85,7 @@ static int ChoiceInput(int count) {
 }
 
 static void ApplyReward(Encounter *e, Reward reward, int *health) {
-    bool strong=e->progress.stage==5;
+    bool strong=e->progress.stage==CLEARING_WAVES;
     e->notice[0]=0;
     if (reward.kind==REWARD_DAMAGE) e->progress.damage+=.15f;
     else if (reward.kind==REWARD_HEALTH) {
@@ -123,7 +127,7 @@ bool ChooseEncounterReward(Encounter *e, EnemyGroup *enemies, const Clearing *cl
 }
 
 bool OpenEncounterSeal(Encounter *e, const EnemyGroup *enemies, Vector2 player) {
-    if (e->phase!=ENCOUNTER_FIGHT) return false;
+    if (e->phase!=ENCOUNTER_FIGHT || e->presentation.remaining>0) return false;
     for (int i=0;i<ENEMY_COUNT;i++) if (enemies->list[i].state==ENEMY_FALLEN &&
         Vector2Distance(enemies->list[i].position,player)<95) {
         e->sealEnemy=i; e->question=GetRandomValue(0,3); e->answer=GetRandomValue(0,2);
@@ -160,13 +164,17 @@ bool AnswerEncounterSeal(Encounter *e, EnemyGroup *enemies, int *health, int cho
 bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing,
                      Vector2 player, int *health) {
     if (*health<=0) { e->phase=ENCOUNTER_DEFEAT; return false; }
+    if (e->presentation.remaining>0) return false;
     if (e->phase==ENCOUNTER_FIGHT) {
         if (EnemiesRemaining(enemies)==0) {
             ClearEnemyAttacks(enemies);
-            if (e->progress.stage==6) {
-                e->progress.stage=7;
+            if (e->progress.stage==CLEARING_BOSS_STAGE) {
+                e->progress.stage=CLEARING_COMPLETE_STAGE;
                 e->progress.health=*health;
                 e->phase=ENCOUNTER_CLEAR;
+                BeginStagePresentation(&e->presentation,0,e->progress.map?"A vila sera a proxima etapa":"Passagem para o cemiterio liberada",NULL);
+                e->presentation.announcement=e->progress.map?"CEMITERIO LIMPO":"CLAREIRA LIMPA";
+                e->presentation.duration=e->presentation.remaining=2.5f;
                 SaveClearingCheckpoint(&e->progress);
             } else {
                 e->phase=ENCOUNTER_REWARD; e->rerolled=false; RollRewards(e);
@@ -189,7 +197,7 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
 }
 
 static const char *RewardText(const Encounter *e, Reward reward) {
-    if (e->progress.stage==5) return reward.kind==REWARD_WEAPON ?
+    if (e->progress.stage==CLEARING_WAVES) return reward.kind==REWARD_WEAPON ?
         "Arma atual\nDano +50%" : TextFormat("Status\nVida +%d / dano +20%%\nVelocidade +15",reward.amount);
     switch (reward.kind) {
         case REWARD_DAMAGE: return "Dano\n+15% de dano base";
@@ -201,16 +209,20 @@ static const char *RewardText(const Encounter *e, Reward reward) {
 }
 
 void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
-    if (e->progress.stage<=5) DrawText(TextFormat("Clareira - onda %d/5 | Restantes: %d",
-        e->progress.stage,EnemiesRemaining(enemies)),24,205,20,GOLD);
-    else DrawText(e->phase==ENCOUNTER_CLEAR ? "Clareira selada - E no pedestal" : "Boss da clareira",24,205,20,GOLD);
+    if (e->presentation.remaining>0) {
+        DrawStagePresentation(&e->presentation,e->progress.map?enemies->cemeteryPortrait:enemies->bossPortrait,1,1);
+        return;
+    }
+    if (e->progress.stage<=CLEARING_WAVES) DrawText(TextFormat("%s - onda %d/5 | Restantes: %d",
+        e->progress.map?"Cemiterio":"Clareira",e->progress.stage,EnemiesRemaining(enemies)),24,205,20,GOLD);
+    else DrawText(e->phase==ENCOUNTER_CLEAR ? (e->progress.map?"Cemiterio limpo":"Clareira limpa - siga pela saida inferior") : (e->progress.map?"Onda 5/5 - Coveiro das Raizes":"Onda 5/5 - Guardiao da Clareira"),24,205,20,GOLD);
     if (e->notice[0]) DrawText(e->notice,24,232,18,RAYWHITE);
-    if (e->progress.stage==6 && enemies->list[0].health>0) {
+    if (e->progress.stage==CLEARING_BOSS_STAGE && enemies->list[0].health>0) {
         const Enemy *boss=&enemies->list[0];
         int w=(int)fminf(600,GetScreenWidth()*.5f), x=(GetScreenWidth()-w)/2;
         DrawRectangle(x,GetScreenHeight()-55,w,18,DARKGRAY);
         DrawRectangle(x,GetScreenHeight()-55,w*boss->health/boss->maxHealth,18,MAROON);
-        DrawText(TextFormat("Guardiao da clareira  %d/%d",boss->health,boss->maxHealth),x,GetScreenHeight()-82,20,GOLD);
+        DrawText(TextFormat("%s  %d/%d",e->progress.map?"Coveiro das Raizes":"Guardiao da Clareira",boss->health,boss->maxHealth),x,GetScreenHeight()-82,20,GOLD);
     }
     if (!EncounterPaused(e)) return;
     DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,.86f));

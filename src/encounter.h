@@ -2,12 +2,14 @@
 #define ENCOUNTER_H
 #include "enemy.h"
 #include "run_progress.h"
+#include "presentation.h"
 
 typedef enum EncounterPhase { ENCOUNTER_FIGHT, ENCOUNTER_REWARD, ENCOUNTER_SEAL,
                              ENCOUNTER_CLEAR, ENCOUNTER_DEFEAT } EncounterPhase;
 typedef struct Reward { int kind; int weapon; int amount; } Reward;
 typedef struct Encounter {
     RunProgress progress;
+    StagePresentation presentation;
     EncounterPhase phase;
     Reward rewards[3];
     int rewardCount, sealEnemy, question, answer;

@@ -68,10 +68,12 @@ bool InitEnemies(EnemyGroup *group) {
     for (int i=0;i<3;i++) SetTextureFilter(group->effects[i], TEXTURE_FILTER_POINT);
     group->rangedSprites = LoadTexture("assets/inimigo_ranged.png");
     group->bossSprites = LoadTexture("assets/boss_clareira.png");
+    group->bossPortrait = LoadTexture("assets/guardiao_intro_pixel_v2.png");
+    group->cemeteryPortrait=LoadTexture("assets/coveiro_intro_pixel.png");
     group->bossAttack = LoadTexture("assets/boss_clareira_especial_1.png");
     group->roots = LoadTexture("assets/boss_clareira_raizes_area.png");
     if (!group->sprites.id || !group->backSprites.id || !group->frontSprites.id ||
-        !group->rangedSprites.id || !group->bossSprites.id || !group->bossAttack.id || !group->roots.id) {
+        !group->rangedSprites.id || !group->bossSprites.id || !group->bossAttack.id || !group->roots.id || !group->bossPortrait.id || !group->cemeteryPortrait.id) {
         UnloadEnemies(group);
         return false;
     }
@@ -80,6 +82,8 @@ bool InitEnemies(EnemyGroup *group) {
     SetTextureFilter(group->frontSprites, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->rangedSprites, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->bossSprites, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->bossPortrait, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->cemeteryPortrait,TEXTURE_FILTER_POINT);
     SetTextureFilter(group->bossAttack, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->roots, TEXTURE_FILTER_POINT);
     return true;
@@ -96,6 +100,8 @@ void UnloadEnemies(EnemyGroup *group) {
     if (group->frontSprites.id) UnloadTexture(group->frontSprites);
     if (group->rangedSprites.id) UnloadTexture(group->rangedSprites);
     if (group->bossSprites.id) UnloadTexture(group->bossSprites);
+    if (group->bossPortrait.id) UnloadTexture(group->bossPortrait);
+    if (group->cemeteryPortrait.id) UnloadTexture(group->cemeteryPortrait);
     if (group->bossAttack.id) UnloadTexture(group->bossAttack);
     if (group->roots.id) UnloadTexture(group->roots);
     *group = (EnemyGroup){0};
@@ -123,14 +129,17 @@ static Vector2 SpawnPosition(const Clearing *clearing, Vector2 player) {
             x < bounds.x + bounds.width*.75f && y > bounds.y + bounds.height*.25f &&
             y < bounds.y + bounds.height*.75f) continue;
         Vector2 point = {x, y};
-        if (!IsClearingBlocked(clearing, point) && Vector2Distance(point, player) > 230.0f)
+        if (!IsMapActorBlocked(clearing, point) && Vector2Distance(point, player) > 230.0f)
             return point;
     }
-    return clearing->spawn;
+    Vector2 fallback=clearing->spawn;
+    FindFreeMapPosition(clearing,fallback,&fallback);
+    return fallback;
 }
 
 void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
                     Vector2 player, float playerPower) {
+    if (clearing->cemetery) { CemeteryStartWave(group,clearing,wave,player,playerPower); return; }
     group->cemetery=false;
     ClearEnemyAttacks(group);
     group->playerHitCooldown = 0;
@@ -158,6 +167,7 @@ void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
 }
 
 void StartClearingBoss(EnemyGroup *group, const Clearing *clearing, Vector2 player, float power) {
+    if (clearing->cemetery) { CemeteryStartBoss(group,clearing,player,power); return; }
     group->cemetery=false;
     ClearEnemyAttacks(group);
     group->playerHitCooldown = 0;
@@ -206,18 +216,7 @@ void DamageEnemy(Enemy *enemy, int damage) {
 }
 
 static void MoveEnemy(const Clearing *clearing, Enemy *enemy, Vector2 delta) {
-    int steps = (int)(Vector2Length(delta)/3.0f)+1;
-    Vector2 step = Vector2Scale(delta, 1.0f/steps);
-    for (int i=0; i<steps; i++) {
-        Vector2 next = Vector2Add(enemy->position, step);
-        if (!IsClearingBlocked(clearing, next)) enemy->position = next;
-        else {
-            Vector2 x = {enemy->position.x+step.x, enemy->position.y};
-            Vector2 y = {enemy->position.x, enemy->position.y+step.y};
-            if (!IsClearingBlocked(clearing, x)) enemy->position = x;
-            else if (!IsClearingBlocked(clearing, y)) enemy->position = y;
-        }
-    }
+    MoveMapActor(clearing, &enemy->position, delta);
 }
 
 void KnockbackEnemy(Enemy *enemy, const Clearing *clearing,
@@ -286,7 +285,8 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 if (enemy->stateTime >= .5f && enemy->stateTime < 1.0f) {
                     MoveEnemy(clearing, enemy, Vector2Scale(enemy->attackDirection, 360 * dt));
                     if (!enemy->attackConnected && !playerDodging && group->playerHitCooldown <= 0 &&
-                        Vector2Distance(player, enemy->position) < 65 && *playerHealth > 0) {
+                        Vector2Distance(player, enemy->position) < 65 && *playerHealth > 0 &&
+                        MapHasClearPath(clearing,enemy->position,player)) {
                         *playerHealth = (int)fmaxf(0, *playerHealth - 18*enemy->power);
                         group->playerHitCooldown = .65f;
                         enemy->attackConnected = true;
@@ -300,7 +300,8 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 if (enemy->type == ENEMY_COMMON_RANGED) {
                     FireRangedProjectile(group, enemy, player);
                 } else if (!playerDodging && group->playerHitCooldown <= 0.0f && *playerHealth > 0 &&
-                    Vector2Distance(enemy->position, player) <= ENEMY_ATTACK_RANGE+8.0f) {
+                    Vector2Distance(enemy->position, player) <= ENEMY_ATTACK_RANGE+8.0f &&
+                    MapHasClearPath(clearing,enemy->position,player)) {
                     *playerHealth -= (int)(ENEMY_ATTACK_DAMAGE * enemy->power);
                     if (*playerHealth < 0) *playerHealth = 0;
                     group->playerHitCooldown = 0.65f;

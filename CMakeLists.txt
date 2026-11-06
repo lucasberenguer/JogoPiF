@@ -26,6 +26,7 @@ set(SOURCES
     src/enemy.c
     src/cemetery_enemy.c
     src/encounter.c
+    src/presentation.c
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
@@ -37,7 +38,7 @@ if(BUILD_TESTING)
     target_include_directories(enemy_audit_test PRIVATE src)
     target_link_libraries(enemy_audit_test PRIVATE raylib)
     add_test(NAME enemy_audit COMMAND enemy_audit_test)
-    add_executable(encounter_test tests/encounter_test.c src/encounter.c src/enemy.c src/cemetery_enemy.c src/clearing.c src/menu.c)
+    add_executable(encounter_test tests/encounter_test.c src/encounter.c src/presentation.c src/enemy.c src/cemetery_enemy.c src/clearing.c src/menu.c)
     target_include_directories(encounter_test PRIVATE src)
     target_link_libraries(encounter_test PRIVATE raylib)
     set_target_properties(encounter_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/audit")

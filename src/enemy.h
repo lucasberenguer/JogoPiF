@@ -53,6 +53,7 @@ typedef struct CemeteryProjectile {
     Vector2 position,velocity;
     float life;
     int kind;
+    int damage;
 } CemeteryProjectile;
 typedef struct EnemyGroup {
     Texture2D sprites;
@@ -60,6 +61,7 @@ typedef struct EnemyGroup {
     Texture2D frontSprites;
     Texture2D rangedSprites;
     Texture2D bossSprites, bossAttack, roots;
+    Texture2D bossPortrait, cemeteryPortrait;
     Enemy list[ENEMY_COUNT];
     EnemyProjectile projectiles[ENEMY_PROJECTILE_COUNT];
     EnemyRoot rootAttacks[ENEMY_ROOT_COUNT];
@@ -92,6 +94,8 @@ int EnemyOptionalDropChance(EnemyType type);
 bool EnemyShouldDrop(EnemyType type, int roll);
 int EnemyAnimationFrame(const Enemy *enemy);
 void DrawEnemyDebug(const EnemyGroup *group);
+void CemeteryStartWave(EnemyGroup *,const Clearing *,int,Vector2,float);
+void CemeteryStartBoss(EnemyGroup *,const Clearing *,Vector2,float);
 void CemeteryResetEnemies(EnemyGroup *,const Clearing *);
 void CemeteryDamageEnemy(Enemy *,int);
 void CemeteryUpdateEnemies(EnemyGroup *,const Clearing *,Vector2,float,bool,int *,int);

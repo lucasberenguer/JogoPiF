@@ -28,14 +28,14 @@ static void MoveWithCollision(const Clearing *clearing, Vector2 *position,
     Vector2 step = Vector2Scale(movement, 1.0f / (float) steps);
     for (int index = 0; index < steps; index++) {
         Vector2 next = Vector2Add(*position, step);
-        if (!IsClearingBlocked(clearing, next)) {
+        if (!IsMapActorBlocked(clearing, next)) {
             *position = next;
             continue;
         }
         Vector2 alongX = { position->x + step.x, position->y };
         Vector2 alongY = { position->x, position->y + step.y };
-        bool xFree = step.x != 0.0f && !IsClearingBlocked(clearing, alongX);
-        bool yFree = step.y != 0.0f && !IsClearingBlocked(clearing, alongY);
+        bool xFree = step.x != 0.0f && !IsMapActorBlocked(clearing, alongX);
+        bool yFree = step.y != 0.0f && !IsMapActorBlocked(clearing, alongY);
         if (xFree && (!yFree || fabsf(step.x) >= fabsf(step.y))) {
             *position = alongX;
         } else if (yFree) {
@@ -238,10 +238,10 @@ int main(void) {
             } else if (action == MENU_CONTINUE) {
                 RunProgress progress;
                 if (LoadClearingCheckpoint(&progress)) {
-                    if (clearing.cemetery) {
+                    if (clearing.cemetery!=(progress.map==1)) {
                         UnloadClearing(&clearing);
                         clearing=(Clearing){0};
-                        if (!InitClearing(&clearing)) break;
+                        if (!(progress.map?InitCemetery(&clearing):InitClearing(&clearing))) break;
                     }
                     BeginEncounter(&encounter,&enemies,&clearing,progress,clearing.spawn);
                     currentWeapon=progress.weapon;
@@ -252,11 +252,6 @@ int main(void) {
                 }
             }
             if (screen == 2) {
-                if (clearing.cemetery) {
-                    UnloadClearing(&clearing);
-                    clearing = (Clearing){0};
-                    if (!InitClearing(&clearing)) break;
-                }
                 player = clearing.spawn;
                 dodgeRemaining = 0.0f;
                 dodgeCooldown = 0.0f;
@@ -313,8 +308,48 @@ int main(void) {
             EndDrawing();
             continue;
         }
+        if (playerHealth <= 0) {
+            Rectangle retry = {GetScreenWidth()/2.0f-150,GetScreenHeight()/2.0f+25,300,65};
+            bool hover=CheckCollisionPointRec(GetMousePosition(),retry);
+            if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_R) ||
+                (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))) {
+                if (clearing.cemetery) {
+                    UnloadClearing(&clearing);
+                    clearing=(Clearing){0};
+                    if (!InitClearing(&clearing)) break;
+                }
+                RunProgress progress=NewRunProgress(currentWeapon);
+                BeginEncounter(&encounter,&enemies,&clearing,progress,clearing.spawn);
+                SaveClearingCheckpoint(&progress);
+                player=clearing.spawn;
+                playerHealth=playerMaxHealth=progress.maxHealth;
+                playerSpeed=progress.speed;
+                ResetGun(&gun); ResetBible(&bible);
+                dodgeRemaining=dodgeCooldown=0;
+                katanaAttackRemaining=katanaAttackCooldown=0;
+                katanaAttackId=0; walkTime=0; facing=0;
+                pedestalMessageTime=0;
+                entryFadeRemaining=entryFadeDuration;
+                continue;
+            }
+            BeginDrawing();
+            ClearBackground((Color){16,10,22,255});
+            DrawText("GAME OVER",(GetScreenWidth()-MeasureText("GAME OVER",52))/2,
+                GetScreenHeight()/2-100,52,RED);
+            DrawText("Sua tentativa terminou.",(GetScreenWidth()-MeasureText("Sua tentativa terminou.",22))/2,
+                GetScreenHeight()/2-30,22,RAYWHITE);
+            DrawRectangleRec(retry,hover?MAROON:DARKGRAY);
+            DrawRectangleLinesEx(retry,2,GOLD);
+            DrawText("REPETIR",(int)retry.x+95,(int)retry.y+19,26,RAYWHITE);
+            DrawText("Enter ou R: nova tentativa",(GetScreenWidth()-MeasureText("Enter ou R: nova tentativa",18))/2,
+                (int)retry.y+85,18,GRAY);
+            EndDrawing();
+            continue;
+        }
         if (IsKeyPressed(KEY_ESCAPE)) { screen = 0; continue; }
-        bool encounterChanged=!clearing.cemetery && entryFadeRemaining<=0 &&
+        if (entryFadeRemaining<=0)
+            UpdateStagePresentation(&encounter.presentation,fminf(GetFrameTime(),.05f));
+        bool encounterChanged=entryFadeRemaining<=0 &&
             UpdateEncounter(&encounter,&enemies,&clearing,player,&playerHealth);
         if (encounterChanged) {
             ResetGun(&gun);
@@ -326,21 +361,26 @@ int main(void) {
         currentWeapon=encounter.progress.weapon;
         playerMaxHealth=encounter.progress.maxHealth;
         playerSpeed=encounter.progress.speed;
-        float deltaTime = (!clearing.cemetery && EncounterPaused(&encounter)) || encounterChanged ? 0 : GetFrameTime();
+        float deltaTime = EncounterPaused(&encounter) || encounterChanged ? 0 : GetFrameTime();
         if (deltaTime > 0.05f) deltaTime = 0.05f;
-        bool entering = entryFadeRemaining > 0.0f || (!clearing.cemetery && EncounterPaused(&encounter)) || encounterChanged;
-        if (entering) entryFadeRemaining = fmaxf(0.0f, entryFadeRemaining - deltaTime);
+        bool entering = entryFadeRemaining > 0.0f || EncounterPaused(&encounter) || encounterChanged;
+        if (entering) entryFadeRemaining = fmaxf(0.0f, entryFadeRemaining - fminf(GetFrameTime(),.05f));
         if (!entering && IsKeyPressed(KEY_F3)) showCollisionGuide = !showCollisionGuide;
         if (!entering && IsKeyPressed(KEY_F6)) showSpriteDebug = !showSpriteDebug;
         bool nearExit = CheckCollisionPointRec(player, clearing.exit);
+        bool clearingComplete=encounter.phase==ENCOUNTER_CLEAR && encounter.progress.stage==CLEARING_COMPLETE_STAGE;
         if (!entering && playerHealth > 0 && !clearing.cemetery &&
-            (nearExit || IsKeyPressed(KEY_F7))) {
+            clearingComplete && nearExit) {
             Clearing next = {0};
             if (InitCemetery(&next)) {
                 UnloadClearing(&clearing);
                 clearing = next;
                 player = clearing.spawn;
-                ResetEnemies(&enemies, &clearing);
+                RunProgress nextProgress=encounter.progress;
+                nextProgress.map=1; nextProgress.stage=1; nextProgress.bossPower=1;
+                nextProgress.health=playerHealth;
+                BeginEncounter(&encounter,&enemies,&clearing,nextProgress,player);
+                SaveClearingCheckpoint(&nextProgress);
                 ResetGun(&gun);
                 ResetBible(&bible);
                 dodgeRemaining = katanaAttackRemaining = 0;
@@ -467,7 +507,8 @@ int main(void) {
                     int damage = GunHitCircle(&gun, center, EnemyHurtRadius(enemy));
                     if (damage) DamageEnemy(enemy, (int)ceilf(damage*EncounterDamage(&encounter)));
                 } else if (currentWeapon == WEAPON_BIBLE && enemy->bibleHitCooldown <= 0.0f &&
-                           BibleTouchesCircle(&bible, player, center, EnemyHurtRadius(enemy))) {
+                           BibleTouchesCircle(&bible, player, center, EnemyHurtRadius(enemy)) &&
+                           MapHasClearPath(&clearing,player,enemy->position)) {
                     DamageEnemy(enemy, (int)ceilf(BibleContactDamage()*EncounterDamage(&encounter)));
                     KnockbackEnemy(enemy, &clearing, player, 36.0f);
                     enemy->bibleHitCooldown = 0.55f;
@@ -478,7 +519,8 @@ int main(void) {
                     float distance = Vector2Length(delta);
                     Vector2 forward = FacingVector(katanaAttackFacing);
                     if (distance < 102.0f+EnemyHurtRadius(enemy) && distance > 0.0f &&
-                        Vector2DotProduct(delta, forward) >= -0.12f*distance) {
+                        Vector2DotProduct(delta, forward) >= -0.12f*distance &&
+                        MapHasClearPath(&clearing,player,enemy->position)) {
                         DamageEnemy(enemy, (int)ceilf(25*EncounterDamage(&encounter)));
                         enemy->lastKatanaSwing = katanaAttackId;
                     }
@@ -581,17 +623,18 @@ int main(void) {
             DrawRectangle(12, 12, 490, 130, Fade(BLACK, 0.72f));
             DrawText(currentWeapon == WEAPON_BIBLE ? "WASD: mover  |  Espaco: esquiva" :
                      "WASD: mover  |  Espaco/botao direito: esquiva", 24, 23, 17, RAYWHITE);
-            DrawText("F3: colisao | F7: cemiterio (teste) | ESC: menu", 24, 76, 17, RAYWHITE);
+            DrawText("F3: colisao | ESC: menu", 24, 76, 17, RAYWHITE);
             DrawText("F4/F5: testar dano e cura", 24, 104, 17, RAYWHITE);
             if (pedestalMessageTime > 0.0f) {
                 DrawText(encounter.phase==ENCOUNTER_CLEAR ? "Clareira concluida! Proxima arena em desenvolvimento" :
-                         "Derrote as cinco ondas e sele o boss", 24, 53, 18, GOLD);
+                         "Conclua quatro ondas e sele o boss da quinta", 24, 53, 18, GOLD);
             } else if (nearPedestal) {
                 DrawText(encounter.phase==ENCOUNTER_CLEAR ? "E: passagem liberada" : "O pedestal esta selado", 24, 53, 18, GOLD);
             } else {
                 DrawText(nearExit ? (clearing.cemetery
                     ? "Vila: proxima etapa do desenvolvimento"
-                    : "Caminhe pela saida para entrar no cemiterio")
+                    : clearingComplete ? "Caminhe pela saida para entrar no cemiterio"
+                    : "Conclua as ondas e sele o Guardiao para avancar")
                     : clearing.cemetery ? "Cemiterio das Raizes" : "Explore a clareira",
                     24, 53, 18, RAYWHITE);
             }
@@ -608,7 +651,7 @@ int main(void) {
                          24, 176, 18, RAYWHITE);
             if (currentWeapon == WEAPON_GUN)
                 DrawText("Clique esquerdo: disparar (um tiro por clique)", 24, 176, 18, RAYWHITE);
-            if (!clearing.cemetery) DrawEncounter(&encounter,&enemies);
+            DrawEncounter(&encounter,&enemies);
             if (entering) {
                 float t = entryFadeRemaining / entryFadeDuration;
                 float opacity = t*t*(3.0f - 2.0f*t);

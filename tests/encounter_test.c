@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 static void Capture(const char *name, Encounter *encounter, EnemyGroup *enemies,
                     Clearing *clearing, Vector2 player) {
@@ -12,11 +13,12 @@ static void Capture(const char *name, Encounter *encounter, EnemyGroup *enemies,
     Camera2D camera={.zoom=.72f};
     BeginMode2D(camera);
     DrawClearing(clearing);
+    if (strstr(name,"collision")) DrawClearingCollisionGuide(clearing);
     DrawEnemies(enemies,player,false);
     DrawCircleV(player,15,SKYBLUE);
     DrawEnemies(enemies,player,true);
     EndMode2D();
-    DrawEncounter(encounter,enemies);
+    if (!strstr(name,"collision")) DrawEncounter(encounter,enemies);
     EndTextureMode();
     Image shot=LoadImageFromTexture(target.texture);
     ImageFlipVertical(&shot);
@@ -38,9 +40,15 @@ int main(void) {
     Vector2 player={835,540};
     int health=100;
     BeginEncounter(&encounter,&enemies,&clearing,NewRunProgress(0),player);
-    for (int wave=1;wave<=5;wave++) {
+    Capture("audit/clearing_collision_updated.png",&encounter,&enemies,&clearing,clearing.spawn);
+    for (int wave=1;wave<=CLEARING_WAVES;wave++) {
         assert(encounter.progress.stage==wave);
         assert(EnemiesRemaining(&enemies)==6+(wave-1)*3);
+        assert(EncounterPaused(&encounter));
+        UpdateStagePresentation(&encounter.presentation,.1f);
+        assert(EncounterPaused(&encounter));
+        UpdateStagePresentation(&encounter.presentation,10);
+        assert(!EncounterPaused(&encounter));
         int specials=0;
         for (int i=0;i<ENEMY_COUNT;i++) {
             Enemy *enemy=&enemies.list[i];
@@ -74,7 +82,7 @@ int main(void) {
         assert(EnemiesRemaining(&enemies)==0);
         UpdateEncounter(&encounter,&enemies,&clearing,player,&health);
         assert(encounter.phase==ENCOUNTER_REWARD);
-        assert(encounter.rewardCount==(wave==5?2:3));
+        assert(encounter.rewardCount==(wave==CLEARING_WAVES?2:3));
         if (wave==1) Capture("audit/rewards.png",&encounter,&enemies,&clearing,player);
         assert(!ChooseEncounterReward(&encounter,&enemies,&clearing,player,&health,9));
         assert(ChooseEncounterReward(&encounter,&enemies,&clearing,player,&health,0));
@@ -82,7 +90,12 @@ int main(void) {
         assert(LoadClearingCheckpoint(&saved));
         assert(saved.stage==wave+1 && saved.weapon==encounter.progress.weapon);
     }
-    assert(encounter.progress.stage==6 && EnemiesRemaining(&enemies)==1);
+    assert(encounter.progress.stage==CLEARING_BOSS_STAGE && EnemiesRemaining(&enemies)==1);
+    assert(encounter.presentation.boss && EncounterPaused(&encounter));
+    UpdateStagePresentation(&encounter.presentation,.7f);
+    Capture("audit/boss_intro.png",&encounter,&enemies,&clearing,player);
+    UpdateStagePresentation(&encounter.presentation,10);
+    assert(!EncounterPaused(&encounter));
     Enemy *boss=&enemies.list[0];
     assert(boss->type==ENEMY_BOSS && EnemyHurtRadius(boss)>20);
     boss->state=ENEMY_IDLE;
@@ -109,21 +122,72 @@ int main(void) {
     assert(encounter.progress.bossPower>oldPower && boss->health==boss->maxHealth);
     RunProgress revanche;
     assert(LoadClearingCheckpoint(&revanche));
-    assert(revanche.stage==6 && revanche.bossPower>1);
+    assert(revanche.stage==CLEARING_BOSS_STAGE && revanche.bossPower>1);
     DamageEnemy(boss,boss->health);
     UpdateEnemies(&enemies,&clearing,player,.9f,true,&health,100);
     assert(OpenEncounterSeal(&encounter,&enemies,boss->position));
     assert(AnswerEncounterSeal(&encounter,&enemies,&health,encounter.answer));
     UpdateEncounter(&encounter,&enemies,&clearing,player,&health);
-    assert(encounter.phase==ENCOUNTER_CLEAR && encounter.progress.stage==7);
+    assert(encounter.phase==ENCOUNTER_CLEAR && encounter.progress.stage==CLEARING_COMPLETE_STAGE);
+    assert(encounter.presentation.announcement && EncounterPaused(&encounter));
+    assert(strcmp(encounter.presentation.announcement,"CLAREIRA LIMPA")==0);
+    UpdateStagePresentation(&encounter.presentation,3);
+    assert(!EncounterPaused(&encounter));
     RunProgress completed;
-    assert(LoadClearingCheckpoint(&completed) && completed.stage==7);
+    assert(LoadClearingCheckpoint(&completed) && completed.stage==CLEARING_COMPLETE_STAGE);
     health=0;
     UpdateEncounter(&encounter,&enemies,&clearing,player,&health);
     assert(encounter.phase==ENCOUNTER_DEFEAT && EncounterPaused(&encounter));
+    UnloadClearing(&clearing);
+    clearing=(Clearing){0};
+    assert(InitCemetery(&clearing));
+    player=clearing.spawn;health=100;
+    RunProgress cemeteryProgress=NewRunProgress(0);
+    cemeteryProgress.damage=1.4f;
+    BeginEncounter(&encounter,&enemies,&clearing,cemeteryProgress,player);
+    assert(encounter.progress.map==1 && encounter.progress.damage==1.4f);
+    UpdateStagePresentation(&encounter.presentation,.6f);
+    Capture("audit/cemetery_wave.png",&encounter,&enemies,&clearing,player);
+    Capture("audit/cemetery_collision_updated.png",&encounter,&enemies,&clearing,player);
+    for (int wave=1;wave<=CLEARING_WAVES;wave++) {
+        assert(encounter.progress.stage==wave);
+        assert(EnemiesRemaining(&enemies)==6+(wave-1)*3);
+        UpdateStagePresentation(&encounter.presentation,10);
+        for (int i=0;i<ENEMY_COUNT;i++) {
+            Enemy *enemy=&enemies.list[i];
+            if (enemy->state==ENEMY_GONE) continue;
+            assert(enemy->cemeteryUnit && !IsMapActorBlocked(&clearing,enemy->position));
+            enemy->state=ENEMY_IDLE;
+            DamageEnemy(enemy,enemy->health);
+        }
+        UpdateEnemies(&enemies,&clearing,player,.9f,true,&health,encounter.progress.maxHealth);
+        for (int i=0;i<ENEMY_COUNT;i++) if (enemies.list[i].state==ENEMY_FALLEN) {
+            assert(OpenEncounterSeal(&encounter,&enemies,enemies.list[i].position));
+            int correct=encounter.question==0 || encounter.question==3?0:1;
+            assert(AnswerEncounterSeal(&encounter,&enemies,&health,correct));
+        }
+        UpdateEncounter(&encounter,&enemies,&clearing,player,&health);
+        assert(encounter.phase==ENCOUNTER_REWARD);
+        assert(ChooseEncounterReward(&encounter,&enemies,&clearing,player,&health,0));
+        RunProgress saved;
+        assert(LoadClearingCheckpoint(&saved) && saved.map==1 && saved.stage==wave+1);
+    }
+    assert(encounter.progress.stage==CLEARING_BOSS_STAGE && EnemiesRemaining(&enemies)==1);
+    UpdateStagePresentation(&encounter.presentation,.7f);
+    Capture("audit/cemetery_boss_intro.png",&encounter,&enemies,&clearing,player);
+    UpdateStagePresentation(&encounter.presentation,10);
+    enemies.list[0].state=ENEMY_IDLE;
+    DamageEnemy(&enemies.list[0],enemies.list[0].health);
+    UpdateEnemies(&enemies,&clearing,player,.9f,true,&health,encounter.progress.maxHealth);
+    assert(enemies.list[0].state==ENEMY_FALLEN);
+    assert(OpenEncounterSeal(&encounter,&enemies,enemies.list[0].position));
+    assert(AnswerEncounterSeal(&encounter,&enemies,&health,encounter.answer));
+    UpdateEncounter(&encounter,&enemies,&clearing,player,&health);
+    assert(encounter.phase==ENCOUNTER_CLEAR);
+    assert(strcmp(encounter.presentation.announcement,"CEMITERIO LIMPO")==0);
     UnloadEnemies(&enemies);
     UnloadClearing(&clearing);
     CloseWindow();
-    puts("Five waves, rewards, boss roots, seals and checkpoints passed");
+    puts("Four waves, boss fifth wave, rewards, boss roots, seals and checkpoints passed");
     return 0;
 }

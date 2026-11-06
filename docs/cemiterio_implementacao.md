@@ -76,3 +76,25 @@ Validação automática executada: compilação CMake/Ninja e CTest, incluindo f
 
 ## Integra��o com as atualiza��es da equipe
 As ondas, recompensas, chefe e checkpoint ampliado da clareira foram preservados. O grupo compartilhado suporta 24 posi��es; o cemit�rio usa as sete primeiras. Seus comportamentos ficam em src/cemetery_enemy.c, acessados pela interface de enemy.c. O controlador de encontros da clareira � suspenso durante o cemit�rio para n�o criar ondas ou recompensas da clareira nessa fase. Continuar restaura o checkpoint da clareira; salvar a fase do cemit�rio continua pendente. A descri��o antiga de checkpoint apenas de arma foi superada pelo sistema novo da equipe.
+
+## Correções de fluxo e navegação — 06/11/2026
+A passagem agora exige ENCOUNTER_CLEAR e etapa 7: cinco ondas concluídas e Guardião selado. O atalho F7 foi removido. As instruções anteriores de passagem livre/F7 estão superadas.
+
+Game Over agora é tratado pelo fluxo principal para ambos os mapas: pausa a simulação e oferece REPETIR (clique, Enter ou R). Repetir cria uma nova tentativa na primeira onda da clareira, com a arma atual e atributos iniciais, e substitui o checkpoint. Não há botão de saída nesta tela.
+
+Inimigos nascem com folga de sete pixels em relação às colisões. A movimentação compartilhada recupera posições embutidas e procura tangentes nas bordas irregulares quando o avanço direto é bloqueado. É navegação local, sem planejamento global de caminho. Testes cobrem recuperação de posição, movimento junto a limite e desvio de obstáculo; falta validar visualmente nos pontos relatados pelo jogador.
+
+## Apresentação e cinco ondas totais
+O ciclo agora tem quatro hordas (6, 9, 12 e 15 inimigos) e uma quinta onda exclusiva do Guardião. A recompensa especial ocorre após a quarta horda. Cada horda começa com aviso ONDA N por 1,6 s. A quinta começa com apresentação de 3 s: fundo escurecido, faixa inclinada, nome e sprite animada do mini-boss, inspirada na referência enviada. Combate fica suspenso durante as apresentações. O módulo presentation.h/c permite reutilizar tempo, nome de mapa e sprite em outros mapas; ainda aplicado apenas na clareira.
+Checkpoint atualizado para PIF-CLEARING-4, com migração dos checkpoints da versão anterior. Saída liberada após o selo do mini-boss na quinta onda. Testes verificam o ciclo de quatro hordas, pausa das apresentações, chefe na quinta e conclusão. Preview renderizado: build/audit/boss_intro.png.
+
+## Cemitério com ondas e colisões desenhadas — 06/11/2026
+Os 15 retângulos aproximados foram substituídos pelo contorno externo e 20 polígonos de lápides/túmulos seguindo as novas marcações. O corredor superior do portão e a abertura lateral direita permanecem acessíveis. O modo F3 mostra os polígonos efetivos, sem o antigo retângulo de limite que já não representa a arena.
+
+O cemitério usa agora o mesmo controlador de encontros da clareira: ondas 1–4 com 6, 9, 12 e 15 inimigos, avisos, pausa durante apresentação/recompensas/selos e recompensa especial antes da quinta onda. Especiais têm tonalidade violeta, investida e selo obrigatório; os magos disparam bolas verdes. O Coveiro aparece sozinho na onda 5, com os três ataques existentes. Após derrotá-lo, é necessário acertar seu selo para concluir; aparece CEMITERIO LIMPO. A vila continua fora desta versão.
+
+A introdução usa um retrato próprio em pixel art ameaçador do Coveiro, com pá reta na vertical, em assets/coveiro_intro_pixel_pa_reta.png. As sprites de combate da pá não foram redesenhadas por essa alteração de retrato.
+
+O checkpoint PIF-RUN-5 salva o mapa além dos atributos e etapa; formatos anteriores são lidos como clareira. Entrar no cemitério preserva vida, arma e melhorias, inicia onda 1 e salva essa fase. Continuar carrega o mapa correto. Repetir após Game Over inicia uma nova tentativa na clareira.
+
+Verificações: build e os dois testes passaram, incluindo o ciclo completo das duas fases, quantidades, recompensas, selos, mapa do checkpoint, nascimento livre, colisões da capela/lápides, passagem direita e apresentação do Coveiro. Previews renderizados em build/audit/cemetery_collision_updated.png e cemetery_boss_intro.png. Ainda é necessário teste interativo das novas bordas.
