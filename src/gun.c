@@ -6,8 +6,8 @@
 #define SHOT_SPEED 760.0f
 #define SHOT_LIFE 0.85f
 #define SHOT_RADIUS 8.0f
-#define SHOT_DAMAGE 8
-#define SHOT_INTERVAL 0.40f
+#define SHOT_DAMAGE 5
+#define SHOT_INTERVAL 0.25f
 
 static void AddImpact(Gun *gun, Vector2 at) {
     for (int i=0; i<GUN_MAX_IMPACTS; i++) {

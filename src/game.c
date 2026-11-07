@@ -216,6 +216,7 @@ int main(void) {
     float pedestalMessageTime = 0.0f;
     const float katanaAttackDuration = 0.42f;
     const float katanaAttackRecovery = 0.55f;
+    const float katanaAttackRange = 140.0f;
     float katanaAttackRemaining = 0.0f;
     float katanaAttackCooldown = 0.0f;
     int katanaAttackFacing = 0;
@@ -519,7 +520,7 @@ int main(void) {
                     Vector2 delta = Vector2Subtract(center, playerCenter);
                     float distance = Vector2Length(delta);
                     Vector2 forward = FacingVector(katanaAttackFacing);
-                    if (distance < 102.0f+EnemyHurtRadius(enemy) && distance > 0.0f &&
+                    if (distance < katanaAttackRange+EnemyHurtRadius(enemy) && distance > 0.0f &&
                         Vector2DotProduct(delta, forward) >= -0.12f*distance &&
                         MapHasClearPath(&clearing,player,enemy->position)) {
                         DamageEnemy(enemy, (int)ceilf(25*EncounterDamage(&encounter)));
@@ -596,6 +597,17 @@ int main(void) {
                         float width = bodyFacing < 2 ? 68.0f : 76.0f;
                         bodyDestination = (Rectangle){player.x - width * 0.5f,
                             player.y - 72.0f, width, 75.0f};
+                    }
+                    if (attacking && katanaAttackRemaining <= katanaAttackDuration * .5f) {
+                        Vector2 direction = FacingVector(katanaAttackFacing);
+                        Vector2 center = {player.x, player.y - 35};
+                        float angle = atan2f(direction.y, direction.x) * RAD2DEG;
+                        float halfArc = acosf(-.12f) * RAD2DEG;
+                        float opacity = katanaAttackRemaining / (katanaAttackDuration * .5f);
+                        DrawRing(center, katanaAttackRange - 10, katanaAttackRange,
+                                 angle - halfArc, angle + halfArc, 32, Fade(MAROON, opacity * .55f));
+                        DrawRing(center, katanaAttackRange - 3, katanaAttackRange,
+                                 angle - halfArc, angle + halfArc, 32, Fade(RAYWHITE, opacity * .75f));
                     }
                     DrawTexturePro(bodyTexture,
                         bodySource,

@@ -11,6 +11,7 @@
 #define RANGED_MAX_DISTANCE 300.0f
 #define RANGED_SHOT_SPEED 365.0f
 #define ARENA_BOSS_BASE_HEALTH 2200
+#define CEMETERY_BOSS_BASE_HEALTH 5000
 #define GUARDIAN_PHASE_TRANSITION_TIME 1.0f
 #define GUARDIAN_ROOT_ECHO_TIME .95f
 #define GUARDIAN_CURSE_ECHO_TIME .62f
@@ -239,9 +240,10 @@ void StartArenaBoss(EnemyGroup *group, const Clearing *clearing, Vector2 player,
     group->playerHitCooldown = 0;
     for (int i=0; i<ENEMY_COUNT; i++) group->list[i] = (Enemy){.state = ENEMY_GONE};
     Enemy *boss = &group->list[0];
+    int baseHealth = clearing->cemetery ? CEMETERY_BOSS_BASE_HEALTH : ARENA_BOSS_BASE_HEALTH;
     *boss = (Enemy){.type = ENEMY_BOSS, .state = ENEMY_SPAWNING,
-        .position = SpawnPosition(clearing, player), .maxHealth = (int)(ARENA_BOSS_BASE_HEALTH*fmaxf(1, power)),
-        .speed = 100, .power = power, .attackCooldown = 1.25f, .lastKatanaSwing = -1,
+        .position = SpawnPosition(clearing, player), .maxHealth = (int)(baseHealth*fmaxf(1, power)),
+        .speed = clearing->cemetery ? 160 : 100, .power = power, .attackCooldown = 1.25f, .lastKatanaSwing = -1,
         .bossAttack = (clearing->cemetery ? COVEIRO_ATTACK_COUNT : GUARDIAN_ATTACK_COUNT) - 1};
     boss->health = boss->maxHealth;
 }
