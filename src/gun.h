@@ -28,6 +28,7 @@ typedef struct Gun {
     Vector2 muzzle;
     Vector2 aim;
     float poseRemaining;
+    float shotCooldown;
 } Gun;
 
 bool InitGun(Gun *gun);

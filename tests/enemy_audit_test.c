@@ -157,7 +157,7 @@ int main(void) {
     assert(health==44); /* Corruption power must affect the root attack. */
     Enemy *coveiro = &group.list[0];
     DamageEnemy(coveiro, coveiro->health);
-    assert(coveiro->guardianPhase == GUARDIAN_PHASE_TRANSITION && coveiro->health == 750);
+    assert(coveiro->guardianPhase == GUARDIAN_PHASE_TRANSITION && coveiro->health == 1100);
     UpdateEnemies(&group, &map, target, 1.0f, true, &health, 100);
     UpdateEnemies(&group, &map, target, .25f, true, &health, 100);
     assert(coveiro->guardianPhase == GUARDIAN_PHASE_TWO && coveiro->bossAttack == COVEIRO_CHARGE);

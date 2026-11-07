@@ -4,9 +4,10 @@
 #include <string.h>
 
 #define SHOT_SPEED 760.0f
-#define SHOT_LIFE 1.25f
+#define SHOT_LIFE 0.85f
 #define SHOT_RADIUS 8.0f
-#define SHOT_DAMAGE 11
+#define SHOT_DAMAGE 8
+#define SHOT_INTERVAL 0.40f
 
 static void AddImpact(Gun *gun, Vector2 at) {
     for (int i=0; i<GUN_MAX_IMPACTS; i++) {
@@ -50,12 +51,14 @@ void ResetGun(Gun *gun) {
     memset(gun->shots, 0, sizeof(gun->shots));
     memset(gun->impacts, 0, sizeof(gun->impacts));
     gun->poseRemaining = 0.0f;
+    gun->shotCooldown = 0.0f;
     gun->aim = (Vector2){1.0f, 0.0f};
 }
 
 void UpdateGun(Gun *gun, const Clearing *clearing, Vector2 player,
                Vector2 aimWorld, float dt, bool triggerPressed) {
     gun->poseRemaining = fmaxf(0.0f, gun->poseRemaining-dt);
+    gun->shotCooldown = fmaxf(0.0f, gun->shotCooldown-dt);
     for (int i=0; i<GUN_MAX_IMPACTS; i++)
         gun->impacts[i].remaining = fmaxf(0.0f, gun->impacts[i].remaining-dt);
     Vector2 origin = {player.x, player.y-35.0f};
@@ -64,13 +67,14 @@ void UpdateGun(Gun *gun, const Clearing *clearing, Vector2 player,
     gun->muzzle = Vector2Add(origin, Vector2Scale(gun->aim, 32.0f));
 
     int newShot = -1;
-    if (triggerPressed) {
+    if (triggerPressed && gun->shotCooldown <= 0.0f) {
         for (int i=0; i<GUN_MAX_SHOTS; i++) {
             if (gun->shots[i].life <= 0.0f) {
                 gun->shots[i] = (GunShot){gun->muzzle, gun->aim, SHOT_LIFE,
                                          GUN_POSE_DURATION * 2.0f / GUN_POSE_FRAMES};
                 newShot = i;
                 gun->poseRemaining = GUN_POSE_DURATION;
+                gun->shotCooldown = SHOT_INTERVAL;
                 break;
             }
         }
@@ -85,6 +89,7 @@ void UpdateGun(Gun *gun, const Clearing *clearing, Vector2 player,
             activeDt -= anticipation;
             if (shot->delay > 0.0f || activeDt <= 0.0f) continue;
         }
+        activeDt = fminf(activeDt, shot->life);
         Vector2 travel = Vector2Scale(shot->direction, SHOT_SPEED*activeDt);
         int steps = (int)(Vector2Length(travel)/7.0f)+1;
         Vector2 step = Vector2Scale(travel, 1.0f/steps);
