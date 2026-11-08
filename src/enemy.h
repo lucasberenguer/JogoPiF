@@ -70,7 +70,7 @@ typedef struct EnemyGroup {
     Texture2D backSprites;
     Texture2D frontSprites;
     Texture2D rangedSprites;
-    Texture2D bossSprites, bossAttack, roots, rootWave, curse, guardianMelee;
+    Texture2D bossSprites, bossWalk, bossAttack, roots, rootWave, curse, guardianMelee;
     Texture2D bossPortrait, cemeteryPortrait;
     Enemy list[ENEMY_COUNT];
     EnemyProjectile projectiles[ENEMY_PROJECTILE_COUNT];
