@@ -10,7 +10,8 @@
 #define RANGED_MIN_DISTANCE 170.0f
 #define RANGED_MAX_DISTANCE 300.0f
 #define RANGED_SHOT_SPEED 365.0f
-#define ARENA_BOSS_BASE_HEALTH 1500
+#define ARENA_BOSS_BASE_HEALTH 2200
+#define CEMETERY_BOSS_BASE_HEALTH 5000
 #define GUARDIAN_PHASE_TRANSITION_TIME 1.0f
 #define GUARDIAN_ROOT_ECHO_TIME .95f
 #define GUARDIAN_CURSE_ECHO_TIME .62f
@@ -73,12 +74,19 @@ bool EnemyShouldDrop(EnemyType type, int roll) {
     return roll >= 0 && roll < 10000 && roll < EnemyOptionalDropChance(type)*100;
 }
 
+static bool GuardianEnraged(const Enemy *enemy);
+
 int EnemyAnimationFrame(const Enemy *enemy) {
     if (enemy->type == ENEMY_BOSS) {
         if (enemy->state == ENEMY_ATTACK && enemy->guardianMelee)
             return (int)fminf(enemy->stateTime * GUARDIAN_MELEE_FPS, GUARDIAN_MELEE_FRAMES - 1);
         if (enemy->state == ENEMY_ATTACK && enemy->bossAttack != GUARDIAN_ROOTS)
             return 0;
+       if (enemy->state == ENEMY_WALK) {
+            float v = enemy->speed * (GuardianEnraged(enemy) ? 1.5f : 1.0f);
+            float fps = 4.0f * v / 30.0f;
+            return (int)(enemy->walkTime * fps) % 8;
+        }
         int count = enemy->state == ENEMY_ATTACK ? 9 : 6;
         int frame = (int)(enemy->stateTime * (enemy->state == ENEMY_ATTACK ? 6.0f : 7.0f));
         return enemy->state == ENEMY_ATTACK ? (frame < count ? frame : count-1) : frame % count;
@@ -119,6 +127,7 @@ bool InitEnemies(EnemyGroup *group) {
     for (int i=0;i<3;i++) SetTextureFilter(group->effects[i], TEXTURE_FILTER_POINT);
     group->rangedSprites = LoadTexture("assets/inimigo_ranged.png");
     group->bossSprites = LoadTexture("assets/boss_clareira.png");
+    group->bossWalk = LoadTexture("assets/boss_clareira_andar.png");
     group->bossPortrait = LoadTexture("assets/guardiao_intro_pixel_v2.png");
     group->cemeteryPortrait = LoadTexture("assets/coveiro_intro_pixel.png");
     group->bossAttack = LoadTexture("assets/boss_clareira_especial_1.png");
@@ -127,7 +136,7 @@ bool InitEnemies(EnemyGroup *group) {
     group->curse = LoadTexture("assets/boss_clareira_maldicao.png");
     group->guardianMelee = LoadTexture("assets/boss_clareira_corpo_a_corpo.png");
     if (!group->sprites.id || !group->backSprites.id || !group->frontSprites.id ||
-        !group->rangedSprites.id || !group->bossSprites.id || !group->bossAttack.id ||
+        !group->rangedSprites.id || !group->bossSprites.id || !group->bossWalk.id ||!group->bossAttack.id ||
         !group->roots.id || !group->rootWave.id || !group->curse.id || !group->guardianMelee.id ||
         !group->bossPortrait.id || !group->cemeteryPortrait.id) {
         UnloadEnemies(group);
@@ -138,6 +147,7 @@ bool InitEnemies(EnemyGroup *group) {
     SetTextureFilter(group->frontSprites, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->rangedSprites, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->bossSprites, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->bossWalk, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->bossPortrait, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->cemeteryPortrait, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->bossAttack, TEXTURE_FILTER_POINT);
@@ -159,6 +169,7 @@ void UnloadEnemies(EnemyGroup *group) {
     if (group->frontSprites.id) UnloadTexture(group->frontSprites);
     if (group->rangedSprites.id) UnloadTexture(group->rangedSprites);
     if (group->bossSprites.id) UnloadTexture(group->bossSprites);
+    if (group->bossWalk.id) UnloadTexture(group->bossWalk);
     if (group->bossPortrait.id) UnloadTexture(group->bossPortrait);
     if (group->cemeteryPortrait.id) UnloadTexture(group->cemeteryPortrait);
     if (group->bossAttack.id) UnloadTexture(group->bossAttack);
@@ -239,9 +250,10 @@ void StartArenaBoss(EnemyGroup *group, const Clearing *clearing, Vector2 player,
     group->playerHitCooldown = 0;
     for (int i=0; i<ENEMY_COUNT; i++) group->list[i] = (Enemy){.state = ENEMY_GONE};
     Enemy *boss = &group->list[0];
+    int baseHealth = clearing->cemetery ? CEMETERY_BOSS_BASE_HEALTH : ARENA_BOSS_BASE_HEALTH;
     *boss = (Enemy){.type = ENEMY_BOSS, .state = ENEMY_SPAWNING,
-        .position = SpawnPosition(clearing, player), .maxHealth = (int)(ARENA_BOSS_BASE_HEALTH*fmaxf(1, power)),
-        .speed = 100, .power = power, .attackCooldown = 1.25f, .lastKatanaSwing = -1,
+        .position = SpawnPosition(clearing, player), .maxHealth = (int)(baseHealth*fmaxf(1, power)),
+        .speed = clearing->cemetery ? 160 : 100, .power = power, .attackCooldown = 1.25f, .lastKatanaSwing = -1,
         .bossAttack = (clearing->cemetery ? COVEIRO_ATTACK_COUNT : GUARDIAN_ATTACK_COUNT) - 1};
     boss->health = boss->maxHealth;
 }
@@ -702,7 +714,8 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
                                       enemy->attackDirection.x < 0);
             bool widePose = attack || melee;
             float w = widePose ? 384 : 256, h = widePose ? 288 : 272;
-            Texture2D texture = melee ? group->guardianMelee : attack ? group->bossAttack : group->bossSprites;
+            Texture2D texture = melee ? group->guardianMelee : attack ? group->bossAttack :
+                    enemy->state == ENEMY_WALK ? group->bossWalk : group->bossSprites;
             DrawTexturePro(texture,
                 (Rectangle){EnemyAnimationFrame(enemy)*w, enemy->facing*h,w,h},
                 (Rectangle){enemy->position.x-w*.325f, enemy->position.y-(widePose?280:264)*.65f,

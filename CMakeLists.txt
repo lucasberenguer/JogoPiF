@@ -20,6 +20,7 @@ set(SOURCES
     src/clearing.c
     src/hud.c
     src/menu.c
+    src/menu_video.c
     src/weapon_select.c
     src/bible.c
     src/gun.c
@@ -31,6 +32,9 @@ set(SOURCES
 
 add_executable(${PROJECT_NAME} ${SOURCES})
 target_link_libraries(${PROJECT_NAME} PRIVATE raylib)
+if(WIN32)
+    target_link_libraries(${PROJECT_NAME} PRIVATE mfplat mfreadwrite mfuuid ole32 uuid)
+endif()
 
 include(CTest)
 if(BUILD_TESTING)
@@ -42,9 +46,12 @@ if(BUILD_TESTING)
     target_include_directories(map_connectivity_test PRIVATE src)
     target_link_libraries(map_connectivity_test PRIVATE raylib)
     add_test(NAME map_connectivity COMMAND map_connectivity_test)
-    add_executable(encounter_test tests/encounter_test.c src/encounter.c src/presentation.c src/enemy.c src/cemetery_enemy.c src/clearing.c src/menu.c)
+    add_executable(encounter_test tests/encounter_test.c src/encounter.c src/presentation.c src/enemy.c src/cemetery_enemy.c src/clearing.c src/menu.c src/menu_video.c)
     target_include_directories(encounter_test PRIVATE src)
     target_link_libraries(encounter_test PRIVATE raylib)
+    if(WIN32)
+        target_link_libraries(encounter_test PRIVATE mfplat mfreadwrite mfuuid ole32 uuid)
+    endif()
     set_target_properties(encounter_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/audit")
     add_test(NAME clearing_encounter COMMAND encounter_test)
     set_tests_properties(clearing_encounter PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")

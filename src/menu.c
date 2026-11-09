@@ -110,10 +110,27 @@ bool InitMenu(Menu *m) {
         SetTextureFilter(m->buttons[i], TEXTURE_FILTER_POINT);
     }
     m->hasSave = LoadMenuCheckpointWeapon() >= 0;
+    int width, height;
+    m->video = OpenMenuVideo("assets/videos/Menu_Principal.mp4", &width, &height, &m->videoInterval);
+    if (m->video) {
+        const unsigned char *pixels = ReadMenuVideo(m->video);
+        if (pixels) {
+            Image firstFrame = {(void *)pixels, width, height, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8};
+            m->videoFrame = LoadTextureFromImage(firstFrame);
+        }
+        if (m->videoFrame.id) SetTextureFilter(m->videoFrame, TEXTURE_FILTER_BILINEAR);
+        else {
+            CloseMenuVideo(m->video);
+            m->video = NULL;
+        }
+    }
+    if (!m->video) TraceLog(LOG_WARNING, "Video do menu indisponivel; usando o fundo animado");
     return true;
 }
 
 void UnloadMenu(Menu *m) {
+    if (m->videoFrame.id) UnloadTexture(m->videoFrame);
+    CloseMenuVideo(m->video);
     for (int i=0; i<4; i++) if (m->buttons[i].id) UnloadTexture(m->buttons[i]);
     for (int i=0; i<10; i++) if (m->hero[i].id) UnloadTexture(m->hero[i]);
     if (m->fog.id) UnloadTexture(m->fog);
@@ -126,7 +143,23 @@ void UnloadMenu(Menu *m) {
 }
 
 MenuAction UpdateMenu(Menu *m) {
-    m->effectTime += GetFrameTime();
+    float dt = GetFrameTime();
+    m->effectTime += dt;
+    if (m->video) {
+        m->videoElapsed = fmin(m->videoElapsed + dt, 3 * m->videoInterval);
+        const unsigned char *pixels = NULL;
+        while (m->videoElapsed >= m->videoInterval) {
+            m->videoElapsed -= m->videoInterval;
+            pixels = ReadMenuVideo(m->video);
+            if (!pixels) {
+                TraceLog(LOG_WARNING, "Falha ao ler o video do menu; usando o fundo animado");
+                CloseMenuVideo(m->video);
+                m->video = NULL;
+                break;
+            }
+        }
+        if (pixels) UpdateTexture(m->videoFrame, pixels);
+    }
     m->hasSave = LoadMenuCheckpointWeapon() >= 0;
     if (m->page == 3) {
         if (IsKeyPressed(KEY_ESCAPE)) m->page = 0;
@@ -160,14 +193,16 @@ MenuAction UpdateMenu(Menu *m) {
     }
 }
 
-void DrawMenu(const Menu *m) {
-    float s = fmaxf((float)GetScreenWidth()/m->background.width,
-                    (float)GetScreenHeight()/m->background.height);
-    Rectangle dst = {(GetScreenWidth()-m->background.width*s)/2,
-                     (GetScreenHeight()-m->background.height*s)/2,
-                     m->background.width*s, m->background.height*s};
-    DrawTexturePro(m->background, (Rectangle){0,0,(float)m->background.width,(float)m->background.height},
+static void DrawMenuBackground(const Menu *m) {
+    Texture2D background = m->video ? m->videoFrame : m->background;
+    float s = fmaxf((float)GetScreenWidth()/background.width,
+                    (float)GetScreenHeight()/background.height);
+    Rectangle dst = {(GetScreenWidth()-background.width*s)/2,
+                     (GetScreenHeight()-background.height*s)/2,
+                     background.width*s, background.height*s};
+    DrawTexturePro(background, (Rectangle){0,0,(float)background.width,(float)background.height},
                    dst, (Vector2){0}, 0, WHITE);
+    if (m->video) return;
     float t = m->effectTime;
     float pulse = 1.0f + 0.025f*sinf(t*1.5f);
     Rectangle moon = {dst.x+(1230.0f-235.0f*pulse)*s, dst.y+(155.0f-235.0f*pulse)*s,
@@ -204,6 +239,10 @@ void DrawMenu(const Menu *m) {
         DrawCircleV((Vector2){dst.x+x*s,dst.y+y*s},radius,
                     Fade((Color){255,64,78,255},0.35f+0.25f*sinf(t*1.3f+phase)*sinf(t*1.3f+phase)));
     }
+}
+
+void DrawMenu(const Menu *m) {
+    DrawMenuBackground(m);
     DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,0.25f));
     if (m->page == 0) {
         for (int i=0; i<4; i++) {

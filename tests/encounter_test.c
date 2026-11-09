@@ -207,7 +207,7 @@ int main(void) {
     UpdateStagePresentation(&encounter.presentation,.7f);
     Capture("audit/cemetery_boss_intro.png",&encounter,&enemies,&clearing,player);
     UpdateStagePresentation(&encounter.presentation,10);
-    assert(EncounterBossVisible(&encounter,&enemies) && enemies.list[0].health==1500);
+    assert(EncounterBossVisible(&encounter,&enemies) && enemies.list[0].health==5000);
     Capture("audit/cemetery_boss_hud.png",&encounter,&enemies,&clearing,player);
     enemies.list[0].state=ENEMY_IDLE;
     DamageEnemy(&enemies.list[0],enemies.list[0].health);

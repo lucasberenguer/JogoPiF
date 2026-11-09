@@ -16,7 +16,7 @@ simplificação lógica. Errar fortalece o boss e inicia uma revanche.
 
 ## Fases
 
-O Guardião começa com 1.500 de vida. Ao chegar a 750, ele interrompe
+O Guardião começa com 2.200 de vida. Ao chegar a 1.100, ele interrompe
 o golpe em andamento e fica invulnerável por um segundo enquanto desperta.
 A segunda fase começa com a Maldição das Raízes em dois pontos, marcados
 em momentos diferentes. O Guardião se move 50% mais rápido e os intervalos

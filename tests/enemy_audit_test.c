@@ -1,5 +1,6 @@
 #include "enemy.h"
 #include <assert.h>
+#include <math.h>
 #include <string.h>
 
 static void CheckGuardianAttacks(Clearing *map, EnemyGroup *group) {
@@ -146,18 +147,18 @@ int main(void) {
     UpdateEnemies(&group,&map,target,.02f,true,&health,100);
     assert(health==100); /* Dodge during active roots. */
     UpdateEnemies(&group,&map,target,.02f,false,&health,100);
-    assert(health==72);
+    assert(health==56);
     UpdateEnemies(&group,&map,target,.02f,false,&health,100);
-    assert(health==72); /* One hit while immunity is active. */
+    assert(health==56); /* One hit while immunity is active. */
     group.playerHitCooldown=0;
     group.list[0].power=2;
     group.list[0].attackConnected=false;
     health=100;
     UpdateEnemies(&group,&map,target,.01f,false,&health,100);
-    assert(health==44); /* Corruption power must affect the root attack. */
+    assert(health==12); /* Corruption power must affect the root attack. */
     Enemy *coveiro = &group.list[0];
     DamageEnemy(coveiro, coveiro->health);
-    assert(coveiro->guardianPhase == GUARDIAN_PHASE_TRANSITION && coveiro->health == 750);
+    assert(coveiro->guardianPhase == GUARDIAN_PHASE_TRANSITION && coveiro->health == 2500);
     UpdateEnemies(&group, &map, target, 1.0f, true, &health, 100);
     UpdateEnemies(&group, &map, target, .25f, true, &health, 100);
     assert(coveiro->guardianPhase == GUARDIAN_PHASE_TWO && coveiro->bossAttack == COVEIRO_CHARGE);
@@ -165,6 +166,9 @@ int main(void) {
     coveiro->stateTime = .79f;
     UpdateEnemies(&group, &map, target, .02f, true, &health, 100);
     assert(group.cemeteryProjectiles[2].active && !group.cemeteryProjectiles[3].active);
+    assert(group.cemeteryProjectiles[0].damage == 76); /* The projectile keeps corruption power. */
+    assert(fabsf(group.cemeteryProjectiles[0].velocity.x) +
+           fabsf(group.cemeteryProjectiles[0].velocity.y) >= 499);
     DamageEnemy(coveiro, coveiro->health);
     UpdateEnemies(&group, &map, target, .9f, true, &health, 100);
     assert(coveiro->state == ENEMY_FALLEN && !group.cemeteryProjectiles[0].active);
