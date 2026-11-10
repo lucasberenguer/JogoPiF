@@ -38,6 +38,7 @@ void BeginEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing,
     progress.map=clearing->cemetery?1:0;
     *e = (Encounter){.progress=progress, .sealEnemy=-1};
     StartStage(e, enemies, clearing, player);
+    BeginAreaEntry(&e->presentation);
 }
 
 bool EncounterPaused(const Encounter *e) {
@@ -126,7 +127,7 @@ bool ChooseEncounterReward(Encounter *e, EnemyGroup *enemies, const Clearing *cl
     ApplyReward(e,e->rewards[choice],health);
     e->progress.stage++;
     e->progress.health=*health;
-    SaveClearingCheckpoint(&e->progress);
+    if (!e->practice) SaveClearingCheckpoint(&e->progress);
     StartStage(e,enemies,clearing,player);
     return true;
 }
@@ -163,7 +164,7 @@ bool AnswerEncounterSeal(Encounter *e, EnemyGroup *enemies, int *health, int cho
             enemy->bossAttack = (enemies->cemetery ? COVEIRO_ATTACK_COUNT : GUARDIAN_ATTACK_COUNT) - 1;
             e->progress.bossPower=fminf(100,e->progress.bossPower*1.2f);
             e->progress.health=*health;
-            SaveClearingCheckpoint(&e->progress);
+            if (!e->practice) SaveClearingCheckpoint(&e->progress);
         }
     }
     e->phase=ENCOUNTER_FIGHT;
@@ -184,7 +185,8 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
                 BeginStagePresentation(&e->presentation,0,e->progress.map?"A vila sera a proxima etapa":"Passagem para o cemiterio liberada",NULL);
                 e->presentation.announcement=e->progress.map?"CEMITERIO LIMPO":"CLAREIRA LIMPA";
                 e->presentation.duration=e->presentation.remaining=2.5f;
-                SaveClearingCheckpoint(&e->progress);
+                QueueAreaUnlock(&e->presentation,e->progress.map?"Vila Abandonada":"Cemiterio das Raizes");
+                if (!e->practice) SaveClearingCheckpoint(&e->progress);
             } else {
                 e->phase=ENCOUNTER_REWARD; e->rerolled=false; RollRewards(e);
             }

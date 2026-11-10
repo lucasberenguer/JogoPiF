@@ -16,6 +16,7 @@ typedef struct Encounter {
     Reward rewards[3];
     int rewardCount, sealEnemy, question, answer;
     bool rerolled;
+    bool practice; /* Temporary test entry must not overwrite the normal run. */
     char notice[120];
 } Encounter;
 

@@ -17,8 +17,9 @@ static void Capture(const char *name, Encounter *encounter, EnemyGroup *enemies,
     DrawEnemies(enemies,player,false);
     DrawCircleV(player,15,SKYBLUE);
     DrawEnemies(enemies,player,true);
+    DrawEnemyProjectiles(enemies);
     EndMode2D();
-    if (!strstr(name,"collision")) DrawEncounter(encounter,enemies);
+    if (!strstr(name,"collision") && !strstr(name,"directions") && !strstr(name,"attack_poses")) DrawEncounter(encounter,enemies);
     EndTextureMode();
     Image shot=LoadImageFromTexture(target.texture);
     ImageFlipVertical(&shot);
@@ -63,6 +64,13 @@ int main(void) {
     Vector2 player={835,540};
     int health=100;
     BeginEncounter(&encounter,&enemies,&clearing,NewRunProgress(0),player);
+    assert(encounter.presentation.areaEntry && EncounterPaused(&encounter));
+    assert(strcmp(encounter.presentation.mapName,"Clareira do Selo")==0);
+    UpdateStagePresentation(&encounter.presentation,.7f);
+    Capture("audit/clearing_area_entry.png",&encounter,&enemies,&clearing,player);
+    UpdateStagePresentation(&encounter.presentation,2.2f);
+    assert(!encounter.presentation.areaEntry && encounter.presentation.wave==1);
+    assert(EncounterPaused(&encounter));
     Capture("audit/clearing_collision_updated.png",&encounter,&enemies,&clearing,clearing.spawn);
     for (int wave=1;wave<=CLEARING_WAVES;wave++) {
         assert(encounter.progress.stage==wave);
@@ -163,6 +171,10 @@ int main(void) {
     assert(encounter.presentation.announcement && EncounterPaused(&encounter));
     assert(strcmp(encounter.presentation.announcement,"CLAREIRA LIMPA")==0);
     UpdateStagePresentation(&encounter.presentation,3);
+    assert(encounter.presentation.areaUnlock && EncounterPaused(&encounter));
+    assert(strcmp(encounter.presentation.mapName,"Cemiterio das Raizes")==0);
+    Capture("audit/area_unlock.png",&encounter,&enemies,&clearing,player);
+    UpdateStagePresentation(&encounter.presentation,4);
     assert(!EncounterPaused(&encounter));
     RunProgress completed;
     assert(LoadClearingCheckpoint(&completed) && completed.stage==CLEARING_COMPLETE_STAGE);
@@ -172,6 +184,33 @@ int main(void) {
     UnloadClearing(&clearing);
     clearing=(Clearing){0};
     assert(InitCemetery(&clearing));
+    enemies.cemetery=true;
+    encounter.phase=ENCOUNTER_FIGHT;
+    encounter.notice[0]=0;
+    for(int i=0;i<ENEMY_COUNT;i++) enemies.list[i]=(Enemy){.state=ENEMY_GONE};
+    for(int kind=0;kind<3;kind++) for(int face=0;face<4;face++) {
+        int at=kind*4+face;
+        enemies.list[at]=(Enemy){.position={380+face*270,300+kind*185},
+            .type=kind==0?ENEMY_COMMON_MELEE:kind==1?ENEMY_COMMON_RANGED:ENEMY_BOSS,
+            .state=ENEMY_WALK,.walkTime=.25f,.facing=face,.health=100,.maxHealth=100};
+    }
+    encounter.presentation.remaining=0;
+    Capture("audit/cemetery_directions_v3.png",&encounter,&enemies,&clearing,(Vector2){30,30});
+    for(int i=0;i<ENEMY_COUNT;i++) enemies.list[i]=(Enemy){.state=ENEMY_GONE};
+    for(int attack=0;attack<3;attack++) for(int beat=0;beat<4;beat++) {
+        enemies.list[attack*4+beat]=(Enemy){.position={380+beat*270,300+attack*185},
+            .type=ENEMY_BOSS,.state=ENEMY_ATTACK,.bossAttack=attack,
+            .stateTime=(float[]){.15f,.55f,.95f,1.8f}[beat],.facing=3,
+            .health=2420,.maxHealth=2420};
+    }
+    Capture("audit/cemetery_attack_poses_v3.png",&encounter,&enemies,&clearing,(Vector2){30,30});
+    for(int i=0;i<ENEMY_COUNT;i++) enemies.list[i]=(Enemy){.state=ENEMY_GONE};
+    enemies.list[0]=(Enemy){.position={500,470},.type=ENEMY_BOSS,.state=ENEMY_ATTACK,
+        .bossAttack=COVEIRO_SHOVEL,.facing=3,.stateTime=.95f,.health=2420,.maxHealth=2420};
+    for(int i=0;i<3;i++) enemies.cemeteryProjectiles[i]=(CemeteryProjectile){.active=true,
+        .position={850+i*150,350+i*110},.velocity={740,(i-1)*180},.life=1.9f-i*.08f};
+    Capture("audit/cemetery_attack_poses_shovel_v4.png",&encounter,&enemies,&clearing,(Vector2){30,30});
+    ClearEnemyAttacks(&enemies);
     player=clearing.spawn;health=100;
     RunProgress cemeteryProgress=NewRunProgress(0);
     cemeteryProgress.damage=1.4f;
@@ -207,7 +246,7 @@ int main(void) {
     UpdateStagePresentation(&encounter.presentation,.7f);
     Capture("audit/cemetery_boss_intro.png",&encounter,&enemies,&clearing,player);
     UpdateStagePresentation(&encounter.presentation,10);
-    assert(EncounterBossVisible(&encounter,&enemies) && enemies.list[0].health==5000);
+    assert(EncounterBossVisible(&encounter,&enemies) && enemies.list[0].health==2420);
     Capture("audit/cemetery_boss_hud.png",&encounter,&enemies,&clearing,player);
     enemies.list[0].state=ENEMY_IDLE;
     DamageEnemy(&enemies.list[0],enemies.list[0].health);
@@ -221,6 +260,29 @@ int main(void) {
     UpdateEncounter(&encounter,&enemies,&clearing,player,&health);
     assert(encounter.phase==ENCOUNTER_CLEAR);
     assert(strcmp(encounter.presentation.announcement,"CEMITERIO LIMPO")==0);
+
+    RunProgress normalSave=NewRunProgress(1);normalSave.stage=3;
+    assert(SaveClearingCheckpoint(&normalSave));
+    BeginEncounter(&encounter,&enemies,&clearing,NewRunProgress(0),player);
+    encounter.practice=true;
+    UpdateStagePresentation(&encounter.presentation,10);
+    for (int i=0;i<ENEMY_COUNT;i++) enemies.list[i]=(Enemy){.state=ENEMY_GONE};
+    UpdateEncounter(&encounter,&enemies,&clearing,player,&health);
+    assert(ChooseEncounterReward(&encounter,&enemies,&clearing,player,&health,0));
+    RunProgress preserved;
+    assert(LoadClearingCheckpoint(&preserved));
+    assert(preserved.weapon==1 && preserved.stage==3 && preserved.map==0);
+    UpdateStagePresentation(&encounter.presentation,10);
+    enemies.list[0]=(Enemy){.type=ENEMY_BOSS,.state=ENEMY_FALLEN,
+        .position=player,.maxHealth=100,.power=1};
+    assert(OpenEncounterSeal(&encounter,&enemies,player));
+    assert(AnswerEncounterSeal(&encounter,&enemies,&health,(encounter.answer+1)%3));
+    assert(LoadClearingCheckpoint(&preserved) && preserved.stage==3 && preserved.map==0);
+    for (int i=0;i<ENEMY_COUNT;i++) enemies.list[i]=(Enemy){.state=ENEMY_GONE};
+    encounter.progress.stage=CLEARING_BOSS_STAGE;
+    UpdateEncounter(&encounter,&enemies,&clearing,player,&health);
+    assert(encounter.phase==ENCOUNTER_CLEAR);
+    assert(LoadClearingCheckpoint(&preserved) && preserved.stage==3 && preserved.map==0);
 
     /* Audit only the test executable's checkpoint, never the player's save. */
     const char *saveFile=TextFormat("%s/partida_pif.sav",GetApplicationDirectory());

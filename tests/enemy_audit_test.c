@@ -158,7 +158,7 @@ int main(void) {
     assert(health==12); /* Corruption power must affect the root attack. */
     Enemy *coveiro = &group.list[0];
     DamageEnemy(coveiro, coveiro->health);
-    assert(coveiro->guardianPhase == GUARDIAN_PHASE_TRANSITION && coveiro->health == 2500);
+    assert(coveiro->guardianPhase == GUARDIAN_PHASE_TRANSITION && coveiro->health == coveiro->maxHealth/2);
     UpdateEnemies(&group, &map, target, 1.0f, true, &health, 100);
     UpdateEnemies(&group, &map, target, .25f, true, &health, 100);
     assert(coveiro->guardianPhase == GUARDIAN_PHASE_TWO && coveiro->bossAttack == COVEIRO_CHARGE);
@@ -168,7 +168,18 @@ int main(void) {
     assert(group.cemeteryProjectiles[2].active && !group.cemeteryProjectiles[3].active);
     assert(group.cemeteryProjectiles[0].damage == 76); /* The projectile keeps corruption power. */
     assert(fabsf(group.cemeteryProjectiles[0].velocity.x) +
-           fabsf(group.cemeteryProjectiles[0].velocity.y) >= 499);
+           fabsf(group.cemeteryProjectiles[0].velocity.y) >= 739);
+    ClearEnemyAttacks(&group);
+    coveiro->state=ENEMY_IDLE;coveiro->attackCooldown=10;
+    group.playerHitCooldown=0;health=100;
+    group.cemeteryProjectiles[0]=(CemeteryProjectile){.active=true,
+        .position={target.x-40,target.y+35},.velocity={620,0},.life=2,.damage=38};
+    UpdateEnemies(&group,&map,target,.05f,false,&health,100);
+    assert(health==62 && group.cemeteryProjectiles[0].hitPlayer);
+    group.playerHitCooldown=0;
+    group.cemeteryProjectiles[0].position=target;
+    UpdateEnemies(&group,&map,target,.01f,false,&health,100);
+    assert(health==62); /* Enlarged blade still hits only once per leg. */
     DamageEnemy(coveiro, coveiro->health);
     UpdateEnemies(&group, &map, target, .9f, true, &health, 100);
     assert(coveiro->state == ENEMY_FALLEN && !group.cemeteryProjectiles[0].active);
@@ -179,7 +190,7 @@ int main(void) {
         .power=2,.attackDirection={1,0},.health=60,.maxHealth=60};
     UpdateEnemies(&group,&map,target,.02f,false,&health,100);
     assert(group.projectiles[0].remaining>0 && group.projectiles[0].damage==20);
-    group.projectiles[0].position=target;
+    group.projectiles[0].position=(Vector2){target.x,target.y-35};
     group.playerHitCooldown=0;health=100;
     UpdateEnemies(&group,&map,target,.01f,false,&health,100);
     assert(health==80);
@@ -231,5 +242,34 @@ int main(void) {
     assert(IsClearingBlocked(&grave,(Vector2){1450,260}));
     assert(IsClearingBlocked(&grave,(Vector2){300,560}));
     assert(!IsMapActorBlocked(&grave,(Vector2){1560,490}));
+    Enemy poseEnemy={.type=ENEMY_COMMON_MELEE,.state=ENEMY_WALK,.walkTime=.25f};
+    poseEnemy.facing=2;assert(CemeteryAnimationPose(&poseEnemy).flip);
+    poseEnemy.facing=3;assert(!CemeteryAnimationPose(&poseEnemy).flip);
+    poseEnemy.type=ENEMY_COMMON_RANGED;
+    const int mageRows[]={0,1,3,2};
+    for(int face=0;face<4;face++) {poseEnemy.facing=face;assert(CemeteryAnimationPose(&poseEnemy).row==mageRows[face]);}
+    poseEnemy.type=ENEMY_BOSS;poseEnemy.state=ENEMY_ATTACK;
+    for(int attack=0;attack<3;attack++) for(int face=0;face<4;face++) for(int f=0;f<220;f++) {
+        poseEnemy.bossAttack=attack;poseEnemy.facing=face;poseEnemy.stateTime=f*.01f;
+        CemeteryPose pose=CemeteryAnimationPose(&poseEnemy);
+        assert(pose.frame>=0 && pose.frame<pose.columns && pose.row>=0 && pose.row<4);
+        assert(pose.flip==(face==2));
+    }
+    Clearing arena=map;arena.cemetery=false;
+    SetRandomSeed(321);StartEnemyWave(&group,&arena,1,target,1);
+    int normalHealth[ENEMY_COUNT];
+    for(int i=0;i<ENEMY_COUNT;i++) normalHealth[i]=group.list[i].maxHealth;
+    SetRandomSeed(321);StartEnemyWave(&group,&map,1,target,1);
+    for(int i=0;i<ENEMY_COUNT;i++) if(normalHealth[i]) assert(group.list[i].maxHealth==(int)ceilf(normalHealth[i]*1.10f));
+    StartArenaBoss(&group,&map,target,1);assert(group.list[0].maxHealth==2420);
+    for(int scenario=0;scenario<3;scenario++) {
+        for(int i=0;i<ENEMY_COUNT;i++) group.list[i]=(Enemy){.state=ENEMY_GONE};
+        ClearEnemyAttacks(&group);group.cemetery=true;group.playerHitCooldown=scenario==2?.5f:0;
+        group.projectiles[0]=(EnemyProjectile){{target.x-20,target.y-35},{1,0},1,20};
+        health=100;UpdateEnemies(&group,&map,target,.05f,scenario==1,&health,100);
+        assert(health==(scenario==0?80:100));
+        assert(group.projectiles[0].remaining==0);
+        assert(group.impacts[0].remaining>0);
+    }
     return 0;
 }

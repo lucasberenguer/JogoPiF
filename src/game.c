@@ -208,6 +208,7 @@ int main(void) {
     int katanaAttackId = 0;
     int screen = 0; /* 0: menu, 1: escolha da arma, 2: clareira */
     int currentWeapon = -1;
+    bool startInCemetery=false;
     Encounter encounter = {.progress = {.weapon=0}};
     const float entryFadeDuration = 1.15f;
     float entryFadeRemaining = 0.0f;
@@ -216,7 +217,8 @@ int main(void) {
         if (screen == 0) {
             MenuAction action = UpdateMenu(&menu);
             if (action == MENU_QUIT) break;
-            if (action == MENU_START) {
+            if (action == MENU_START || action==MENU_TEST_CEMETERY) {
+                startInCemetery=action==MENU_TEST_CEMETERY;
                 weaponSelect.selected = 0;
                 screen = 1;
             } else if (action == MENU_CONTINUE) {
@@ -259,17 +261,19 @@ int main(void) {
             int choice = UpdateWeaponSelect(&weaponSelect);
             if (choice == -2) { screen = 0; continue; }
             if (choice >= 0) {
-                if (clearing.cemetery) {
+                if (clearing.cemetery!=startInCemetery) {
+                    Clearing next={0};
+                    if (!(startInCemetery?InitCemetery(&next):InitClearing(&next))) break;
                     UnloadClearing(&clearing);
-                    clearing = (Clearing){0};
-                    if (!InitClearing(&clearing)) break;
+                    clearing=next;
                 }
                 currentWeapon = choice;
                 RunProgress progress=NewRunProgress(currentWeapon);
                 BeginEncounter(&encounter,&enemies,&clearing,progress,clearing.spawn);
+                encounter.practice=startInCemetery;
                 playerMaxHealth=progress.maxHealth;
                 playerSpeed=progress.speed;
-                if (!SaveClearingCheckpoint(&progress))
+                if (!encounter.practice && !SaveClearingCheckpoint(&progress))
                     TraceLog(LOG_WARNING, "Nao foi possivel salvar a arma escolhida");
                 player = clearing.spawn;
                 playerHealth = playerMaxHealth;
@@ -297,14 +301,16 @@ int main(void) {
             bool hover=CheckCollisionPointRec(GetMousePosition(),retry);
             if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_R) ||
                 (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))) {
-                if (clearing.cemetery) {
+                bool practice=encounter.practice;
+                if (clearing.cemetery && !practice) {
                     UnloadClearing(&clearing);
                     clearing=(Clearing){0};
                     if (!InitClearing(&clearing)) break;
                 }
                 RunProgress progress=NewRunProgress(currentWeapon);
                 BeginEncounter(&encounter,&enemies,&clearing,progress,clearing.spawn);
-                SaveClearingCheckpoint(&progress);
+                encounter.practice=practice;
+                if (!practice) SaveClearingCheckpoint(&progress);
                 player=clearing.spawn;
                 playerHealth=playerMaxHealth=progress.maxHealth;
                 playerSpeed=progress.speed;
@@ -648,6 +654,7 @@ int main(void) {
             if (currentWeapon == WEAPON_GUN)
                 DrawText("Clique esquerdo: disparar (um tiro por clique)", 24, 176 + hudOffset, 18, RAYWHITE);
             DrawEncounter(&encounter,&enemies);
+            if (encounter.practice) DrawText("MODO TESTE - checkpoint preservado",24,GetScreenHeight()-26,17,GOLD);
             if (entering) {
                 float t = entryFadeRemaining / entryFadeDuration;
                 float opacity = t*t*(3.0f - 2.0f*t);

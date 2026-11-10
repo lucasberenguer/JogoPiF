@@ -5,8 +5,30 @@ void BeginStagePresentation(StagePresentation *p,int wave,const char *mapName,co
         .boss=bossName!=0,.mapName=mapName,.bossName=bossName,.portraitCenterX=.77f};
     p->remaining=p->duration;
 }
+void QueueAreaUnlock(StagePresentation *p,const char *mapName) {
+    p->nextAreaName=mapName;
+}
+void BeginAreaEntry(StagePresentation *p) {
+    if(p->remaining<=0) return;
+    p->areaEntry=true;
+    p->duration=p->remaining=2.8f;
+}
 void UpdateStagePresentation(StagePresentation *p,float dt) {
-    if (dt>0) p->remaining=fmaxf(0,p->remaining-dt);
+    if(dt<=0) return;
+    float excess=dt-p->remaining;
+    p->remaining=fmaxf(0,p->remaining-dt);
+    if(p->remaining==0 && p->areaEntry) {
+        float portraitCenter=p->portraitCenterX;
+        BeginStagePresentation(p,p->wave,p->mapName,p->bossName);
+        p->portraitCenterX=portraitCenter;
+        p->remaining=fmaxf(0,p->remaining-excess);
+        return;
+    }
+    if(p->remaining==0 && p->nextAreaName) {
+        const char *name=p->nextAreaName;
+        *p=(StagePresentation){.duration=3.2f,.remaining=fmaxf(0,3.2f-excess),
+            .mapName=name,.areaUnlock=true};
+    }
 }
 void DrawStagePresentation(const StagePresentation *p,Texture2D sprite,int columns,int rows) {
     if (p->remaining<=0) return;
@@ -14,6 +36,25 @@ void DrawStagePresentation(const StagePresentation *p,Texture2D sprite,int colum
     float alpha=fminf(1,fminf(elapsed/.22f,p->remaining/.35f));
     float w=(float)GetScreenWidth(),h=(float)GetScreenHeight();
     float slide=(1-alpha)*50;
+    if(p->areaUnlock || p->areaEntry) {
+        float center=h*.48f;
+        float reveal=fminf(1,elapsed/.65f);
+        reveal=1-powf(1-reveal,3);
+        DrawRectangle(0,0,(int)w,(int)h,Fade(BLACK,alpha*.28f));
+        DrawRectangle(0,(int)(center-85),(int)w,174,Fade((Color){16,19,25,255},alpha*.94f));
+        float half=w*.34f*reveal;
+        DrawLineEx((Vector2){w/2-half,center-85},(Vector2){w/2+half,center-85},2,Fade(GOLD,alpha));
+        DrawLineEx((Vector2){w/2-half,center+89},(Vector2){w/2+half,center+89},2,Fade(GOLD,alpha));
+        const char *label=p->areaEntry?"ENTRANDO EM":"NOVA AREA DESBLOQUEADA";
+        DrawText(label,(int)((w-MeasureText(label,19))/2),(int)center-61,19,Fade(GOLD,alpha));
+        int size=44;
+        while(size>18 && MeasureText(p->mapName,size)>w*.86f) size--;
+        DrawText(p->mapName,(int)((w-MeasureText(p->mapName,size))/2+(1-reveal)*65),
+            (int)center-15,size,Fade(RAYWHITE,alpha));
+        const char *hint=p->areaEntry?"":"O caminho adiante foi revelado";
+        DrawText(hint,(int)((w-MeasureText(hint,18))/2),(int)center+48,18,Fade(LIGHTGRAY,alpha));
+        return;
+    }
     DrawRectangle(0,0,(int)w,(int)h,Fade(BLACK,alpha*(p->boss?.88f:.22f)));
     if (!p->boss) {
         float y=h*.42f;

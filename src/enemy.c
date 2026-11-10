@@ -11,7 +11,7 @@
 #define RANGED_MAX_DISTANCE 300.0f
 #define RANGED_SHOT_SPEED 365.0f
 #define ARENA_BOSS_BASE_HEALTH 2200
-#define CEMETERY_BOSS_BASE_HEALTH 5000
+#define CEMETERY_BOSS_BASE_HEALTH 2420
 #define GUARDIAN_PHASE_TRANSITION_TIME 1.0f
 #define GUARDIAN_ROOT_ECHO_TIME .95f
 #define GUARDIAN_CURSE_ECHO_TIME .62f
@@ -109,13 +109,18 @@ bool InitEnemies(EnemyGroup *group) {
     group->frontSprites = LoadTexture("assets/inimigo_encapuzado_frente.png");
     group->skeleton = LoadTexture("assets/esqueleto.png");
     group->mage = LoadTexture("assets/esqueleto_mago.png");
-    group->boss[0] = LoadTexture("assets/coveiro_raizes.png");
-    group->boss[1] = LoadTexture("assets/coveiro_pa.png");
-    group->boss[2] = LoadTexture("assets/coveiro_investida.png");
+    group->skeletonFront=LoadTexture("assets/esqueleto_frente.png");
+    group->skeletonBack=LoadTexture("assets/esqueleto_costas.png");
+    group->coveiroWalk=LoadTexture("assets/coveiro_walk_v4.png");
+    group->greenFire=LoadTexture("assets/mago_fogo_v2.png");
+    group->boss[0] = LoadTexture("assets/coveiro_slam_v3.png");
+    group->boss[1] = LoadTexture("assets/coveiro_throw_v4.png");
+    group->boss[2] = LoadTexture("assets/coveiro_charge_v3.png");
     group->effects[0]=LoadTexture("assets/coveiro_efeito_raizes.png");
-    group->effects[1]=LoadTexture("assets/coveiro_efeito_pa.png");
+    group->effects[1]=LoadTexture("assets/coveiro_pa_vento_v4.png");
     group->effects[2]=LoadTexture("assets/coveiro_efeito_investida.png");
-    if (!group->skeleton.id || !group->mage.id || !group->boss[0].id ||
+    if (!group->skeletonFront.id || !group->skeletonBack.id || !group->coveiroWalk.id || !group->greenFire.id ||
+        !group->skeleton.id || !group->mage.id || !group->boss[0].id ||
         !group->boss[1].id || !group->boss[2].id || !group->effects[0].id ||
         !group->effects[1].id || !group->effects[2].id) {
         UnloadEnemies(group);
@@ -123,6 +128,10 @@ bool InitEnemies(EnemyGroup *group) {
     }
     SetTextureFilter(group->skeleton, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->mage, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->skeletonFront,TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->skeletonBack,TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->coveiroWalk,TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->greenFire,TEXTURE_FILTER_POINT);
     for (int i=0;i<3;i++) SetTextureFilter(group->boss[i], TEXTURE_FILTER_POINT);
     for (int i=0;i<3;i++) SetTextureFilter(group->effects[i], TEXTURE_FILTER_POINT);
     group->rangedSprites = LoadTexture("assets/inimigo_ranged.png");
@@ -161,6 +170,10 @@ bool InitEnemies(EnemyGroup *group) {
 void UnloadEnemies(EnemyGroup *group) {
     if (group->skeleton.id) UnloadTexture(group->skeleton);
     if (group->mage.id) UnloadTexture(group->mage);
+    if (group->skeletonFront.id) UnloadTexture(group->skeletonFront);
+    if (group->skeletonBack.id) UnloadTexture(group->skeletonBack);
+    if (group->coveiroWalk.id) UnloadTexture(group->coveiroWalk);
+    if (group->greenFire.id) UnloadTexture(group->greenFire);
     for (int i=0;i<3;i++) if (group->boss[i].id) UnloadTexture(group->boss[i]);
     for (int i=0;i<3;i++) if (group->effects[i].id) UnloadTexture(group->effects[i]);
 
@@ -188,6 +201,7 @@ void ClearEnemyAttacks(EnemyGroup *group) {
     memset(group->projectiles, 0, sizeof(group->projectiles));
     memset(group->cemeteryProjectiles,0,sizeof(group->cemeteryProjectiles));
     memset(group->rootAttacks, 0, sizeof(group->rootAttacks));
+    memset(group->impacts,0,sizeof(group->impacts));
 }
 
 static Vector2 SpawnPosition(const Clearing *clearing, Vector2 player) {
@@ -233,6 +247,7 @@ void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
         float adjustment = 1.0f + fminf(.15f, fmaxf(0, playerPower - 1.0f) * .05f);
         enemy->maxHealth = (int)((enemy->type == ENEMY_SPECIAL ? 100 : 45) *
                                 (1.0f + (wave-1)*.12f) * adjustment);
+        if (clearing->cemetery) enemy->maxHealth=(int)ceilf(enemy->maxHealth*1.10f);
         enemy->health = enemy->maxHealth;
         enemy->speed = ENEMY_SPEED * (1.0f + (wave-1)*.045f);
         enemy->power = 1.0f + (wave-1)*.09f;
@@ -314,9 +329,9 @@ void KnockbackEnemy(Enemy *enemy, const Clearing *clearing,
 }
 
 static void FireRangedProjectile(EnemyGroup *group, const Enemy *enemy, Vector2 player) {
-    Vector2 origin = group->cemetery ? enemy->position : EnemyCenter(enemy);
-    Vector2 toward = group->cemetery ? enemy->attackDirection :
-                     Vector2Subtract((Vector2){player.x, player.y - 35.0f}, origin);
+    Vector2 origin = EnemyCenter(enemy);
+    Vector2 toward = Vector2Subtract((Vector2){player.x,player.y-35},origin);
+    if (group->cemetery && Vector2LengthSqr(enemy->attackDirection)>.001f) toward=enemy->attackDirection;
     if (Vector2LengthSqr(toward) < 0.001f) return;
     for (int i = 0; i < ENEMY_PROJECTILE_COUNT; i++) {
         if (group->projectiles[i].remaining <= 0.0f) {
@@ -396,10 +411,17 @@ static void UpdateGuardianMelee(EnemyGroup *group, const Clearing *clearing, Ene
     }
 }
 
+static void AddEnemyImpact(EnemyGroup *group,Vector2 position) {
+    for(int i=0;i<16;i++) if(group->impacts[i].remaining<=0) {
+        group->impacts[i]=(EnemyImpact){position,.32f};return;
+    }
+}
+
 void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                    Vector2 player, float dt, bool playerDodging,
                    int *playerHealth, int playerMaxHealth) {
     group->playerHitCooldown = fmaxf(0.0f, group->playerHitCooldown-dt);
+    for (int i=0;i<16;i++) group->impacts[i].remaining=fmaxf(0,group->impacts[i].remaining-dt);
     if (group->cemetery && group->list[0].type == ENEMY_BOSS &&
         (group->list[0].guardianPhase == GUARDIAN_PHASE_TRANSITION || group->list[0].state == ENEMY_DIE))
         ClearEnemyAttacks(group);
@@ -585,13 +607,17 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         Vector2 step = Vector2Scale(movement, 1.0f / steps);
         for (int j = 0; j < steps && shot->remaining > 0.0f; j++) {
             Vector2 next = Vector2Add(shot->position, step);
-            if (IsClearingBlocked(clearing, next)) {
+            Vector2 collisionPoint=next;
+            if (group->cemetery) collisionPoint.y+=35;
+            if (IsClearingBlocked(clearing, collisionPoint)) {
+                if (group->cemetery) AddEnemyImpact(group,next);
                 shot->remaining = 0.0f;
             } else {
                 shot->position = next;
-                Vector2 playerCenter = {player.x, player.y - (group->cemetery ? 0 : 35.0f)};
-                float radius = group->cemetery ? 19 : 24;
+                Vector2 playerCenter = {player.x, player.y - 35.0f};
+                float radius = group->cemetery ? 30 : 24;
                 if (Vector2DistanceSqr(next, playerCenter) <= radius * radius) {
+                    if (group->cemetery) AddEnemyImpact(group,next);
                     if (!playerDodging && group->playerHitCooldown <= 0.0f && *playerHealth > 0) {
                         *playerHealth -= shot->damage;
                         if (*playerHealth < 0) *playerHealth = 0;
@@ -643,13 +669,24 @@ static void DrawGuardianCurse(Texture2D texture, const EnemyRoot *root, const Gu
 }
 
 static void DrawRangedProjectiles(const EnemyGroup *group) {
+    if (group->cemetery) for(int i=0;i<16;i++) {
+        const EnemyImpact *impact=&group->impacts[i];
+        if (impact->remaining<=0) continue;
+        Texture2D tex=group->greenFire;float cw=tex.width/4.0f,ch=tex.height/2.0f;
+        int frame=(int)((.32f-impact->remaining)/.08f);if(frame>3)frame=3;
+        DrawTexturePro(tex,(Rectangle){frame*cw,ch,cw,ch},
+            (Rectangle){impact->position.x-35,impact->position.y-35,70,70},(Vector2){0},0,WHITE);
+    }
     for (int i = 0; i < ENEMY_PROJECTILE_COUNT; i++) {
         const EnemyProjectile *shot = &group->projectiles[i];
         if (shot->remaining <= 0.0f) continue;
         if (group->cemetery) {
-            DrawCircleV(shot->position, 14, Fade(GREEN, .3f));
-            DrawCircleV(shot->position, 8, LIME);
-            DrawCircleV(shot->position, 3, RAYWHITE);
+            Texture2D tex=group->greenFire;
+            float cw=tex.width/4.0f,ch=tex.height/2.0f;
+            int frame=(int)(GetTime()*12)%4;
+            float angle=atan2f(shot->direction.y,shot->direction.x)*RAD2DEG;
+            DrawTexturePro(tex,(Rectangle){frame*cw,0,cw,ch},
+                (Rectangle){shot->position.x,shot->position.y,64,48},(Vector2){45,24},angle,WHITE);
             continue;
         }
         Vector2 tail = Vector2Subtract(shot->position, Vector2Scale(shot->direction, 16.0f));

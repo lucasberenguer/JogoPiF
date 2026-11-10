@@ -3,7 +3,7 @@
 #include "raylib.h"
 #include "run_progress.h"
 #include "menu_video.h"
-typedef enum MenuAction { MENU_NONE, MENU_START, MENU_CONTINUE, MENU_QUIT } MenuAction;
+typedef enum MenuAction { MENU_NONE, MENU_START, MENU_CONTINUE, MENU_QUIT, MENU_TEST_CEMETERY } MenuAction;
 typedef struct Menu {
     Texture2D background;
     Texture2D moon, seal, necromancer, fog, fogTexture;

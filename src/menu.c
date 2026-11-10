@@ -9,6 +9,10 @@ static const char *SavePath(void) {
 }
 
 static Rectangle ButtonBounds(int i) {
+    if (i==4) {
+        float width=fminf(310,GetScreenWidth()*.27f);
+        return (Rectangle){GetScreenWidth()-width-20,GetScreenHeight()-72.0f,width,48};
+    }
     float w = fminf(GetScreenWidth() * 0.32f, 530.0f);
     float h = w * 0.30f;
     float gap = fmaxf(8.0f, h * 0.04f);
@@ -176,12 +180,12 @@ MenuAction UpdateMenu(Menu *m) {
         return MENU_NONE;
     }
     if (IsKeyPressed(KEY_ESCAPE)) return MENU_QUIT;
-    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) m->selected = (m->selected+1)%4;
-    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) m->selected = (m->selected+3)%4;
+    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) m->selected = (m->selected+1)%5;
+    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) m->selected = (m->selected+4)%5;
     Vector2 mouse = GetMousePosition();
     Vector2 mouseDelta = GetMouseDelta();
     if (mouseDelta.x != 0.0f || mouseDelta.y != 0.0f)
-        for (int i=0; i<4; i++) if (CheckCollisionPointRec(mouse, ButtonBounds(i))) m->selected = i;
+        for (int i=0; i<5; i++) if (CheckCollisionPointRec(mouse, ButtonBounds(i))) m->selected = i;
     bool click = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     if (!click && !IsKeyPressed(KEY_ENTER) && !IsKeyPressed(KEY_SPACE)) return MENU_NONE;
     if (click && !CheckCollisionPointRec(mouse, ButtonBounds(m->selected))) return MENU_NONE;
@@ -189,6 +193,7 @@ MenuAction UpdateMenu(Menu *m) {
         case 0: if (m->hasSave) { m->page = 3; return MENU_NONE; } return MENU_START;
         case 1: return m->hasSave ? MENU_CONTINUE : MENU_NONE;
         case 2: m->page = 1; return MENU_NONE;
+        case 4: return MENU_TEST_CEMETERY;
         default: m->page = 2; return MENU_NONE;
     }
 }
@@ -255,6 +260,12 @@ void DrawMenu(const Menu *m) {
                            (float)m->buttons[i].height}, b, (Vector2){0}, 0,
                            disabled ? Fade(WHITE,0.48f) : WHITE);
         }
+        Rectangle test=ButtonBounds(4);
+        DrawRectangleRounded(test,.15f,6,m->selected==4?(Color){96,52,112,255}:(Color){35,22,45,240});
+        DrawRectangleRoundedLinesEx(test,.15f,6,2,m->selected==4?GOLD:GRAY);
+        int font=(int)fminf(19,test.width/13);
+        const char *label="TESTAR CEMITERIO";
+        DrawText(label,(int)(test.x+(test.width-MeasureText(label,font))/2),(int)test.y+15,font,RAYWHITE);
         if (!m->hasSave) DrawText("Continuar disponivel apos iniciar uma partida",
                                   GetScreenWidth()/2-210,GetScreenHeight()-42,18,RAYWHITE);
         return;

@@ -27,6 +27,8 @@ typedef struct EnemyProjectile {
     float remaining;
     int damage;
 } EnemyProjectile;
+
+typedef struct EnemyImpact { Vector2 position; float remaining; } EnemyImpact;
 typedef enum EnemyType {
     ENEMY_COMMON_MELEE, ENEMY_COMMON_RANGED, ENEMY_SPECIAL,
     ENEMY_ELITE, ENEMY_BOSS
@@ -57,6 +59,7 @@ typedef struct Enemy {
     bool guardianMelee;
     float guardianMeleeCooldown;
     int bossAttack;
+    int attackBurst;
     Vector2 attackTarget;
 } Enemy;
 typedef struct CemeteryProjectile {
@@ -64,6 +67,7 @@ typedef struct CemeteryProjectile {
     Vector2 position,velocity;
     float life;
     int damage;
+    bool returning, hitPlayer;
 } CemeteryProjectile;
 typedef struct EnemyGroup {
     Texture2D sprites;
@@ -78,6 +82,8 @@ typedef struct EnemyGroup {
     float playerHitCooldown;
     bool cemetery;
     Texture2D skeleton,mage,boss[3],effects[3];
+    Texture2D skeletonFront,skeletonBack,coveiroWalk,greenFire;
+    EnemyImpact impacts[16];
     CemeteryProjectile cemeteryProjectiles[CEMETERY_PROJECTILE_COUNT];
 } EnemyGroup;
 
@@ -105,6 +111,10 @@ int EnemyOptionalDropChance(EnemyType type);
 bool EnemyShouldDrop(EnemyType type, int roll);
 int EnemyAnimationFrame(const Enemy *enemy);
 void DrawEnemyDebug(const EnemyGroup *group);
+typedef struct CemeteryPose { int atlas,columns,rows,row,frame; bool flip; } CemeteryPose;
+enum { CEM_SKELETON_SIDE,CEM_SKELETON_FRONT,CEM_SKELETON_BACK,CEM_MAGE,
+       CEM_BOSS_WALK,CEM_BOSS_SLAM,CEM_BOSS_THROW,CEM_BOSS_CHARGE };
+CemeteryPose CemeteryAnimationPose(const Enemy *enemy);
 void CemeteryUpdateBoss(EnemyGroup *, const Clearing *, Enemy *, Vector2, float, bool, int *);
 void CemeteryUpdateProjectiles(EnemyGroup *, const Clearing *, Vector2, float, bool, int *);
 void CemeteryDrawEnemies(const EnemyGroup *,Vector2,bool);
