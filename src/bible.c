@@ -45,11 +45,11 @@ void ResetBible(Bible *b) {
 void UpdateBible(Bible *b, float dt, bool activate) {
     if (activate && b->boostCooldown <= 0.0f) {
         b->boostRemaining = 1.25f;
-        b->boostCooldown = 5.0f;
+        b->boostCooldown = 4.0f;
         b->activationRemaining = BIBLE_ACTIVATION_DURATION;
     }
     bool boosted = b->boostRemaining > 0.0f;
-    b->angle += (boosted ? 4.2f : 1.35f) * dt;
+    b->angle += (boosted ? 4.8f : 1.6f) * dt;
     if (b->angle >= 2.0f * BIBLE_PI) b->angle -= 2.0f * BIBLE_PI;
     b->animationTime += dt;
     if (b->boostRemaining > 0.0f) b->boostRemaining = fmaxf(0.0f, b->boostRemaining - dt);
