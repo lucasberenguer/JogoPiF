@@ -198,7 +198,7 @@ int main(void) {
     bool showSpriteDebug = false;
     float pedestalMessageTime = 0.0f;
     const float katanaAttackDuration = 0.42f;
-    const float katanaAttackRecovery = 0.55f;
+    const float katanaAttackRecovery = 0.45f;
     const float katanaAttackRange = 140.0f;
     float katanaAttackRemaining = 0.0f;
     float katanaAttackCooldown = 0.0f;
@@ -496,7 +496,7 @@ int main(void) {
                            MapHasClearPath(&clearing,player,enemy->position)) {
                     DamageEnemy(enemy, (int)ceilf(BibleContactDamage()*EncounterDamage(&encounter)));
                     KnockbackEnemy(enemy, &clearing, player, 36.0f);
-                    enemy->bibleHitCooldown = 0.55f;
+                    enemy->bibleHitCooldown = 0.45f;
                 } else if (currentWeapon == WEAPON_KATANA && katanaAttackRemaining > 0.0f &&
                            katanaAttackRemaining <= katanaAttackDuration*0.5f &&
                            enemy->lastKatanaSwing != katanaAttackId) {
