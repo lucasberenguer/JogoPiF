@@ -24,24 +24,7 @@ static Camera2D FitClearing(const Clearing *clearing) {
 
 static void MoveWithCollision(const Clearing *clearing, Vector2 *position,
                               Vector2 movement) {
-    int steps = (int) (Vector2Length(movement) / 2.0f) + 1;
-    Vector2 step = Vector2Scale(movement, 1.0f / (float) steps);
-    for (int index = 0; index < steps; index++) {
-        Vector2 next = Vector2Add(*position, step);
-        if (!IsMapActorBlocked(clearing, next)) {
-            *position = next;
-            continue;
-        }
-        Vector2 alongX = { position->x + step.x, position->y };
-        Vector2 alongY = { position->x, position->y + step.y };
-        bool xFree = step.x != 0.0f && !IsMapActorBlocked(clearing, alongX);
-        bool yFree = step.y != 0.0f && !IsMapActorBlocked(clearing, alongY);
-        if (xFree && (!yFree || fabsf(step.x) >= fabsf(step.y))) {
-            *position = alongX;
-        } else if (yFree) {
-            *position = alongY;
-        }
-    }
+    MoveMapPlayer(clearing,position,movement);
 }
 
 static Vector2 FacingVector(int facing) {

@@ -40,6 +40,7 @@ bool IsMapActorBlocked(const Clearing *map, Vector2 point);
 bool MapHasClearPath(const Clearing *map, Vector2 from, Vector2 to);
 bool FindFreeMapPosition(const Clearing *map, Vector2 origin, Vector2 *result);
 void MoveMapActor(const Clearing *map, Vector2 *position, Vector2 delta);
+void MoveMapPlayer(const Clearing *map, Vector2 *position, Vector2 delta);
 void UnloadClearing(Clearing *clearing);
 
 #endif

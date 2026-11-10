@@ -12,10 +12,73 @@ bool MapHasClearPath(const Clearing *map,Vector2 from,Vector2 to) {
 }
 
 bool IsMapActorBlocked(const Clearing *map, Vector2 point) {
-    /* Test the feet with clearance, rather than a single pixel on the edge. */
-    for (int y=-1;y<=1;y++) for (int x=-1;x<=1;x++)
-        if (IsClearingBlocked(map,(Vector2){point.x+x*7,point.y+y*7})) return true;
+    /* Rounded feet: square corners used to catch on slanted map edges. */
+    if (IsClearingBlocked(map,point)) return true;
+    for (int i=0;i<16;i++) {
+        float angle=(float)i*2*PI/16;
+        if (IsClearingBlocked(map,(Vector2){point.x+cosf(angle)*7,point.y+sinf(angle)*7})) return true;
+    }
     return false;
+}
+
+static void PlayerSlideCandidate(const Clearing *map, Vector2 position, Vector2 movement,
+                                 Vector2 candidate, Vector2 *best, float *score) {
+    float progress=Vector2DotProduct(movement,candidate);
+    if (progress>*score && !IsMapActorBlocked(map,Vector2Add(position,candidate))) {
+        *best=candidate;*score=progress;
+    }
+}
+
+static void PlayerSlideEdge(const Clearing *map,Vector2 position,Vector2 movement,
+                            Vector2 a,Vector2 b,Vector2 *best,float *score) {
+    Vector2 edge=Vector2Subtract(b,a);
+    float lengthSqr=Vector2LengthSqr(edge);
+    if (lengthSqr<.001f) return;
+    float along=Clamp(Vector2DotProduct(Vector2Subtract(position,a),edge)/lengthSqr,0,1);
+    Vector2 nearest=Vector2Add(a,Vector2Scale(edge,along));
+    if (Vector2DistanceSqr(position,nearest)>11*11) return;
+    /* Project input onto the contacted edge; pushing straight into it stops. */
+    Vector2 tangent=Vector2Scale(edge,1/sqrtf(lengthSqr));
+    Vector2 slide=Vector2Scale(tangent,Vector2DotProduct(movement,tangent));
+    PlayerSlideCandidate(map,position,movement,slide,best,score);
+}
+
+void MoveMapPlayer(const Clearing *map,Vector2 *position,Vector2 delta) {
+    if (IsMapActorBlocked(map,*position)) {
+        Vector2 freePosition;
+        if (!FindFreeMapPosition(map,*position,&freePosition) ||
+            Vector2DistanceSqr(*position,freePosition)>24*24) return;
+        *position=freePosition;
+    }
+    float distance=Vector2Length(delta);
+    if (distance<.001f) return;
+    int steps=(int)ceilf(distance); /* At most one pixel, including during dodge. */
+    Vector2 step=Vector2Scale(delta,1.0f/(float)steps);
+    for (int i=0;i<steps;i++) {
+        Vector2 next=Vector2Add(*position,step);
+        if (!IsMapActorBlocked(map,next)) { *position=next;continue; }
+        /* Approach the wall without discarding the entire movement step. */
+        float low=0,high=1;
+        for (int j=0;j<8;j++) {
+            float mid=(low+high)*.5f;
+            if (IsMapActorBlocked(map,Vector2Add(*position,Vector2Scale(step,mid)))) high=mid;
+            else low=mid;
+        }
+        *position=Vector2Add(*position,Vector2Scale(step,low));
+        Vector2 remaining=Vector2Scale(step,1-low),slide={0};float score=.000001f;
+        for (int j=0;j<map->boundaryCount;j++)
+            PlayerSlideEdge(map,*position,remaining,map->boundary[j],
+                map->boundary[(j+1)%map->boundaryCount],&slide,&score);
+        for (int j=0;j<map->shapeCount;j++) {
+            const MapObstacle *shape=&map->shapes[j];
+            for (int k=0;k<shape->count;k++)
+                PlayerSlideEdge(map,*position,remaining,shape->vertices[k],
+                    shape->vertices[(k+1)%shape->count],&slide,&score);
+        }
+        PlayerSlideCandidate(map,*position,remaining,(Vector2){remaining.x,0},&slide,&score);
+        PlayerSlideCandidate(map,*position,remaining,(Vector2){0,remaining.y},&slide,&score);
+        *position=Vector2Add(*position,slide);
+    }
 }
 
 bool FindFreeMapPosition(const Clearing *map, Vector2 origin, Vector2 *result) {
