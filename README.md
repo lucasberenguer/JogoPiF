@@ -1,5 +1,10 @@
 # Jogo PIF
 
+Para retomar o projeto em outro computador ou chat, leia primeiro
+[CONTINUIDADE.md](CONTINUIDADE.md). O arquivo registra a situação atual,
+decisões de design e passos para compilar. Algumas seções abaixo descrevem
+versões antigas do protótipo.
+
 Protótipo da clareira em C com raylib 5.5. A arte de fundo está em
 `assets/clareira.png`. O mapa marcado pelo criador está em
 `design/clareira_marcada.png`. As linhas vermelhas geram
