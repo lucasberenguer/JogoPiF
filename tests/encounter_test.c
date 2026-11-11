@@ -13,6 +13,7 @@ static void Capture(const char *name, Encounter *encounter, EnemyGroup *enemies,
     Camera2D camera={.zoom=.72f};
     BeginMode2D(camera);
     DrawClearing(clearing);
+    if (ClearingAltarOpen(encounter, clearing)) DrawClearingAltarGlow(clearing, 0.5f);
     if (strstr(name,"collision")) DrawClearingCollisionGuide(clearing);
     DrawEnemies(enemies,player,false);
     DrawCircleV(player,15,SKYBLUE);
@@ -58,7 +59,8 @@ int main(void) {
     assert(InitClearing(&clearing));
     Vector2 pedestalApproach;
     assert(FindFreeMapPosition(&clearing, clearing.pedestal, &pedestalApproach));
-    assert(CheckCollisionPointCircle(pedestalApproach, clearing.pedestal, 72));
+    assert(CheckCollisionPointCircle(pedestalApproach, clearing.pedestal, CLEARING_ALTAR_RADIUS));
+    assert(clearing.exit.width == 0);
     assert(InitEnemies(&enemies));
     Encounter encounter={0};
     Vector2 player={835,540};
@@ -149,6 +151,8 @@ int main(void) {
     DamageEnemy(boss,boss->health);
     UpdateEnemies(&enemies,&clearing,player,.9f,true,&health,100);
     assert(boss->state==ENEMY_FALLEN && !EnemyCanBeHit(boss));
+    assert(!ClearingAltarOpen(&encounter,&clearing));
+    assert(!CanEnterCemetery(&encounter,&clearing,pedestalApproach,true));
     for (int i=0;i<ENEMY_ROOT_COUNT;i++) assert(!enemies.rootAttacks[i].active);
     assert(OpenEncounterSeal(&encounter,&enemies,boss->position));
     Capture("audit/boss_seal.png",&encounter,&enemies,&clearing,player);
@@ -168,6 +172,9 @@ int main(void) {
     assert(AnswerEncounterSeal(&encounter,&enemies,&health,encounter.answer));
     UpdateEncounter(&encounter,&enemies,&clearing,player,&health);
     assert(encounter.phase==ENCOUNTER_CLEAR && encounter.progress.stage==CLEARING_COMPLETE_STAGE);
+    assert(!encounter.notice[0]);
+    assert(ClearingAltarOpen(&encounter,&clearing));
+    assert(!CanEnterCemetery(&encounter,&clearing,pedestalApproach,true));
     assert(encounter.presentation.announcement && EncounterPaused(&encounter));
     assert(strcmp(encounter.presentation.announcement,"CLAREIRA LIMPA")==0);
     UpdateStagePresentation(&encounter.presentation,3);
@@ -176,6 +183,11 @@ int main(void) {
     Capture("audit/area_unlock.png",&encounter,&enemies,&clearing,player);
     UpdateStagePresentation(&encounter.presentation,4);
     assert(!EncounterPaused(&encounter));
+    assert(!CanEnterCemetery(&encounter,&clearing,pedestalApproach,false));
+    Vector2 formerExit = {clearing.background.width*.46f, clearing.background.height*.985f};
+    assert(!CanEnterCemetery(&encounter,&clearing,formerExit,true));
+    assert(CanEnterCemetery(&encounter,&clearing,pedestalApproach,true));
+    Capture("audit/clearing_altar_open.png",&encounter,&enemies,&clearing,pedestalApproach);
     RunProgress completed;
     assert(LoadClearingCheckpoint(&completed) && completed.stage==CLEARING_COMPLETE_STAGE);
     health=0;

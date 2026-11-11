@@ -3,13 +3,13 @@
 #include "raylib.h"
 #include "run_progress.h"
 #include "menu_video.h"
-typedef enum MenuAction { MENU_NONE, MENU_START, MENU_CONTINUE, MENU_QUIT, MENU_TEST_CEMETERY } MenuAction;
+typedef enum MenuAction { MENU_NONE, MENU_START, MENU_CONTINUE, MENU_QUIT } MenuAction;
 typedef enum PauseAction { PAUSE_NONE, PAUSE_RESUME, PAUSE_MAIN_MENU } PauseAction;
 typedef enum PausePage { PAUSE_OPTIONS, PAUSE_SETTINGS, PAUSE_CONTROLS } PausePage;
 typedef struct PauseMenu {
     Texture2D background, frame, labels;
     Shader shader;
-    int timeLocation, layerLocation;
+    int timeLocation, layerLocation, fogLocation;
     float time, buttonFocus[4];
     PausePage page;
     int selected;

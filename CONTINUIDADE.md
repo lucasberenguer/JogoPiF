@@ -39,16 +39,19 @@ O Pátio dos Guardiões foi retirado da sequência. Cutscene de descoberta do pa
 
 ## Estado implementado
 
-- Clareira e cemitério: ondas de 7, 11, 15 e 19 inimigos; quinta onda com miniboss. Spawns compartilham a estrutura; saída da clareira fica embaixo e conduz à entrada superior do cemitério. Saída do cemitério fica à direita.
-- Transição da clareira só após concluir o encontro. Colisões dos dois mapas seguem revisões desenhadas pelo usuário, com tratamento de deslizamento para reduzir agarramento nas bordas. Protagonista inicia no centro da clareira.
-- Game Over e repetição; teste direto no menu por **TESTAR CEMITERIO**, com escolha de arma. Prática não sobrescreve checkpoint normal e repetição permanece no cemitério.
-- Menu de pausa integrado localmente sobre o pull `d2e5e39`. Durante a partida, **Esc** pausa e retoma. A tela oferece Continuar Jogo, Configurações, Controles e Voltar ao Menu. Os botões seguem o estilo do menu inicial e o cenário anima a lua, as bandeiras e o rio. A integração preserva a entrada **TESTAR CEMITERIO** no menu inicial.
+- Clareira e cemitério: ondas de 7, 11, 15 e 19 inimigos; quinta onda com miniboss. Para avançar ao cemitério, sele o Guardião da Clareira e pressione **E** junto ao altar iluminado. A saída inferior e o atalho do menu foram desativados. **Continuar Jogo** retoma o mapa de um checkpoint existente. A saída do cemitério fica à direita.
+- As colisões dos dois mapas seguem revisões desenhadas pelo usuário, com tratamento de deslizamento para reduzir agarramento nas bordas. O protagonista inicia no centro da clareira. Game Over oferece uma nova tentativa na clareira.
+- Durante a partida, **Esc** pausa e retoma. A tela oferece Continuar Jogo, Configurações, Controles e Voltar ao Menu. Os botões seguem o estilo do menu inicial e o cenário anima a lua, as bandeiras e o rio.
+- Revisão visual da pausa: a moldura tem o quadriculado removido antes da filtragem, o foco é aplicado na própria arte dos botões e os painéis usam o mesmo estilo do menu inicial. As folhas oscilam em ritmos diferentes, a névoa deriva em duas camadas e o pulso lunar ilumina o halo, a névoa e os reflexos do rio.
+- O shader da pausa aceita tanto a moldura RGB enviada por builds antigos quanto a moldura com alfa pré-multiplicado do build atual. Isso evita que o quadriculado branco apareça ao carregar os assets do repositório com um executável antigo.
+- A katana mira no cursor no momento do clique. O arco visual e o dano usam a direção exata do golpe e o alcance base de 105 unidades. A pose usa a direção cardinal mais próxima.
 - Vida de inimigos do cemitério: +10% em relação à base da clareira, arredondada para cima. Guardião 2.200 HP; Coveiro 2.420 HP.
 - Direções de esqueletos corrigidas com frente/costas e espelhamento lateral. Magos usam linhas direcionais corretas; fogo verde tem animação de voo/impacto e colisão ajustada. Esquiva e invulnerabilidade ainda impedem dano intencionalmente.
 - Coveiro possui raízes, arremesso da pá e investida; segunda fase acrescenta raízes laterais, três pás e segunda investida com novo aviso. Novos atlas evitam recortes de pés/cabeça.
 - Caminhada e arremesso do Coveiro: 12 quadros por direção. Caminhada 18 quadros/s, arremesso com preparação até 0,8 s e recuperação até 1,65 s; movimento corporal e pequeno avanço nos golpes. Após teste do usuário, deslocamento corporal foi reduzido 8% (fator 0,92), incluindo investidas. Velocidade das pás preservada.
 - Pás: ida 620/740 unidades/s nas fases 1/2, retorno 660/760, raio de contato 43; oito quadros de giro, vento e poeira. Um acerto por trajeto de ida/volta; movimento subdividido para evitar atravessar colisões.
 - Ao entrar numa área: apresentação **ENTRANDO EM + nome**, 2,8 s, seguida da apresentação da onda. Combate pausado durante apresentações.
+- A abertura em HQ toca uma vez por sessão, após a confirmação da arma em uma nova partida. Usa oito ilustrações em seis momentos narrativos e dura cerca de 41 s. O quarto momento, Juramento, inclui uma ilustração vertical no painel lateral. **Espaço** ou **Enter** avança e **Esc** segue para a Clareira. A transição reutiliza a apresentação de área com o subtítulo **A Terra dos que Não Descansam**. Checkpoints e novas tentativas após Game Over seguem direto ao jogo. A trilha e os efeitos ainda não foram fornecidos.
 - Ao concluir: mensagem de área limpa e depois **NOVA AREA DESBLOQUEADA + próximo nome**, 3,2 s. Atualmente o anúncio após o cemitério ainda diz "Vila Abandonada"; trocar para **Vila Lascada** ao integrar a vila. O anúncio não significa que a vila já seja acessível.
 
 ## Arquivos úteis
@@ -58,6 +61,7 @@ O Pátio dos Guardiões foi retirado da sequência. Cutscene de descoberta do pa
 - `src/cemetery_enemy.c`: comportamento, animações e VFX do Coveiro; desenho dos inimigos do cemitério.
 - `src/clearing.c`: mapas e colisões.
 - `src/encounter.c`, `src/presentation.c`: progressão, selos, recompensas e apresentações.
+- `src/cutscene.c` e `assets/cutscenes/intro/`: duração, legendas, composição, ilustrações e caminhos de áudio da abertura.
 - `assets/coveiro_walk_v4.png`, `coveiro_throw_v4.png`, `coveiro_slam_v3.png`, `coveiro_charge_v3.png`, `coveiro_pa_vento_v4.png`: assets atuais do chefe.
 - `design/coveiro_v4_notas.md`: especificações e notas das artes geradas com imagegen.
 - `README.md` contém partes históricas do protótipo, inclusive informações antigas sobre inimigos/checkpoints; conferir implementação e este documento.
@@ -85,8 +89,17 @@ Pop-Location
 ```
 
 Ajustar caminhos se a instalação diferir. Primeira configuração precisa de internet para baixar raylib. Diretório `out/review` é a versão local de testes; `build/JogoPiF.exe` pode ser antigo. Os assets são copiados pelo build.
+Na inicialização, o executável usa sua própria pasta quando ela contém `assets/`. Após corrigir o caso em que a abertura era pulada pelo executável antigo, `build` e `out/review` foram recompilados com os sete quadros. A verificação iniciou o jogo de outra pasta e confirmou a abertura após selecionar a arma com Enter e com clique.
 
-Validação da integração em `out/review`: build concluído e quatro testes aprovados (`enemy_audit`, `map_connectivity`, `player_collision`, `clearing_encounter`). Uma verificação adicional em janela raylib carregou as artes e o shader da pausa e confirmou por teclado a seleção de **TESTAR CEMITERIO**, a navegação da pausa e as ações de retomar e voltar ao menu. A verificação adicional exercitou o módulo do menu diretamente.
+Validação da integração em `out/review`: build concluído e quatro testes aprovados (`enemy_audit`, `map_connectivity`, `player_collision`, `clearing_encounter`). Uma verificação adicional em janela raylib carregou as artes e o shader da pausa e confirmou a navegação por teclado e as ações de retomar e voltar ao menu. A verificação adicional exercitou o módulo do menu diretamente.
+
+A revisão visual passou pelos mesmos quatro testes e pela navegação de menu. Capturas em 1280×720 e 800×700 foram inspecionadas. A comparação entre quadros confirmou movimento nas bandeiras, folhas, névoa, lua e rio e estabilidade dos botões. A pausa manteve 60 FPS durante uma medição de 180 quadros em 1920×1080, renderizados em textura na Intel UHD local.
+
+A correção do branco foi conferida em capturas da pausa com o renderizador antigo e o atual. Os quatro testes passaram após essa correção e a mudança da mira da katana.
+
+O teste de encontro também confere que a queda do Guardião ainda exige o selo, que a apresentação bloqueia a interação e que, depois dela, apenas a interação junto ao altar libera a passagem. A captura do altar liberado fica em `out/review/audit/clearing_altar_open.png`.
+
+A abertura foi conferida em 1280×720 e 800×700. O fluxo de jogo foi exercitado com entradas simuladas até a primeira onda e a repetição após Game Over, tanto no avanço automático quanto ao pular com Esc. As capturas ficam em `out/review/audit/intro_*.png`.
 
 ## O que é salvo e o que precisa de backup
 

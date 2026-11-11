@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include "raylib.h"
 
+enum { CLEARING_ALTAR_RADIUS = 72 };
+
 typedef struct MapObstacle {
     Vector2 vertices[16];
     int count;
@@ -33,6 +35,7 @@ void ConfigureCemeteryBoundary(Clearing *map);
 bool InitClearing(Clearing *clearing);
 bool InitCemetery(Clearing *clearing);
 void DrawClearing(const Clearing *clearing);
+void DrawClearingAltarGlow(const Clearing *clearing, float time);
 void DrawClearingForeground(const Clearing *clearing, Vector2 player);
 void DrawClearingCollisionGuide(const Clearing *clearing);
 bool IsClearingBlocked(const Clearing *clearing, Vector2 point);

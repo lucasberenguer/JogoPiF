@@ -21,6 +21,7 @@ set(SOURCES
     src/hud.c
     src/menu.c
     src/menu_video.c
+    src/cutscene.c
     src/weapon_select.c
     src/bible.c
     src/gun.c

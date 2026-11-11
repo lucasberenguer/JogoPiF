@@ -412,16 +412,22 @@ bool InitClearing(Clearing *clearing) {
         (float) clearing->background.height - 166.0f
     };
     ConfigureClearingBoundary(clearing);
-    /* Bottom dirt opening marked in the map; below the initial spawn. */
-    clearing->exit = (Rectangle){clearing->background.width*.36f,
-        clearing->background.height*.97f,clearing->background.width*.21f,
-        clearing->background.height*.03f};
     clearing->pedestal = (Vector2) { 869.0f, 162.0f };
     return true;
 }
 
 void DrawClearing(const Clearing *clearing) {
     DrawTexture(clearing->background, 0, 0, WHITE);
+}
+
+void DrawClearingAltarGlow(const Clearing *clearing, float time) {
+    Vector2 sigil = {clearing->pedestal.x, clearing->pedestal.y - 82.0f};
+    float pulse = 0.5f + 0.5f*sinf(time*2.4f);
+    DrawCircleGradient((int)sigil.x, (int)sigil.y, 70.0f + 8.0f*pulse,
+                       Fade(GOLD, 0.42f + 0.18f*pulse), Fade(GOLD, 0.0f));
+    DrawRing(sigil, 33.0f, 35.0f, 0, 360, 40, Fade(YELLOW, 0.32f + 0.25f*pulse));
+    DrawEllipse((int)clearing->pedestal.x, (int)clearing->pedestal.y + 19,
+                43.0f, 11.0f, Fade(GOLD, 0.16f + 0.10f*pulse));
 }
 
 void DrawClearingForeground(const Clearing *clearing, Vector2 player) {
@@ -455,10 +461,11 @@ void DrawClearingCollisionGuide(const Clearing *clearing) {
         for (int j=0;j<shape->count;j++)
             DrawLineEx(shape->vertices[j],shape->vertices[(j+1)%shape->count],2,RED);
     }
-    DrawRectangleLinesEx(clearing->exit,2,GREEN);
+    if (clearing->cemetery) DrawRectangleLinesEx(clearing->exit,2,GREEN);
     if (!clearing->boundaryCount) DrawRectangleLinesEx(clearing->playableBounds, 3.0f, RED);
-    DrawCircleLines((int) clearing->pedestal.x,
-                    (int) clearing->pedestal.y, 72.0f, BLUE);
+    if (!clearing->cemetery)
+        DrawCircleLines((int) clearing->pedestal.x,
+                        (int) clearing->pedestal.y, CLEARING_ALTAR_RADIUS, BLUE);
 }
 
 bool IsClearingBlocked(const Clearing *clearing, Vector2 point) {
@@ -474,11 +481,6 @@ bool IsClearingBlocked(const Clearing *clearing, Vector2 point) {
         Vector2 rock={clearing->background.width*.622f,clearing->background.height*.228f};
         return CheckCollisionPointCircle(point,rock,22);
     }
-    /* Open only the marked passage through the old bottom boundary/mask. */
-    if (!clearing->cemetery && clearing->exit.width > 0 &&
-        CheckCollisionPointRec(point,(Rectangle){clearing->exit.x,
-            clearing->background.height*.94f,clearing->exit.width,
-            clearing->background.height*.06f})) return false;
     if (!CheckCollisionPointRec(point, clearing->playableBounds)) return true;
     for (int i=0;i<clearing->obstacleCount;i++)
         if (CheckCollisionCircleRec(point, 8.0f, clearing->obstacles[i])) return true;

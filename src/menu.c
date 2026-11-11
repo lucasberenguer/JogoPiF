@@ -3,7 +3,7 @@
 #include <math.h>
 #include "rlgl.h"
 
-enum { PAUSE_SCENE, PAUSE_FRAME, PAUSE_PLATE, PAUSE_LABEL };
+enum { PAUSE_SCENE = 0, PAUSE_PLATE = 2, PAUSE_LABEL = 3, PAUSE_FRAME = 4 };
 
 static const char *SavePath(void) {
     static char path[1024];
@@ -19,10 +19,6 @@ static Rectangle MenuButtonBounds(int i, float centerX, float centerY, float w) 
 }
 
 static Rectangle ButtonBounds(int i) {
-    if (i==4) {
-        float width=fminf(310,GetScreenWidth()*.27f);
-        return (Rectangle){GetScreenWidth()-width-20,GetScreenHeight()-72.0f,width,48};
-    }
     float w = fminf(GetScreenWidth() * 0.32f, 530.0f);
     float groupHeight = 4*w*.30f + 3*fmaxf(8.0f, w*.30f*.04f);
     float centerY = GetScreenHeight()*.54f - groupHeight*.04f;
@@ -34,19 +30,52 @@ static void UpdateButtonFocus(float focus[4], int selected, float dt) {
     for (int i = 0; i < 4; i++) focus[i] += ((i == selected ? 1.0f : 0.0f) - focus[i])*blend;
 }
 
-static void DrawMenuButtonGlow(Rectangle bounds, float focus) {
-    if (focus <= .005f) return;
-    Rectangle edge = {bounds.x, bounds.y + bounds.height*.20f,
-                      bounds.width, bounds.height*.60f};
-    DrawRectangleRounded(edge, .80f, 12, Fade((Color){245, 134, 42, 255}, .18f*focus));
-}
-
 static Color MenuButtonTint(Rectangle bounds, float focus, bool disabled) {
     if (disabled) return Fade(WHITE, .48f);
-    float idleTint = 239.0f + 16.0f*focus;
+    float idleTint = 217.0f + 38.0f*focus;
     if (focus > .5f && IsMouseButtonDown(MOUSE_BUTTON_LEFT) &&
         CheckCollisionPointRec(GetMousePosition(), bounds)) idleTint *= .89f;
     return (Color){(unsigned char)idleTint, (unsigned char)idleTint, (unsigned char)idleTint, 255};
+}
+
+static void DrawMenuPanel(Rectangle bounds) {
+    DrawRectangleRounded(bounds, .08f, 12, (Color){31, 5, 20, 248});
+    DrawRectangleRoundedLinesEx(bounds, .08f, 12, 2, (Color){163, 93, 46, 255});
+}
+
+static float SmoothRange(float start, float end, float value) {
+    float t = fminf(1.0f, fmaxf(0.0f, (value-start)/(end-start)));
+    return t*t*(3.0f - 2.0f*t);
+}
+
+static Texture2D LoadPauseFrame(void) {
+    Image source = LoadImage("assets/pausa_moldura.png");
+    if (!source.data) return (Texture2D){0};
+    Color *pixels = LoadImageColors(source);
+    Texture2D texture = {0};
+    if (pixels) {
+        // Remova a cor do quadriculado antes de interpolar. O shader recebe RGB pré-multiplicado.
+        const float matte = 218.0f;
+        for (int i = 0; i < source.width*source.height; i++) {
+            Color pixel = pixels[i];
+            int low = (int)fminf(pixel.r, fminf(pixel.g, pixel.b));
+            int high = (int)fmaxf(pixel.r, fmaxf(pixel.g, pixel.b));
+            float alpha = fmaxf(1.0f - SmoothRange(70, 142, low), SmoothRange(19, 62, high-low));
+            float background = matte*(1.0f-alpha);
+            float limit = 255.0f*alpha;
+            pixels[i] = (Color){
+                (unsigned char)fminf(limit, fmaxf(0, pixel.r-background)),
+                (unsigned char)fminf(limit, fmaxf(0, pixel.g-background)),
+                (unsigned char)fminf(limit, fmaxf(0, pixel.b-background)),
+                (unsigned char)roundf(limit)
+            };
+        }
+        Image prepared = {pixels, source.width, source.height, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8};
+        texture = LoadTextureFromImage(prepared);
+        UnloadImageColors(pixels);
+    }
+    UnloadImage(source);
+    return texture;
 }
 
 bool SaveMenuCheckpoint(int weapon) {
@@ -135,7 +164,7 @@ bool InitMenu(Menu *m) {
     SetTextureFilter(m->seal, TEXTURE_FILTER_POINT);
     SetTextureFilter(m->necromancer, TEXTURE_FILTER_POINT);
     SetTextureFilter(m->fog, TEXTURE_FILTER_POINT);
-    SetTextureFilter(m->fogTexture, TEXTURE_FILTER_POINT);
+    SetTextureFilter(m->fogTexture, TEXTURE_FILTER_BILINEAR);
     for (int i=0; i<10; i++) SetTextureFilter(m->hero[i], TEXTURE_FILTER_POINT);
     for (int i=0; i<4; i++) {
         m->buttons[i] = LoadTexture(paths[i]);
@@ -144,12 +173,13 @@ bool InitMenu(Menu *m) {
     }
     m->hasSave = LoadMenuCheckpointWeapon() >= 0;
     m->pause.background = LoadTexture("assets/pausa_fundo.png");
-    m->pause.frame = LoadTexture("assets/pausa_moldura.png");
+    m->pause.frame = LoadPauseFrame();
     m->pause.labels = LoadTexture("assets/pausa_rotulos.png");
     m->pause.shader = LoadShader(NULL, "assets/shaders/pausa.fs");
     if (m->pause.shader.id && m->pause.shader.id != rlGetShaderIdDefault()) {
         m->pause.timeLocation = GetShaderLocation(m->pause.shader, "time");
         m->pause.layerLocation = GetShaderLocation(m->pause.shader, "layer");
+        m->pause.fogLocation = GetShaderLocation(m->pause.shader, "fogTexture");
     } else m->pause.shader = (Shader){0};
     if (m->pause.background.id) SetTextureFilter(m->pause.background, TEXTURE_FILTER_BILINEAR);
     if (m->pause.frame.id) SetTextureFilter(m->pause.frame, TEXTURE_FILTER_BILINEAR);
@@ -273,7 +303,6 @@ static void DrawPauseButton(const Menu *menu, Rectangle canvas, int index) {
     Rectangle bounds = PauseRect(canvas, logical);
     float focus = pause->buttonFocus[index];
     Color tint = MenuButtonTint(bounds, focus, false);
-    DrawMenuButtonGlow(bounds, focus);
 
     if (index < 2) {
         Texture2D button = menu->buttons[index+1];
@@ -309,7 +338,6 @@ static void DrawPauseTextButton(const Menu *menu, Rectangle canvas, Rectangle lo
                                 const char *label, int fontSize) {
     Rectangle bounds = PauseRect(canvas, logical);
     float focus = CheckCollisionPointRec(GetMousePosition(), bounds) ? 1.0f : 0.0f;
-    DrawMenuButtonGlow(bounds, focus);
     DrawPausePlate(menu, bounds, MenuButtonTint(bounds, focus, false));
     DrawPauseText(canvas, label, logical.y + (logical.height-fontSize)/2, fontSize, RAYWHITE);
 }
@@ -328,8 +356,14 @@ void DrawPauseMenu(const Menu *menu) {
         // Na janela estreita, deixe a lua dentro do enquadramento.
         x = fmaxf(GetScreenWidth()-width, fminf(x, GetScreenWidth()*.84f - width*.812f));
         Rectangle destination = {x, (GetScreenHeight()-height)/2, width, height};
-        if (pause->shader.id) DrawPauseLayer(pause, PAUSE_SCENE, background, source, destination, WHITE);
-        else DrawTexturePro(background, source, destination, (Vector2){0}, 0, WHITE);
+        if (pause->shader.id) {
+            BeginShaderMode(pause->shader);
+            const int layer = PAUSE_SCENE;
+            SetShaderValue(pause->shader, pause->layerLocation, &layer, SHADER_UNIFORM_INT);
+            SetShaderValueTexture(pause->shader, pause->fogLocation, menu->fogTexture);
+            DrawTexturePro(background, source, destination, (Vector2){0}, 0, WHITE);
+            EndShaderMode();
+        } else DrawTexturePro(background, source, destination, (Vector2){0}, 0, WHITE);
     }
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
                   Fade(BLACK, pause->page == PAUSE_OPTIONS ? .12f : .35f));
@@ -344,8 +378,7 @@ void DrawPauseMenu(const Menu *menu) {
     }
 
     Rectangle panel = PauseRect(canvas, (Rectangle){395, 148, 882, 668});
-    DrawRectangleRounded(panel, .09f, 12, (Color){34, 13, 18, 248});
-    DrawRectangleRoundedLinesEx(panel, .09f, 12, 2, GOLD);
+    DrawMenuPanel(panel);
     DrawPauseTextButton(menu, canvas, pauseBack, "Voltar  ·  Esc", 28);
     if (pause->page == PAUSE_SETTINGS) {
         DrawPauseText(canvas, "Configurações", 211, 60, GOLD);
@@ -396,12 +429,12 @@ MenuAction UpdateMenu(Menu *m) {
         return MENU_NONE;
     }
     if (IsKeyPressed(KEY_ESCAPE)) return MENU_QUIT;
-    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) m->selected = (m->selected+1)%5;
-    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) m->selected = (m->selected+4)%5;
+    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) m->selected = (m->selected+1)%4;
+    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) m->selected = (m->selected+3)%4;
     Vector2 mouse = GetMousePosition();
     Vector2 mouseDelta = GetMouseDelta();
     if (mouseDelta.x != 0.0f || mouseDelta.y != 0.0f)
-        for (int i=0; i<5; i++) if (CheckCollisionPointRec(mouse, ButtonBounds(i))) m->selected = i;
+        for (int i=0; i<4; i++) if (CheckCollisionPointRec(mouse, ButtonBounds(i))) m->selected = i;
     bool click = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     UpdateButtonFocus(m->buttonFocus, m->selected == 1 && !m->hasSave ? -1 : m->selected, dt);
     if (!click && !IsKeyPressed(KEY_ENTER) && !IsKeyPressed(KEY_SPACE)) return MENU_NONE;
@@ -410,7 +443,6 @@ MenuAction UpdateMenu(Menu *m) {
         case 0: if (m->hasSave) { m->page = 3; return MENU_NONE; } return MENU_START;
         case 1: return m->hasSave ? MENU_CONTINUE : MENU_NONE;
         case 2: m->page = 1; return MENU_NONE;
-        case 4: return MENU_TEST_CEMETERY;
         default: m->page = 2; return MENU_NONE;
     }
 }
@@ -470,24 +502,16 @@ void DrawMenu(const Menu *m) {
         for (int i=0; i<4; i++) {
             Rectangle b = ButtonBounds(i);
             bool disabled = i==1 && !m->hasSave;
-            if (!disabled) DrawMenuButtonGlow(b, m->buttonFocus[i]);
             DrawTexturePro(m->buttons[i], (Rectangle){0,0,(float)m->buttons[i].width,
                            (float)m->buttons[i].height}, b, (Vector2){0}, 0,
                            MenuButtonTint(b, m->buttonFocus[i], disabled));
         }
-        Rectangle test=ButtonBounds(4);
-        DrawRectangleRounded(test,.15f,6,m->selected==4?(Color){96,52,112,255}:(Color){35,22,45,240});
-        DrawRectangleRoundedLinesEx(test,.15f,6,2,m->selected==4?GOLD:GRAY);
-        int font=(int)fminf(19,test.width/13);
-        const char *label="TESTAR CEMITERIO";
-        DrawText(label,(int)(test.x+(test.width-MeasureText(label,font))/2),(int)test.y+15,font,RAYWHITE);
         if (!m->hasSave) DrawText("Continuar disponivel apos iniciar uma partida",
                                   GetScreenWidth()/2-210,GetScreenHeight()-42,18,RAYWHITE);
         return;
     }
     Rectangle p = {GetScreenWidth()/2.0f-330, GetScreenHeight()/2.0f-140,660,280};
-    DrawRectangleRounded(p,0.08f,12,Fade((Color){31,5,20,255},0.96f));
-    DrawRectangleRoundedLinesEx(p,0.08f,12,3,GOLD);
+    DrawMenuPanel(p);
     if (m->page==1) {
         DrawText("CONFIGURACOES",(int)p.x+50,(int)p.y+34,34,GOLD);
         DrawText("F ou Enter: alternar tela cheia",(int)p.x+50,(int)p.y+110,23,RAYWHITE);

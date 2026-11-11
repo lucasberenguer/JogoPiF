@@ -18,13 +18,15 @@ definida no código.
 ## Compilar no Windows (MSYS2 UCRT64)
 
 ```powershell
-cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=C:/msys64/ucrt64/bin/gcc.exe
-cmake --build build
-./build/JogoPiF.exe
+cmake -S . -B out/review -G Ninja -DCMAKE_C_COMPILER=C:/msys64/ucrt64/bin/gcc.exe
+cmake --build out/review
+Push-Location out/review
+.\JogoPiF.exe
+Pop-Location
 ```
 
 O CMake baixa a raylib automaticamente. O executável e os assets copiados ficam
-em `build/`.
+em `out/review/`.
 
 ## Menu
 
@@ -37,12 +39,11 @@ progresso, o menu pede confirmação antes de substituí-lo.
 **Continuar Jogo** retoma do checkpoint inicial da clareira com a arma escolhida,
 o único checkpoint disponível no protótipo. **Configurações** permite alternar tela cheia com F ou Enter;
 **Créditos** abre uma tela reservada aos nomes da equipe.
-O arquivo `partida_pif.sav` fica ao lado do executável, em `build/`.
+O arquivo `partida_pif.sav` fica ao lado do executável.
 As cartas e a moldura da escolha estão em `assets/`. A arma selecionada aparece
 na interface da clareira.
-Com a Katana equipada, o clique esquerdo já executa um corte visual em quatro
-quadros, orientado para onde o personagem está olhando. Cada clique inicia um
-golpe; segurar o botão não repete o ataque. O efeito foi recortado
+Com a Katana equipada, o clique esquerdo executa um corte na direção do cursor.
+Cada clique inicia um golpe. Segurar o botão não repete o ataque. O efeito foi recortado
 de `design/katana_ataque_referencia.png` por `tools/extract_katana.py`.
 O mesmo script também produz `assets/katana_corpo.png`, com poses do personagem
 sincronizadas com o corte nas quatro direções.
@@ -70,6 +71,21 @@ intervalo antes de outro acerto. As poses originais estão em
 Depois da escolha ou de **Continuar**, a clareira surge com um fade de 1,15 s.
 O movimento e a esquiva começam quando a transição termina.
 
+## Abertura em HQ
+
+A abertura roda na primeira partida nova da sessão, depois da escolha da
+arma. Espaço ou Enter avança um momento e Esc segue para a Clareira do Selo.
+
+Em `src/cutscene.c`, a tabela `beats` define as durações, as legendas e os
+nomes dos efeitos. Ajuste a segunda legenda do juramento em `oathCaption`.
+`DrawOpeningCutscene` define posições dos painéis, recortes, zoom e tremor.
+
+Em `assets/cutscenes/intro/`, os sete PNGs mostram o campo, o sobrevivente,
+a descida do anjo, o despertar, o juramento, a mão e o confronto. A descida e
+o despertar ocupam o mesmo momento narrativo. O painel lateral do juramento
+usa a ilustração vertical `quadro_04_complemento.png`. Para adicionar áudio, coloque
+`trilha.ogg` e os WAVs nomeados em `beats` nessa pasta. Todos são opcionais.
+
 ## Testar a clareira
 
 - WASD: mover.
@@ -78,7 +94,7 @@ O movimento e a esquiva começam quando a transição termina.
   e respeita as colisões.
 - F3: mostrar a máscara de colisão e os limites externos.
 - F4/F5: tirar ou recuperar 5 pontos de vida para testar os estados da HUD.
-- E perto do pedestal: inspecionar a saída ainda selada.
+- E perto do altar dourado: entrar no Cemitério das Raízes após selar o Guardião da Clareira.
 - Esc: voltar ao menu.
 
 O personagem usa uma folha de sprites com quatro direções, uma pose parada e

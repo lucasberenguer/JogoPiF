@@ -8,6 +8,7 @@
 #include "gun.h"
 #include "enemy.h"
 #include "encounter.h"
+#include "cutscene.h"
 #include <math.h>
 
 static Camera2D FitClearing(const Clearing *clearing) {
@@ -67,6 +68,11 @@ static bool InitKatanaSprites(KatanaSprites *sprites) {
 }
 
 int main(void) {
+    const char *applicationDirectory = GetApplicationDirectory();
+    if (DirectoryExists(TextFormat("%s/assets", applicationDirectory)) &&
+        !ChangeDirectory(applicationDirectory))
+        TraceLog(LOG_WARNING, "Nao foi possivel abrir a pasta de assets do executavel.");
+
     InitWindow(1280, 720, "Jogo PIF - Clareira");
     const int monitor = GetCurrentMonitor();
     SetWindowSize(GetMonitorWidth(monitor), GetMonitorHeight(monitor));
@@ -199,16 +205,19 @@ int main(void) {
     float pedestalMessageTime = 0.0f;
     const float katanaAttackDuration = 0.42f;
     const float katanaAttackRecovery = 0.45f;
-    const float katanaAttackRange = 140.0f;
+    const float katanaAttackRange = 105.0f;
     float katanaAttackRemaining = 0.0f;
     float katanaAttackCooldown = 0.0f;
     int katanaAttackFacing = 0;
+    Vector2 katanaAttackDirection = {0.0f, 1.0f};
     int gunAttackFacing = 0;
     int bibleAttackFacing = 0;
     int katanaAttackId = 0;
+    enum { OPENING_SCREEN = 4 };
     int screen = 0; /* 0: menu, 1: escolha da arma, 2: partida, 3: pausa */
+    OpeningCutscene opening = {0};
+    bool openingSeen = false;
     int currentWeapon = -1;
-    bool startInCemetery=false;
     Encounter encounter = {.progress = {.weapon=0}};
     const float entryFadeDuration = 1.15f;
     float entryFadeRemaining = 0.0f;
@@ -217,8 +226,7 @@ int main(void) {
         if (screen == 0) {
             MenuAction action = UpdateMenu(&menu);
             if (action == MENU_QUIT) break;
-            if (action == MENU_START || action==MENU_TEST_CEMETERY) {
-                startInCemetery=action==MENU_TEST_CEMETERY;
+            if (action == MENU_START) {
                 weaponSelect.selected = 0;
                 screen = 1;
             } else if (action == MENU_CONTINUE) {
@@ -257,23 +265,49 @@ int main(void) {
             EndDrawing();
             continue;
         }
-        if (screen == 1) {
-            int choice = UpdateWeaponSelect(&weaponSelect);
+        if (screen == 1 || screen == OPENING_SCREEN) {
+            bool fromOpening = screen == OPENING_SCREEN;
+            int choice;
+            if (fromOpening) {
+                UpdateOpeningCutscene(&opening, GetFrameTime());
+                BeginDrawing();
+                    ClearBackground(BLACK);
+                    if (!opening.finished) DrawOpeningCutscene(&opening);
+                EndDrawing();
+                if (!opening.finished) continue;
+                UnloadOpeningCutscene(&opening);
+                choice = currentWeapon;
+            } else {
+                choice = UpdateWeaponSelect(&weaponSelect);
+            }
             if (choice == -2) { screen = 0; continue; }
             if (choice >= 0) {
-                if (clearing.cemetery!=startInCemetery) {
+                if (!openingSeen) {
+                    openingSeen = true;
+                    if (InitOpeningCutscene(&opening)) {
+                        currentWeapon = choice;
+                        screen = OPENING_SCREEN;
+                        BeginDrawing();
+                            ClearBackground(BLACK);
+                            DrawOpeningCutscene(&opening);
+                        EndDrawing();
+                        continue;
+                    }
+                    TraceLog(LOG_WARNING, "Abertura indisponivel. Iniciando a partida.");
+                }
+                if (clearing.cemetery) {
                     Clearing next={0};
-                    if (!(startInCemetery?InitCemetery(&next):InitClearing(&next))) break;
+                    if (!InitClearing(&next)) break;
                     UnloadClearing(&clearing);
                     clearing=next;
                 }
                 currentWeapon = choice;
                 RunProgress progress=NewRunProgress(currentWeapon);
                 BeginEncounter(&encounter,&enemies,&clearing,progress,clearing.spawn);
-                encounter.practice=startInCemetery;
+                if (fromOpening) encounter.presentation.areaSubtitle = "A Terra dos que Não Descansam";
                 playerMaxHealth=progress.maxHealth;
                 playerSpeed=progress.speed;
-                if (!encounter.practice && !SaveClearingCheckpoint(&progress))
+                if (!SaveClearingCheckpoint(&progress))
                     TraceLog(LOG_WARNING, "Nao foi possivel salvar a arma escolhida");
                 player = clearing.spawn;
                 playerHealth = playerMaxHealth;
@@ -290,6 +324,7 @@ int main(void) {
                 entryFadeRemaining = entryFadeDuration;
                 screen = 2;
             }
+            if (fromOpening) continue;
             BeginDrawing();
                 ClearBackground(BLACK);
                 DrawWeaponSelect(&weaponSelect);
@@ -301,16 +336,14 @@ int main(void) {
             bool hover=CheckCollisionPointRec(GetMousePosition(),retry);
             if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_R) ||
                 (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))) {
-                bool practice=encounter.practice;
-                if (clearing.cemetery && !practice) {
+                if (clearing.cemetery) {
                     UnloadClearing(&clearing);
                     clearing=(Clearing){0};
                     if (!InitClearing(&clearing)) break;
                 }
                 RunProgress progress=NewRunProgress(currentWeapon);
                 BeginEncounter(&encounter,&enemies,&clearing,progress,clearing.spawn);
-                encounter.practice=practice;
-                if (!practice) SaveClearingCheckpoint(&progress);
+                SaveClearingCheckpoint(&progress);
                 player=clearing.spawn;
                 playerHealth=playerMaxHealth=progress.maxHealth;
                 playerSpeed=progress.speed;
@@ -373,11 +406,13 @@ int main(void) {
         if (entering) entryFadeRemaining = fmaxf(0.0f, entryFadeRemaining - fminf(GetFrameTime(),.05f));
         if (!entering && IsKeyPressed(KEY_F3)) showCollisionGuide = !showCollisionGuide;
         if (!entering && IsKeyPressed(KEY_F6)) showSpriteDebug = !showSpriteDebug;
-        bool nearExit = CheckCollisionPointRec(player, clearing.exit);
-        bool nearPedestal = !clearing.cemetery && CheckCollisionPointCircle(player, clearing.pedestal, 72.0f);
-        bool clearingComplete=encounter.phase==ENCOUNTER_CLEAR && encounter.progress.stage==CLEARING_COMPLETE_STAGE;
-        if (!entering && playerHealth > 0 && !clearing.cemetery &&
-            clearingComplete && (nearExit || (nearPedestal && IsKeyPressed(KEY_E)))) {
+        bool nearExit = clearing.cemetery && CheckCollisionPointRec(player, clearing.exit);
+        bool nearPedestal = !clearing.cemetery &&
+            CheckCollisionPointCircle(player, clearing.pedestal, CLEARING_ALTAR_RADIUS);
+        bool altarOpen = ClearingAltarOpen(&encounter, &clearing);
+        bool interactPressed = IsKeyPressed(KEY_E);
+        if (!entering && playerHealth > 0 &&
+            CanEnterCemetery(&encounter, &clearing, player, interactPressed)) {
             Clearing next = {0};
             if (InitCemetery(&next)) {
                 UnloadClearing(&clearing);
@@ -423,10 +458,17 @@ int main(void) {
         };
         bool dodgePressed = !entering && (IsKeyPressed(KEY_SPACE) ||
                             (currentWeapon != WEAPON_BIBLE && IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)));
+        Camera2D camera = FitClearing(&clearing);
         if (!entering && currentWeapon == WEAPON_KATANA &&
             IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
             katanaAttackCooldown <= 0.0f && dodgeRemaining <= 0.0f) {
-            katanaAttackFacing = facing;
+            Vector2 cursor = GetScreenToWorld2D(GetMousePosition(), camera);
+            Vector2 aim = Vector2Subtract(cursor, (Vector2){player.x, player.y - 35.0f});
+            katanaAttackDirection = Vector2LengthSqr(aim) > 0.0001f
+                ? Vector2Normalize(aim) : FacingVector(facing);
+            katanaAttackFacing = fabsf(katanaAttackDirection.x) >= fabsf(katanaAttackDirection.y)
+                ? (katanaAttackDirection.x < 0.0f ? 2 : 3)
+                : (katanaAttackDirection.y < 0.0f ? 1 : 0);
             katanaAttackId++;
             katanaAttackRemaining = katanaAttackDuration;
             katanaAttackCooldown = katanaAttackRecovery;
@@ -489,7 +531,6 @@ int main(void) {
             }
             walkTime = 0.0f;
         }
-        Camera2D camera = FitClearing(&clearing);
         if (currentWeapon == WEAPON_GUN) {
             Vector2 aimWorld = GetScreenToWorld2D(GetMousePosition(), camera);
             Vector2 aimDelta = {aimWorld.x - player.x, aimWorld.y - (player.y - 35.0f)};
@@ -524,9 +565,8 @@ int main(void) {
                            enemy->lastKatanaSwing != katanaAttackId) {
                     Vector2 delta = Vector2Subtract(center, playerCenter);
                     float distance = Vector2Length(delta);
-                    Vector2 forward = FacingVector(katanaAttackFacing);
                     if (distance < katanaAttackRange+EnemyHurtRadius(enemy) && distance > 0.0f &&
-                        Vector2DotProduct(delta, forward) >= -0.12f*distance &&
+                        Vector2DotProduct(delta, katanaAttackDirection) >= -0.12f*distance &&
                         MapHasClearPath(&clearing,player,enemy->position)) {
                         DamageEnemy(enemy, (int)ceilf(25*EncounterDamage(&encounter)));
                         enemy->lastKatanaSwing = katanaAttackId;
@@ -537,13 +577,14 @@ int main(void) {
                           &playerHealth, playerMaxHealth);
         }
         int frame = walking ? 1 + (int) (walkTime * 7.0f) % 4 : 0;
-        if (!entering && nearPedestal && IsKeyPressed(KEY_E)) pedestalMessageTime = 3.0f;
+        if (!entering && nearPedestal && interactPressed) pedestalMessageTime = 3.0f;
         if (pedestalMessageTime > 0.0f) pedestalMessageTime -= deltaTime;
 
         BeginDrawing();
             ClearBackground(BLACK);
             BeginMode2D(camera);
                 DrawClearing(&clearing);
+                if (altarOpen) DrawClearingAltarGlow(&clearing, (float)GetTime());
                 DrawEnemies(&enemies, player, false);
                 if (currentWeapon == WEAPON_BIBLE) DrawBible(&bible, player, false);
                 if (currentWeapon == WEAPON_BIBLE) DrawBibleActivation(&bible, player);
@@ -604,14 +645,13 @@ int main(void) {
                             player.y - 72.0f, width, 75.0f};
                     }
                     if (attacking && katanaAttackRemaining <= katanaAttackDuration * .5f) {
-                        Vector2 direction = FacingVector(katanaAttackFacing);
                         Vector2 center = {player.x, player.y - 35};
-                        float angle = atan2f(direction.y, direction.x) * RAD2DEG;
+                        float angle = atan2f(katanaAttackDirection.y, katanaAttackDirection.x) * RAD2DEG;
                         float halfArc = acosf(-.12f) * RAD2DEG;
                         float opacity = katanaAttackRemaining / (katanaAttackDuration * .5f);
-                        DrawRing(center, katanaAttackRange - 10, katanaAttackRange,
+                        DrawRing(center, katanaAttackRange - 7, katanaAttackRange,
                                  angle - halfArc, angle + halfArc, 32, Fade(MAROON, opacity * .55f));
-                        DrawRing(center, katanaAttackRange - 3, katanaAttackRange,
+                        DrawRing(center, katanaAttackRange - 2, katanaAttackRange,
                                  angle - halfArc, angle + halfArc, 32, Fade(RAYWHITE, opacity * .75f));
                     }
                     DrawTexturePro(bodyTexture,
@@ -643,16 +683,16 @@ int main(void) {
                      "WASD: mover  |  Espaco/botao direito: esquiva", 24, 23 + hudOffset, 17, RAYWHITE);
             DrawText("F3: colisao | ESC: pausar", 24, 76 + hudOffset, 17, RAYWHITE);
             DrawText("F4/F5: testar dano e cura", 24, 104 + hudOffset, 17, RAYWHITE);
-            if (pedestalMessageTime > 0.0f) {
-                DrawText(encounter.phase==ENCOUNTER_CLEAR ? "E: entrar no cemiterio" :
-                         "Conclua quatro ondas e sele o boss da quinta", 24, 53 + hudOffset, 18, GOLD);
+            if (altarOpen) {
+                DrawText(nearPedestal ? "E: usar o altar e entrar no cemiterio"
+                                      : "Siga o brilho dourado ate o altar",
+                         24, 53 + hudOffset, 18, GOLD);
+            } else if (pedestalMessageTime > 0.0f) {
+                DrawText("Conclua as ondas e sele o Guardiao", 24, 53 + hudOffset, 18, GOLD);
             } else if (nearPedestal) {
-                DrawText(encounter.phase==ENCOUNTER_CLEAR ? "E: entrar no cemiterio" : "O pedestal esta selado", 24, 53 + hudOffset, 18, GOLD);
+                DrawText("O altar esta selado", 24, 53 + hudOffset, 18, GOLD);
             } else {
-                DrawText(nearExit ? (clearing.cemetery
-                    ? "Vila: proxima etapa do desenvolvimento"
-                    : clearingComplete ? "Caminhe pela saida para entrar no cemiterio"
-                    : "Conclua as ondas e sele o Guardiao para avancar")
+                DrawText(nearExit ? "Vila: proxima etapa do desenvolvimento"
                     : clearing.cemetery ? "Cemiterio das Raizes" : "Explore a clareira",
                     24, 53 + hudOffset, 18, RAYWHITE);
             }
@@ -670,7 +710,6 @@ int main(void) {
             if (currentWeapon == WEAPON_GUN)
                 DrawText("Clique esquerdo: disparar (um tiro por clique)", 24, 176 + hudOffset, 18, RAYWHITE);
             DrawEncounter(&encounter,&enemies);
-            if (encounter.practice) DrawText("MODO TESTE - checkpoint preservado",24,GetScreenHeight()-26,17,GOLD);
             if (entering) {
                 float t = entryFadeRemaining / entryFadeDuration;
                 float opacity = t*t*(3.0f - 2.0f*t);
@@ -680,6 +719,7 @@ int main(void) {
         EndDrawing();
     }
 
+    UnloadOpeningCutscene(&opening);
     UnloadEnemies(&enemies);
     UnloadGun(&gun);
     UnloadBible(&bible);

@@ -45,14 +45,18 @@ void DrawStagePresentation(const StagePresentation *p,Texture2D sprite,int colum
         float half=w*.34f*reveal;
         DrawLineEx((Vector2){w/2-half,center-85},(Vector2){w/2+half,center-85},2,Fade(GOLD,alpha));
         DrawLineEx((Vector2){w/2-half,center+89},(Vector2){w/2+half,center+89},2,Fade(GOLD,alpha));
-        const char *label=p->areaEntry?"ENTRANDO EM":"NOVA AREA DESBLOQUEADA";
+        const char *label=p->areaEntry?(p->areaSubtitle?"":"ENTRANDO EM"):"NOVA AREA DESBLOQUEADA";
         DrawText(label,(int)((w-MeasureText(label,19))/2),(int)center-61,19,Fade(GOLD,alpha));
+        const char *title=p->areaSubtitle?TextToUpper(p->mapName):p->mapName;
         int size=44;
-        while(size>18 && MeasureText(p->mapName,size)>w*.86f) size--;
-        DrawText(p->mapName,(int)((w-MeasureText(p->mapName,size))/2+(1-reveal)*65),
-            (int)center-15,size,Fade(RAYWHITE,alpha));
-        const char *hint=p->areaEntry?"":"O caminho adiante foi revelado";
-        DrawText(hint,(int)((w-MeasureText(hint,18))/2),(int)center+48,18,Fade(LIGHTGRAY,alpha));
+        while(size>18 && MeasureText(title,size)>w*.86f) size--;
+        DrawText(title,(int)((w-MeasureText(title,size))/2+(1-reveal)*65),
+            (int)center-(p->areaSubtitle?33:15),size,Fade(RAYWHITE,alpha));
+        const char *hint=p->areaEntry?(p->areaSubtitle?p->areaSubtitle:""):"O caminho adiante foi revelado";
+        int hintSize=p->areaSubtitle?24:18;
+        while(hintSize>12 && MeasureText(hint,hintSize)>w*.86f) hintSize--;
+        DrawText(hint,(int)((w-MeasureText(hint,hintSize))/2),(int)center+(p->areaSubtitle?26:48),
+            hintSize,Fade(p->areaSubtitle?GOLD:LIGHTGRAY,alpha));
         return;
     }
     DrawRectangle(0,0,(int)w,(int)h,Fade(BLACK,alpha*(p->boss?.88f:.22f)));

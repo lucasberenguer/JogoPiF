@@ -45,6 +45,17 @@ bool EncounterPaused(const Encounter *e) {
     return e->presentation.remaining>0 || e->phase == ENCOUNTER_REWARD || e->phase == ENCOUNTER_SEAL || e->phase == ENCOUNTER_DEFEAT;
 }
 
+bool ClearingAltarOpen(const Encounter *e, const Clearing *clearing) {
+    return !clearing->cemetery && e->phase == ENCOUNTER_CLEAR &&
+           e->progress.stage == CLEARING_COMPLETE_STAGE;
+}
+
+bool CanEnterCemetery(const Encounter *e, const Clearing *clearing,
+                      Vector2 player, bool interactPressed) {
+    return interactPressed && ClearingAltarOpen(e, clearing) && !EncounterPaused(e) &&
+           CheckCollisionPointCircle(player, clearing->pedestal, CLEARING_ALTAR_RADIUS);
+}
+
 float EncounterDamage(const Encounter *e) {
     int weapon = e->progress.weapon;
     return e->progress.damage * (1 + .2f*e->progress.weaponLevel[weapon]) *
@@ -182,7 +193,8 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
                 e->progress.stage=CLEARING_COMPLETE_STAGE;
                 e->progress.health=*health;
                 e->phase=ENCOUNTER_CLEAR;
-                BeginStagePresentation(&e->presentation,0,e->progress.map?"A vila sera a proxima etapa":"Passagem para o cemiterio liberada",NULL);
+                e->notice[0]=0;
+                BeginStagePresentation(&e->presentation,0,e->progress.map?"A vila sera a proxima etapa":"O altar agora leva ao cemiterio",NULL);
                 e->presentation.announcement=e->progress.map?"CEMITERIO LIMPO":"CLAREIRA LIMPA";
                 e->presentation.duration=e->presentation.remaining=2.5f;
                 QueueAreaUnlock(&e->presentation,e->progress.map?"Vila Abandonada":"Cemiterio das Raizes");
@@ -228,7 +240,7 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
     int statusY = 205 + (bossVisible ? ENCOUNTER_BOSS_HUD_HEIGHT : 0);
     if (e->progress.stage<=CLEARING_WAVES) DrawText(TextFormat("%s - onda %d/5 | Restantes: %d",
         e->progress.map?"Cemiterio":"Clareira",e->progress.stage,EnemiesRemaining(enemies)),24,statusY,20,GOLD);
-    else DrawText(e->phase==ENCOUNTER_CLEAR ? (e->progress.map?"Cemiterio limpo":"Clareira limpa - siga pela saida inferior") : (e->progress.map?"Onda 5/5 - Coveiro das Raizes":"Onda 5/5 - Guardiao da Clareira"),24,statusY,20,GOLD);
+    else DrawText(e->phase==ENCOUNTER_CLEAR ? (e->progress.map?"Cemiterio limpo":"Clareira limpa - altar liberado") : (e->progress.map?"Onda 5/5 - Coveiro das Raizes":"Onda 5/5 - Guardiao da Clareira"),24,statusY,20,GOLD);
     if (e->notice[0]) DrawText(e->notice,24,statusY+27,18,RAYWHITE);
     if (bossVisible) {
         const Enemy *boss=&enemies->list[0];

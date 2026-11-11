@@ -25,6 +25,9 @@ void BeginEncounter(Encounter *encounter, EnemyGroup *enemies, const Clearing *c
 bool UpdateEncounter(Encounter *encounter, EnemyGroup *enemies, const Clearing *clearing,
                      Vector2 player, int *health);
 bool EncounterPaused(const Encounter *encounter);
+bool ClearingAltarOpen(const Encounter *encounter, const Clearing *clearing);
+bool CanEnterCemetery(const Encounter *encounter, const Clearing *clearing,
+                      Vector2 player, bool interactPressed);
 bool EncounterBossVisible(const Encounter *encounter, const EnemyGroup *enemies);
 float EncounterDamage(const Encounter *encounter);
 bool ChooseEncounterReward(Encounter *encounter, EnemyGroup *enemies, const Clearing *clearing,

@@ -9,6 +9,7 @@ typedef struct StagePresentation {
     bool boss;
     const char *mapName, *bossName;
     const char *announcement;
+    const char *areaSubtitle;
     const char *nextAreaName;
     bool areaUnlock;
     bool areaEntry;
