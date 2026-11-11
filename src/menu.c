@@ -1,11 +1,21 @@
 #include "menu.h"
 #include <stdio.h>
 #include <math.h>
+#include "rlgl.h"
+
+enum { PAUSE_SCENE, PAUSE_FRAME, PAUSE_PLATE, PAUSE_LABEL };
 
 static const char *SavePath(void) {
     static char path[1024];
     snprintf(path, sizeof(path), "%s/partida_pif.sav", GetApplicationDirectory());
     return path;
+}
+
+static Rectangle MenuButtonBounds(int i, float centerX, float centerY, float w) {
+    float h = w * 0.30f;
+    float gap = fmaxf(8.0f, h * 0.04f);
+    float top = centerY - (4*h + 3*gap)/2;
+    return (Rectangle){centerX - w/2, top + i*(h+gap), w, h};
 }
 
 static Rectangle ButtonBounds(int i) {
@@ -14,10 +24,29 @@ static Rectangle ButtonBounds(int i) {
         return (Rectangle){GetScreenWidth()-width-20,GetScreenHeight()-72.0f,width,48};
     }
     float w = fminf(GetScreenWidth() * 0.32f, 530.0f);
-    float h = w * 0.30f;
-    float gap = fmaxf(8.0f, h * 0.04f);
-    float top = (GetScreenHeight() - (4*h + 3*gap)) * 0.54f;
-    return (Rectangle){(GetScreenWidth() - w)/2.0f, top + i*(h+gap), w, h};
+    float groupHeight = 4*w*.30f + 3*fmaxf(8.0f, w*.30f*.04f);
+    float centerY = GetScreenHeight()*.54f - groupHeight*.04f;
+    return MenuButtonBounds(i, GetScreenWidth()/2.0f, centerY, w);
+}
+
+static void UpdateButtonFocus(float focus[4], int selected, float dt) {
+    float blend = 1.0f - expf(-18.0f*dt);
+    for (int i = 0; i < 4; i++) focus[i] += ((i == selected ? 1.0f : 0.0f) - focus[i])*blend;
+}
+
+static void DrawMenuButtonGlow(Rectangle bounds, float focus) {
+    if (focus <= .005f) return;
+    Rectangle edge = {bounds.x, bounds.y + bounds.height*.20f,
+                      bounds.width, bounds.height*.60f};
+    DrawRectangleRounded(edge, .80f, 12, Fade((Color){245, 134, 42, 255}, .18f*focus));
+}
+
+static Color MenuButtonTint(Rectangle bounds, float focus, bool disabled) {
+    if (disabled) return Fade(WHITE, .48f);
+    float idleTint = 239.0f + 16.0f*focus;
+    if (focus > .5f && IsMouseButtonDown(MOUSE_BUTTON_LEFT) &&
+        CheckCollisionPointRec(GetMousePosition(), bounds)) idleTint *= .89f;
+    return (Color){(unsigned char)idleTint, (unsigned char)idleTint, (unsigned char)idleTint, 255};
 }
 
 bool SaveMenuCheckpoint(int weapon) {
@@ -114,6 +143,16 @@ bool InitMenu(Menu *m) {
         SetTextureFilter(m->buttons[i], TEXTURE_FILTER_POINT);
     }
     m->hasSave = LoadMenuCheckpointWeapon() >= 0;
+    m->pause.background = LoadTexture("assets/pausa_fundo.png");
+    m->pause.frame = LoadTexture("assets/pausa_moldura.png");
+    m->pause.labels = LoadTexture("assets/pausa_rotulos.png");
+    m->pause.shader = LoadShader(NULL, "assets/shaders/pausa.fs");
+    if (m->pause.shader.id && m->pause.shader.id != rlGetShaderIdDefault()) {
+        m->pause.timeLocation = GetShaderLocation(m->pause.shader, "time");
+        m->pause.layerLocation = GetShaderLocation(m->pause.shader, "layer");
+    } else m->pause.shader = (Shader){0};
+    if (m->pause.background.id) SetTextureFilter(m->pause.background, TEXTURE_FILTER_BILINEAR);
+    if (m->pause.frame.id) SetTextureFilter(m->pause.frame, TEXTURE_FILTER_BILINEAR);
     int width, height;
     m->video = OpenMenuVideo("assets/videos/Menu_Principal.mp4", &width, &height, &m->videoInterval);
     if (m->video) {
@@ -133,6 +172,10 @@ bool InitMenu(Menu *m) {
 }
 
 void UnloadMenu(Menu *m) {
+    if (m->pause.shader.id) UnloadShader(m->pause.shader);
+    if (m->pause.labels.id) UnloadTexture(m->pause.labels);
+    if (m->pause.frame.id) UnloadTexture(m->pause.frame);
+    if (m->pause.background.id) UnloadTexture(m->pause.background);
     if (m->videoFrame.id) UnloadTexture(m->videoFrame);
     CloseMenuVideo(m->video);
     for (int i=0; i<4; i++) if (m->buttons[i].id) UnloadTexture(m->buttons[i]);
@@ -144,6 +187,179 @@ void UnloadMenu(Menu *m) {
     if (m->moon.id) UnloadTexture(m->moon);
     if (m->background.id) UnloadTexture(m->background);
     *m = (Menu){0};
+}
+
+static Rectangle PauseButtonBounds(int index) {
+    return MenuButtonBounds(index, 836.0f, 543.0f, 370.0f);
+}
+static const Rectangle pauseFullscreen = {626, 403, 420, 126};
+static const Rectangle pauseBack = {696, 710, 280, 84};
+
+static Rectangle PauseCanvas(void) {
+    float scale = fminf(GetScreenWidth()/1672.0f, GetScreenHeight()/941.0f);
+    float width = 1672 * scale, height = 941 * scale;
+    return (Rectangle){(GetScreenWidth()-width)/2, (GetScreenHeight()-height)/2, width, height};
+}
+
+PauseAction UpdatePauseMenu(PauseMenu *pause) {
+    float dt = GetFrameTime();
+    pause->time += dt;
+    Rectangle canvas = PauseCanvas();
+    float scale = canvas.width / 1672.0f;
+    Vector2 mouse = GetMousePosition();
+    mouse = (Vector2){(mouse.x-canvas.x)/scale, (mouse.y-canvas.y)/scale};
+    bool click = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+    bool escape = IsKeyPressed(KEY_ESCAPE);
+    if (pause->page != PAUSE_OPTIONS) {
+        if (escape || IsKeyPressed(KEY_BACKSPACE) || (click && CheckCollisionPointRec(mouse, pauseBack))) {
+            pause->page = PAUSE_OPTIONS;
+        } else if (pause->page == PAUSE_SETTINGS &&
+                   (IsKeyPressed(KEY_F) || IsKeyPressed(KEY_ENTER) ||
+                    (click && CheckCollisionPointRec(mouse, pauseFullscreen)))) {
+            ToggleFullscreen();
+        }
+        return PAUSE_NONE;
+    }
+    if (escape) return PAUSE_RESUME;
+    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) pause->selected = (pause->selected + 3) % 4;
+    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) pause->selected = (pause->selected + 1) % 4;
+    Vector2 movement = GetMouseDelta();
+    if (click || movement.x != 0 || movement.y != 0) {
+        for (int i = 0; i < 4; i++)
+            if (CheckCollisionPointRec(mouse, PauseButtonBounds(i))) pause->selected = i;
+    }
+    UpdateButtonFocus(pause->buttonFocus, pause->selected, dt);
+    if (click ? !CheckCollisionPointRec(mouse, PauseButtonBounds(pause->selected)) :
+                !IsKeyPressed(KEY_ENTER) && !IsKeyPressed(KEY_SPACE)) return PAUSE_NONE;
+    if (pause->selected == 0) return PAUSE_RESUME;
+    if (pause->selected == 3) return PAUSE_MAIN_MENU;
+    pause->page = pause->selected == 1 ? PAUSE_SETTINGS : PAUSE_CONTROLS;
+    return PAUSE_NONE;
+}
+
+static Rectangle PauseRect(Rectangle canvas, Rectangle logical) {
+    float scale = canvas.width / 1672.0f;
+    return (Rectangle){canvas.x + logical.x*scale, canvas.y + logical.y*scale,
+                       logical.width*scale, logical.height*scale};
+}
+
+static void DrawPauseText(Rectangle canvas, const char *label, float y, int size, Color color) {
+    float scale = canvas.width / 1672.0f;
+    int fontSize = (int)fmaxf(1, size * scale);
+    DrawText(label, (int)(canvas.x + (canvas.width - MeasureText(label, fontSize))/2),
+             (int)(canvas.y + y*scale), fontSize, color);
+}
+
+static void DrawPauseLayer(const PauseMenu *pause, int layer, Texture2D texture,
+                           Rectangle source, Rectangle destination, Color tint) {
+    BeginShaderMode(pause->shader);
+    SetShaderValue(pause->shader, pause->layerLocation, &layer, SHADER_UNIFORM_INT);
+    DrawTexturePro(texture, source, destination, (Vector2){0}, 0, tint);
+    EndShaderMode();
+}
+
+static void DrawPausePlate(const Menu *menu, Rectangle bounds, Color tint) {
+    Texture2D plate = menu->buttons[2];
+    if (menu->pause.shader.id)
+        DrawPauseLayer(&menu->pause, PAUSE_PLATE, plate,
+                       (Rectangle){0, 0, plate.width, plate.height}, bounds, tint);
+    else
+        DrawRectangleRounded(bounds, .18f, 8, MAROON);
+}
+
+static void DrawPauseButton(const Menu *menu, Rectangle canvas, int index) {
+    const PauseMenu *pause = &menu->pause;
+    Rectangle logical = PauseButtonBounds(index);
+    Rectangle bounds = PauseRect(canvas, logical);
+    float focus = pause->buttonFocus[index];
+    Color tint = MenuButtonTint(bounds, focus, false);
+    DrawMenuButtonGlow(bounds, focus);
+
+    if (index < 2) {
+        Texture2D button = menu->buttons[index+1];
+        DrawTexturePro(button, (Rectangle){0, 0, button.width, button.height},
+                       bounds, (Vector2){0}, 0, tint);
+        return;
+    }
+
+    DrawPausePlate(menu, bounds, tint);
+    if (!pause->shader.id || !pause->labels.id) {
+        DrawPauseText(canvas, index == 2 ? "Controles" : "Voltar ao Menu", logical.y + 39, 34, GOLD);
+        return;
+    }
+
+    static const Rectangle icons[] = {{651, 402, 128, 82}, {662, 560, 112, 92}};
+    static const Rectangle labels[] = {{880, 404, 319, 78}, {838, 558, 481, 84}};
+    Rectangle icon = icons[index-2], label = labels[index-2];
+    float labelHeight = fminf(bounds.height*.35f, bounds.width*.50f*label.height/label.width);
+    float iconHeight = fminf(bounds.height*.37f, bounds.width*.11f*icon.height/icon.width);
+    DrawPauseLayer(pause, PAUSE_LABEL, pause->labels, icon,
+                   (Rectangle){bounds.x + bounds.width*.21f - icon.width*iconHeight/icon.height/2,
+                               bounds.y + (bounds.height-iconHeight)/2,
+                               icon.width*iconHeight/icon.height, iconHeight}, tint);
+    DrawRectangleRec((Rectangle){bounds.x + bounds.width*.304f, bounds.y + bounds.height*.34f,
+                                 bounds.width*.005f, bounds.height*.30f}, Fade(GOLD, .62f));
+    float labelWidth = label.width*labelHeight/label.height;
+    DrawPauseLayer(pause, PAUSE_LABEL, pause->labels, label,
+                   (Rectangle){bounds.x + bounds.width*.618f - labelWidth/2,
+                               bounds.y + (bounds.height-labelHeight)/2, labelWidth, labelHeight}, tint);
+}
+
+static void DrawPauseTextButton(const Menu *menu, Rectangle canvas, Rectangle logical,
+                                const char *label, int fontSize) {
+    Rectangle bounds = PauseRect(canvas, logical);
+    float focus = CheckCollisionPointRec(GetMousePosition(), bounds) ? 1.0f : 0.0f;
+    DrawMenuButtonGlow(bounds, focus);
+    DrawPausePlate(menu, bounds, MenuButtonTint(bounds, focus, false));
+    DrawPauseText(canvas, label, logical.y + (logical.height-fontSize)/2, fontSize, RAYWHITE);
+}
+
+void DrawPauseMenu(const Menu *menu) {
+    const PauseMenu *pause = &menu->pause;
+    Rectangle canvas = PauseCanvas();
+    if (pause->shader.id)
+        SetShaderValue(pause->shader, pause->timeLocation, &pause->time, SHADER_UNIFORM_FLOAT);
+    if (pause->background.id) {
+        Texture2D background = pause->background;
+        float scale = fmaxf((float)GetScreenWidth()/background.width, (float)GetScreenHeight()/background.height);
+        float width = background.width*scale, height = background.height*scale;
+        Rectangle source = {0, 0, background.width, background.height};
+        float x = (GetScreenWidth()-width)/2;
+        // Na janela estreita, deixe a lua dentro do enquadramento.
+        x = fmaxf(GetScreenWidth()-width, fminf(x, GetScreenWidth()*.84f - width*.812f));
+        Rectangle destination = {x, (GetScreenHeight()-height)/2, width, height};
+        if (pause->shader.id) DrawPauseLayer(pause, PAUSE_SCENE, background, source, destination, WHITE);
+        else DrawTexturePro(background, source, destination, (Vector2){0}, 0, WHITE);
+    }
+    DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
+                  Fade(BLACK, pause->page == PAUSE_OPTIONS ? .12f : .35f));
+    if (pause->page == PAUSE_OPTIONS) {
+        if (pause->shader.id && pause->frame.id) {
+            Rectangle source = {0, 0, pause->frame.width, pause->frame.height*.67f};
+            Rectangle destination = PauseRect(canvas, (Rectangle){300, 23, 1072, 1072*source.height/source.width});
+            DrawPauseLayer(pause, PAUSE_FRAME, pause->frame, source, destination, WHITE);
+        } else DrawPauseText(canvas, "Pausa", 170, 82, GOLD);
+        for (int i = 0; i < 4; i++) DrawPauseButton(menu, canvas, i);
+        return;
+    }
+
+    Rectangle panel = PauseRect(canvas, (Rectangle){395, 148, 882, 668});
+    DrawRectangleRounded(panel, .09f, 12, (Color){34, 13, 18, 248});
+    DrawRectangleRoundedLinesEx(panel, .09f, 12, 2, GOLD);
+    DrawPauseTextButton(menu, canvas, pauseBack, "Voltar  ·  Esc", 28);
+    if (pause->page == PAUSE_SETTINGS) {
+        DrawPauseText(canvas, "Configurações", 211, 60, GOLD);
+        DrawPauseTextButton(menu, canvas, pauseFullscreen,
+                            IsWindowFullscreen() ? "Tela cheia ligada" : "Tela cheia desligada", 34);
+        DrawPauseText(canvas, "F ou Enter alterna o modo de tela", 542, 30, RAYWHITE);
+    } else {
+        DrawPauseText(canvas, "Controles", 211, 60, GOLD);
+        DrawPauseText(canvas, "WASD  ·  Mover", 331, 37, RAYWHITE);
+        DrawPauseText(canvas, "Espaço  ·  Esquivar com qualquer arma", 400, 37, RAYWHITE);
+        DrawPauseText(canvas, "Clique esquerdo  ·  Atacar com katana ou arma de fogo", 469, 30, RAYWHITE);
+        DrawPauseText(canvas, "Clique direito  ·  Acelerar a Bíblia ou esquivar", 531, 34, RAYWHITE);
+        DrawPauseText(canvas, "E  ·  Interagir e selar", 600, 37, RAYWHITE);
+    }
 }
 
 MenuAction UpdateMenu(Menu *m) {
@@ -187,6 +403,7 @@ MenuAction UpdateMenu(Menu *m) {
     if (mouseDelta.x != 0.0f || mouseDelta.y != 0.0f)
         for (int i=0; i<5; i++) if (CheckCollisionPointRec(mouse, ButtonBounds(i))) m->selected = i;
     bool click = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+    UpdateButtonFocus(m->buttonFocus, m->selected == 1 && !m->hasSave ? -1 : m->selected, dt);
     if (!click && !IsKeyPressed(KEY_ENTER) && !IsKeyPressed(KEY_SPACE)) return MENU_NONE;
     if (click && !CheckCollisionPointRec(mouse, ButtonBounds(m->selected))) return MENU_NONE;
     switch (m->selected) {
@@ -253,12 +470,10 @@ void DrawMenu(const Menu *m) {
         for (int i=0; i<4; i++) {
             Rectangle b = ButtonBounds(i);
             bool disabled = i==1 && !m->hasSave;
-            if (i==m->selected && !disabled)
-                DrawRectangleRounded((Rectangle){b.x+16,b.y+10,b.width-32,b.height-20},
-                                     0.3f,8,Fade(GOLD,0.35f));
+            if (!disabled) DrawMenuButtonGlow(b, m->buttonFocus[i]);
             DrawTexturePro(m->buttons[i], (Rectangle){0,0,(float)m->buttons[i].width,
                            (float)m->buttons[i].height}, b, (Vector2){0}, 0,
-                           disabled ? Fade(WHITE,0.48f) : WHITE);
+                           MenuButtonTint(b, m->buttonFocus[i], disabled));
         }
         Rectangle test=ButtonBounds(4);
         DrawRectangleRounded(test,.15f,6,m->selected==4?(Color){96,52,112,255}:(Color){35,22,45,240});

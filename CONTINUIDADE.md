@@ -1,6 +1,6 @@
 # Jogo PIF — continuidade entre computadores e chats
 
-Atualizado em 10/11/2026. Leia junto do código e de `git status` antes de retomar.
+Atualizado em 11/11/2026. Leia junto do código e de `git status` antes de retomar.
 
 ## Retomada rápida
 
@@ -42,6 +42,7 @@ O Pátio dos Guardiões foi retirado da sequência. Cutscene de descoberta do pa
 - Clareira e cemitério: ondas de 7, 11, 15 e 19 inimigos; quinta onda com miniboss. Spawns compartilham a estrutura; saída da clareira fica embaixo e conduz à entrada superior do cemitério. Saída do cemitério fica à direita.
 - Transição da clareira só após concluir o encontro. Colisões dos dois mapas seguem revisões desenhadas pelo usuário, com tratamento de deslizamento para reduzir agarramento nas bordas. Protagonista inicia no centro da clareira.
 - Game Over e repetição; teste direto no menu por **TESTAR CEMITERIO**, com escolha de arma. Prática não sobrescreve checkpoint normal e repetição permanece no cemitério.
+- Menu de pausa integrado localmente sobre o pull `d2e5e39`. Durante a partida, **Esc** pausa e retoma. A tela oferece Continuar Jogo, Configurações, Controles e Voltar ao Menu. Os botões seguem o estilo do menu inicial e o cenário anima a lua, as bandeiras e o rio. A integração preserva a entrada **TESTAR CEMITERIO** no menu inicial.
 - Vida de inimigos do cemitério: +10% em relação à base da clareira, arredondada para cima. Guardião 2.200 HP; Coveiro 2.420 HP.
 - Direções de esqueletos corrigidas com frente/costas e espelhamento lateral. Magos usam linhas direcionais corretas; fogo verde tem animação de voo/impacto e colisão ajustada. Esquiva e invulnerabilidade ainda impedem dano intencionalmente.
 - Coveiro possui raízes, arremesso da pá e investida; segunda fase acrescenta raízes laterais, três pás e segunda investida com novo aviso. Novos atlas evitam recortes de pés/cabeça.
@@ -85,7 +86,7 @@ Pop-Location
 
 Ajustar caminhos se a instalação diferir. Primeira configuração precisa de internet para baixar raylib. Diretório `out/review` é a versão local de testes; `build/JogoPiF.exe` pode ser antigo. Os assets são copiados pelo build.
 
-Última validação de gameplay antes desta documentação: compilação e quatro testes passaram (`enemy_audit`, `map_connectivity`, `player_collision`, `clearing_encounter`). Isso não garante ausência de bugs nem substitui teste manual de fluidez/dificuldade.
+Validação da integração em `out/review`: build concluído e quatro testes aprovados (`enemy_audit`, `map_connectivity`, `player_collision`, `clearing_encounter`). Uma verificação adicional em janela raylib carregou as artes e o shader da pausa e confirmou por teclado a seleção de **TESTAR CEMITERIO**, a navegação da pausa e as ações de retomar e voltar ao menu. A verificação adicional exercitou o módulo do menu diretamente.
 
 ## O que é salvo e o que precisa de backup
 

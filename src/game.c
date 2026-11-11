@@ -206,7 +206,7 @@ int main(void) {
     int gunAttackFacing = 0;
     int bibleAttackFacing = 0;
     int katanaAttackId = 0;
-    int screen = 0; /* 0: menu, 1: escolha da arma, 2: clareira */
+    int screen = 0; /* 0: menu, 1: escolha da arma, 2: partida, 3: pausa */
     int currentWeapon = -1;
     bool startInCemetery=false;
     Encounter encounter = {.progress = {.weapon=0}};
@@ -336,7 +336,23 @@ int main(void) {
             EndDrawing();
             continue;
         }
-        if (IsKeyPressed(KEY_ESCAPE)) { screen = 0; continue; }
+        if (screen == 3 || IsKeyPressed(KEY_ESCAPE)) {
+            if (screen == 3) {
+                PauseAction action = UpdatePauseMenu(&menu.pause);
+                if (action == PAUSE_RESUME) screen = 2;
+                else if (action == PAUSE_MAIN_MENU) screen = 0;
+            } else {
+                screen = 3;
+                menu.pause.page = PAUSE_OPTIONS;
+                menu.pause.selected = 0;
+                for (int i = 0; i < 4; i++) menu.pause.buttonFocus[i] = i == 0 ? 1.0f : 0.0f;
+            }
+            BeginDrawing();
+                ClearBackground(BLACK);
+                DrawPauseMenu(&menu);
+            EndDrawing();
+            continue;
+        }
         if (entryFadeRemaining<=0)
             UpdateStagePresentation(&encounter.presentation,fminf(GetFrameTime(),.05f));
         bool encounterChanged=entryFadeRemaining<=0 &&
@@ -625,7 +641,7 @@ int main(void) {
             DrawRectangle(12, 12 + hudOffset, 490, 130, Fade(BLACK, 0.72f));
             DrawText(currentWeapon == WEAPON_BIBLE ? "WASD: mover  |  Espaco: esquiva" :
                      "WASD: mover  |  Espaco/botao direito: esquiva", 24, 23 + hudOffset, 17, RAYWHITE);
-            DrawText("F3: colisao | ESC: menu", 24, 76 + hudOffset, 17, RAYWHITE);
+            DrawText("F3: colisao | ESC: pausar", 24, 76 + hudOffset, 17, RAYWHITE);
             DrawText("F4/F5: testar dano e cura", 24, 104 + hudOffset, 17, RAYWHITE);
             if (pedestalMessageTime > 0.0f) {
                 DrawText(encounter.phase==ENCOUNTER_CLEAR ? "E: entrar no cemiterio" :
