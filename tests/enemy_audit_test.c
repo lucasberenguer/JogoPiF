@@ -143,6 +143,25 @@ int main(void) {
     group.playerHitCooldown=0;
     UpdateEnemies(&group,&map,meleeTarget,.30f,false,&meleeTargetHealth,100);
     assert(meleeTargetHealth==88 && melee->state==ENEMY_IDLE);
+    const Vector2 archerTargets[] = {{400,600},{400,200},{200,400},{600,400}};
+    for (int direction=0;direction<4;direction++) {
+        ClearEnemyAttacks(&group);
+        Enemy *archer = &group.list[0];
+        *archer = (Enemy){.type=ENEMY_COMMON_RANGED,.state=ENEMY_IDLE,
+            .position={400,400},.health=45,.maxHealth=45,.power=1};
+        int archerTargetHealth = 100;
+        Vector2 archerTarget = archerTargets[direction];
+        UpdateEnemies(&group,&map,archerTarget,.01f,false,&archerTargetHealth,100);
+        assert(archer->state==ENEMY_ATTACK && archer->facing==direction);
+        UpdateEnemies(&group,&map,archerTarget,.31f,false,&archerTargetHealth,100);
+        assert(!archer->attackConnected && group.projectiles[0].remaining==0);
+        UpdateEnemies(&group,&map,archerTarget,.02f,false,&archerTargetHealth,100);
+        assert(archer->attackConnected && group.projectiles[0].remaining>0);
+        Vector2 shot = group.projectiles[0].direction;
+        assert((direction==0 ? shot.y : direction==1 ? -shot.y : direction==2 ? -shot.x : shot.x)>.99f);
+        UpdateEnemies(&group,&map,archerTarget,.05f,false,&archerTargetHealth,100);
+        assert(group.projectiles[1].remaining==0);
+    }
     map.cemetery=true;
     ResetEnemies(&group,&map);
     assert(EnemiesRemaining(&group)==7);

@@ -85,6 +85,15 @@ int main(void) {
         }
     }
     Capture("audit/clearing_melee_directions.png",&encounter,&meleePreview,&clearing,player);
+    for (int i=0;i<12;i++) meleePreview.list[i].type=ENEMY_COMMON_RANGED;
+    Capture("audit/clearing_archer_directions.png",&encounter,&meleePreview,&clearing,player);
+    for (int i=0;i<12;i++) {
+        meleePreview.list[i].type=ENEMY_SPECIAL;
+        meleePreview.list[i].stateTime=.52f;
+    }
+    meleePreview.list[12]=(Enemy){.type=ENEMY_SPECIAL,.state=ENEMY_FALLEN,
+        .facing=3,.position={800,870},.maxHealth=100};
+    Capture("audit/clearing_special_directions.png",&encounter,&meleePreview,&clearing,player);
     for (int wave=1;wave<=CLEARING_WAVES;wave++) {
         assert(encounter.progress.stage==wave);
         assert(EnemiesRemaining(&enemies)==7+(wave-1)*4);

@@ -4,12 +4,14 @@ in vec2 fragTexCoord;
 in vec4 fragColor;
 uniform sampler2D texture0;
 uniform vec4 colDiffuse;
+uniform int darkRedMatte;
 out vec4 finalColor;
 
 // The attack sheet carries a dark wine backdrop behind the ink and slash.
 float foreground(vec3 rgb)
 {
-    vec3 levels = (rgb * 255.0 - vec3(56, 20, 24)) / vec3(13, 8, 9);
+    vec3 key = darkRedMatte != 0 ? vec3(66, 10, 14) : vec3(56, 20, 24);
+    vec3 levels = (rgb * 255.0 - key) / vec3(13, 8, 9);
     return smoothstep(0.0, 1.0, max(levels.r, max(levels.g, levels.b)));
 }
 
@@ -26,7 +28,8 @@ void main()
     if (mask < 1.0 && ink.a > 0.94) {
         vec2 stepUV = 2.0 / vec2(textureSize(texture0, 0));
         vec4 sides = vec4(0.0);
-        for (int step = 1; step <= 7; ++step) {
+        int steps = darkRedMatte != 0 ? 11 : 7;
+        for (int step = 1; step <= steps; ++step) {
             vec2 offset = float(step) * stepUV;
             sides = max(sides, vec4(nearbyInk(vec2(offset.x, 0)),
                                    nearbyInk(vec2(-offset.x, 0)),

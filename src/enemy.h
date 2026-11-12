@@ -73,8 +73,8 @@ typedef struct EnemyGroup {
     Texture2D sprites;
     Texture2D backSprites;
     Texture2D frontSprites;
-    Texture2D rangedSprites;
-    Texture2D clearingMelee[3];
+    Texture2D clearingMelee[3], clearingArcher[3], clearingSpecial[3];
+    Texture2D sealMarker;
     Texture2D bossSprites, bossWalk, bossAttack, roots, rootWave, curse, guardianMelee;
     Texture2D guardianSpawn, guardianDefeat;
     Texture2D bossPortrait, cemeteryPortrait;

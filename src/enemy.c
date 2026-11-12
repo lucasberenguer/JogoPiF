@@ -10,6 +10,10 @@
 #define CLEARING_MELEE_ATTACK_DURATION .62f
 #define CLEARING_MELEE_ATTACK_FRAMES 8
 #define CLEARING_MELEE_IMPACT_FRAME 4
+#define CLEARING_ARCHER_RELEASE_TIME .32f
+#define SPECIAL_CHARGE_START .5f
+#define SPECIAL_CHARGE_END 1.0f
+#define SPECIAL_ATTACK_END 1.1f
 #define RANGED_MIN_DISTANCE 170.0f
 #define RANGED_MAX_DISTANCE 300.0f
 #define RANGED_SHOT_SPEED 365.0f
@@ -132,13 +136,41 @@ bool EnemyShouldDrop(EnemyType type, int roll) {
 
 static bool GuardianEnraged(const Enemy *enemy);
 
-static int ClearingMeleeFrame(const Enemy *enemy) {
+static int FacingToward(Vector2 direction) {
+    return fabsf(direction.x) > fabsf(direction.y)*0.65f
+        ? (direction.x < 0 ? 2 : 3) : (direction.y < 0 ? 1 : 0);
+}
+
+static int ClearingEnemyFrame(const Enemy *enemy) {
+    bool archer = enemy->type == ENEMY_COMMON_RANGED;
+    if (enemy->type == ENEMY_SPECIAL) {
+        if (enemy->state == ENEMY_WALK) return (int)(enemy->walkTime * 8.0f) % 4;
+        if (enemy->state != ENEMY_ATTACK) return 0;
+        int impact = enemy->facing == 2 ? 2 : 3;
+        int count = enemy->facing == 1 ? 7 : 6;
+        if (enemy->stateTime < SPECIAL_CHARGE_START)
+            return (int)(enemy->stateTime / SPECIAL_CHARGE_START * impact);
+        float recovery = (enemy->stateTime - SPECIAL_CHARGE_START) / (SPECIAL_ATTACK_END - SPECIAL_CHARGE_START);
+        int frame = (int)fminf(impact + recovery * (count - impact), count - 1);
+        // Pula o quadro em que o perfil esquerdo vira para o outro lado.
+        return enemy->facing == 2 && frame == 5 ? 6 : frame;
+    }
     switch (enemy->state) {
-        case ENEMY_IDLE: return (int)(enemy->stateTime * 7.5f) % 5;
+        case ENEMY_IDLE: return (int)(enemy->stateTime * 7.5f) % (archer ? 4 : 5);
         case ENEMY_WALK: return (int)(enemy->walkTime * 11.0f) % 8;
-        case ENEMY_ATTACK:
+        case ENEMY_ATTACK: {
+            if (archer) {
+                // A flecha para a esquerda já aparece no quarto quadro da folha.
+                int releaseFrame = enemy->facing == 2 ? 3 : 4;
+                if (enemy->stateTime < CLEARING_ARCHER_RELEASE_TIME)
+                    return (int)(enemy->stateTime / CLEARING_ARCHER_RELEASE_TIME * releaseFrame);
+                float recovery = (enemy->stateTime - CLEARING_ARCHER_RELEASE_TIME) /
+                                 (CLEARING_MELEE_ATTACK_DURATION - CLEARING_ARCHER_RELEASE_TIME);
+                return (int)fminf(releaseFrame + recovery * (8 - releaseFrame), 7);
+            }
             return (int)fminf(enemy->stateTime / CLEARING_MELEE_ATTACK_DURATION *
                              CLEARING_MELEE_ATTACK_FRAMES, CLEARING_MELEE_ATTACK_FRAMES - 1);
+        }
         default: return 0;
     }
 }
@@ -169,10 +201,9 @@ int EnemyAnimationFrame(const Enemy *enemy) {
         ? frame % count : (frame < count ? frame : count-1);
 }
 
-static Texture2D LoadClearingMeleeAttack(void) {
-    Texture2D source = LoadTexture("assets/clareira_melee_ataque.png");
+static Texture2D LoadClearingSpriteWithMatte(const char *path, Shader shader) {
+    Texture2D source = LoadTexture(path);
     if (!source.id) return source;
-    Shader shader = LoadShader(NULL, "assets/shaders/clareira_melee.fs");
     RenderTexture2D target = LoadRenderTexture(source.width, source.height);
     Texture2D result = {0};
     if (shader.id && target.id) {
@@ -194,7 +225,6 @@ static Texture2D LoadClearingMeleeAttack(void) {
         }
     }
     if (target.id) UnloadRenderTexture(target);
-    if (shader.id) UnloadShader(shader);
     UnloadTexture(source);
     return result;
 }
@@ -231,10 +261,21 @@ bool InitEnemies(EnemyGroup *group) {
     SetTextureFilter(group->greenFire,TEXTURE_FILTER_POINT);
     for (int i=0;i<3;i++) SetTextureFilter(group->boss[i], TEXTURE_FILTER_POINT);
     for (int i=0;i<3;i++) SetTextureFilter(group->effects[i], TEXTURE_FILTER_POINT);
-    group->rangedSprites = LoadTexture("assets/inimigo_ranged.png");
     group->clearingMelee[0] = LoadTexture("assets/clareira_melee_idle.png");
     group->clearingMelee[1] = LoadTexture("assets/clareira_melee_andar.png");
-    group->clearingMelee[2] = LoadClearingMeleeAttack();
+    Shader matte = LoadShader(NULL, "assets/shaders/clareira_melee.fs");
+    group->clearingMelee[2] = LoadClearingSpriteWithMatte("assets/clareira_melee_ataque.png", matte);
+    group->clearingArcher[0] = LoadClearingSpriteWithMatte("assets/clareira_arqueiro_idle.png", matte);
+    group->clearingArcher[1] = LoadClearingSpriteWithMatte("assets/clareira_arqueiro_andar.png", matte);
+    group->clearingArcher[2] = LoadClearingSpriteWithMatte("assets/clareira_arqueiro_ataque.png", matte);
+    int darkRedMatte = 1;
+    if (matte.id) SetShaderValue(matte, GetShaderLocation(matte, "darkRedMatte"),
+                                &darkRedMatte, SHADER_UNIFORM_INT);
+    group->clearingSpecial[0] = LoadClearingSpriteWithMatte("assets/clareira_especial_idle.png", matte);
+    group->clearingSpecial[1] = LoadClearingSpriteWithMatte("assets/clareira_especial_andar.png", matte);
+    group->clearingSpecial[2] = LoadTexture("assets/clareira_especial_ataque.png");
+    if (matte.id) UnloadShader(matte);
+    group->sealMarker = LoadTexture("assets/inimigo_selo.png");
     group->bossSprites = LoadTexture("assets/boss_clareira.png");
     group->guardianSpawn = LoadTexture("assets/boss_clareira_spawn.png");
     group->guardianDefeat = LoadTexture("assets/boss_clareira_derrota.png");
@@ -247,9 +288,12 @@ bool InitEnemies(EnemyGroup *group) {
     group->curse = LoadTexture("assets/boss_clareira_maldicao.png");
     group->guardianMelee = LoadTexture("assets/boss_clareira_corpo_a_corpo.png");
     if (!group->sprites.id || !group->backSprites.id || !group->frontSprites.id ||
-        !group->rangedSprites.id || !group->bossSprites.id || !group->bossWalk.id || !group->bossAttack.id ||
+        !group->bossSprites.id || !group->bossWalk.id || !group->bossAttack.id ||
         !group->guardianSpawn.id || !group->guardianDefeat.id ||
         !group->clearingMelee[0].id || !group->clearingMelee[1].id || !group->clearingMelee[2].id ||
+        !group->clearingArcher[0].id || !group->clearingArcher[1].id || !group->clearingArcher[2].id ||
+        !group->clearingSpecial[0].id || !group->clearingSpecial[1].id || !group->clearingSpecial[2].id ||
+        !group->sealMarker.id ||
         !group->roots.id || !group->rootWave.id || !group->curse.id || !group->guardianMelee.id ||
         !group->bossPortrait.id || !group->cemeteryPortrait.id) {
         UnloadEnemies(group);
@@ -258,8 +302,12 @@ bool InitEnemies(EnemyGroup *group) {
     SetTextureFilter(group->sprites, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->backSprites, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->frontSprites, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->rangedSprites, TEXTURE_FILTER_POINT);
-    for (int i=0; i<3; i++) SetTextureFilter(group->clearingMelee[i], TEXTURE_FILTER_POINT);
+    for (int i=0; i<3; i++) {
+        SetTextureFilter(group->clearingMelee[i], TEXTURE_FILTER_POINT);
+        SetTextureFilter(group->clearingArcher[i], TEXTURE_FILTER_POINT);
+        SetTextureFilter(group->clearingSpecial[i], TEXTURE_FILTER_POINT);
+    }
+    SetTextureFilter(group->sealMarker, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->bossSprites, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->guardianSpawn, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->guardianDefeat, TEXTURE_FILTER_POINT);
@@ -287,8 +335,12 @@ void UnloadEnemies(EnemyGroup *group) {
     if (group->sprites.id) UnloadTexture(group->sprites);
     if (group->backSprites.id) UnloadTexture(group->backSprites);
     if (group->frontSprites.id) UnloadTexture(group->frontSprites);
-    if (group->rangedSprites.id) UnloadTexture(group->rangedSprites);
-    for (int i=0; i<3; i++) if (group->clearingMelee[i].id) UnloadTexture(group->clearingMelee[i]);
+    for (int i=0; i<3; i++) {
+        if (group->clearingMelee[i].id) UnloadTexture(group->clearingMelee[i]);
+        if (group->clearingArcher[i].id) UnloadTexture(group->clearingArcher[i]);
+        if (group->clearingSpecial[i].id) UnloadTexture(group->clearingSpecial[i]);
+    }
+    if (group->sealMarker.id) UnloadTexture(group->sealMarker);
     if (group->bossSprites.id) UnloadTexture(group->bossSprites);
     if (group->guardianSpawn.id) UnloadTexture(group->guardianSpawn);
     if (group->guardianDefeat.id) UnloadTexture(group->guardianDefeat);
@@ -606,7 +658,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 continue;
             }
             if (enemy->type == ENEMY_SPECIAL) {
-                if (enemy->stateTime >= .5f && enemy->stateTime < 1.0f) {
+                if (enemy->stateTime >= SPECIAL_CHARGE_START && enemy->stateTime < SPECIAL_CHARGE_END) {
                     MoveEnemy(clearing, enemy, Vector2Scale(enemy->attackDirection, 360 * dt));
                     if (!enemy->attackConnected && !playerDodging && group->playerHitCooldown <= 0 &&
                         Vector2Distance(player, enemy->position) < 65 && *playerHealth > 0 &&
@@ -616,16 +668,20 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                         enemy->attackConnected = true;
                     }
                 }
-                if (enemy->stateTime >= 1.1f) { enemy->state = ENEMY_IDLE; enemy->stateTime = 0; }
+                if (enemy->stateTime >= SPECIAL_ATTACK_END) { enemy->state = ENEMY_IDLE; enemy->stateTime = 0; }
                 continue;
             }
             bool mage = group->cemetery && enemy->type == ENEMY_COMMON_RANGED;
             bool clearingMelee = !group->cemetery && enemy->type == ENEMY_COMMON_MELEE;
-            bool impact = clearingMelee ? ClearingMeleeFrame(enemy) >= CLEARING_MELEE_IMPACT_FRAME :
-                          enemy->stateTime >= (mage ? .55f : .32f);
+            bool impact = clearingMelee ? ClearingEnemyFrame(enemy) >= CLEARING_MELEE_IMPACT_FRAME :
+                          enemy->stateTime >= (mage ? .55f : CLEARING_ARCHER_RELEASE_TIME);
             if (!enemy->attackConnected && impact) {
                 enemy->attackConnected = true;
                 if (enemy->type == ENEMY_COMMON_RANGED) {
+                    if (!group->cemetery) {
+                        Vector2 aim = Vector2Subtract((Vector2){player.x, player.y-35}, EnemyCenter(enemy));
+                        if (Vector2LengthSqr(aim) > .001f) enemy->facing = FacingToward(aim);
+                    }
                     FireRangedProjectile(group, enemy, player);
                 } else if (!playerDodging && group->playerHitCooldown <= 0.0f && *playerHealth > 0 &&
                     Vector2Distance(enemy->position, player) <= ENEMY_ATTACK_RANGE+8.0f &&
@@ -644,10 +700,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         if (*playerHealth <= 0) { enemy->state = ENEMY_IDLE; continue; }
         Vector2 toPlayer = Vector2Subtract(player, enemy->position);
         float distance = Vector2Length(toPlayer);
-        if (distance > 0.001f) {
-            enemy->facing = fabsf(toPlayer.x) > fabsf(toPlayer.y)*0.65f
-                ? (toPlayer.x < 0 ? 2 : 3) : (toPlayer.y < 0 ? 1 : 0);
-        }
+        if (distance > 0.001f) enemy->facing = FacingToward(toPlayer);
         if (enemy->type == ENEMY_BOSS || enemy->type == ENEMY_SPECIAL) {
             float range = enemy->type == ENEMY_BOSS ? 560 : 280;
             bool melee = enemy->type == ENEMY_BOSS && distance <= GUARDIAN_MELEE_RANGE &&
@@ -851,42 +904,91 @@ static void DrawGuardianDefeat(Texture2D texture, const Enemy *enemy) {
         DrawText("E: selar", (int)enemy->position.x - 30, (int)enemy->position.y + 10, 18, GOLD);
 }
 
-typedef struct ClearingMeleeRow {
+typedef struct ClearingEnemyRow {
     int top, bottom, ground;
     float scale;
     int edges[9];
     int pivots[8];
-} ClearingMeleeRow;
+} ClearingEnemyRow;
 
 // Os pivôs acompanham o corpo e a linha do chão, mesmo quando o arco se estende para o lado.
-static const ClearingMeleeRow clearingMeleeIdleRows[] = {
+static const ClearingEnemyRow clearingMeleeIdleRows[] = {
     {747, 995, 961, .36f, {160,406,657,906,1155,1430}, {278,529,781,1034,1285}},
     {0,   254, 238, .35f, {160,406,657,906,1155,1430}, {279,530,785,1036,1289}},
     {254, 502, 471, .39f, {160,406,657,906,1155,1430}, {277,532,785,1037,1289}},
     {502, 747, 710, .39f, {160,406,657,906,1155,1430}, {280,531,780,1034,1286}},
 };
 
-static const ClearingMeleeRow clearingMeleeWalkRows[] = {
+static const ClearingEnemyRow clearingMeleeWalkRows[] = {
     {270, 480, 449, .46f, {157,340,500,660,820,980,1140,1300,1480}, {257,419,579,741,899,1058,1219,1378}},
     {0,   245, 212, .43f, {157,340,500,660,820,980,1140,1300,1480}, {256,417,577,736,895,1056,1215,1376}},
     {515, 730, 698, .44f, {157,340,500,660,820,980,1140,1300,1480}, {265,429,592,750,909,1068,1230,1388}},
     {770, 985, 951, .46f, {157,340,500,660,820,980,1140,1300,1480}, {258,414,575,732,893,1050,1216,1376}},
 };
 
-static const ClearingMeleeRow clearingMeleeAttackRows[] = {
+static const ClearingEnemyRow clearingMeleeAttackRows[] = {
     {18,  257, 240, .53f, {150,317,480,629,796,981,1152,1329,1490}, {235,395,550,713,877,1049,1212,1415}},
     {272, 510, 483, .49f, {151,319,485,644,790,990,1144,1327,1490}, {236,397,557,715,881,1056,1224,1415}},
     {751, 960, 936, .49f, {149,319,484,642,799,997,1151,1327,1490}, {237,402,560,718,880,1053,1223,1414}},
 };
 
-static void DrawClearingMelee(const EnemyGroup *group, const Enemy *enemy) {
+static const ClearingEnemyRow clearingArcherIdleRows[] = {
+    {52,  252, 231, .45f, {416,595,773,950,1123}, {511,688,863,1038}},
+    {514, 727, 705, .44f, {416,595,773,950,1123}, {507,686,860,1039}},
+    {769, 966, 943, .46f, {416,595,773,950,1123}, {514,692,868,1044}},
+    {285, 487, 465, .46f, {416,595,773,950,1123}, {502,684,859,1035}},
+};
+
+static const ClearingEnemyRow clearingArcherWalkRows[] = {
+    {71,  252, 238, .48f, {98,282,462,645,805,974,1132,1290,1454}, {178,382,558,728,898,1061,1219,1374}},
+    {517, 705, 690, .46f, {98,282,462,645,805,974,1132,1290,1454}, {182,379,565,732,899,1068,1221,1380}},
+    {765, 940, 921, .50f, {98,282,462,645,805,974,1132,1290,1454}, {176,378,562,730,888,1051,1214,1374}},
+    {302, 483, 462, .50f, {98,282,462,645,805,974,1132,1290,1454}, {177,381,562,734,899,1065,1220,1373}},
+};
+
+static const ClearingEnemyRow clearingArcherAttackRows[] = {
+    {305, 516, 461, .54f, {171,324,486,647,813,1030,1190,1360,1514}, {249,410,571,734,923,1099,1285,1447}},
+    {29,  277, 254, .57f, {174,324,486,647,823,1007,1190,1360,1514}, {250,411,571,732,921,1095,1284,1450}},
+    {529, 716, 689, .53f, {171,325,486,633,822,1003,1190,1365,1514}, {248,407,570,750,925,1103,1288,1453}},
+    {751, 944, 917, .54f, {171,324,488,649,818,1034,1190,1362,1514}, {249,409,573,741,926,1098,1283,1449}},
+};
+
+static const ClearingEnemyRow clearingSpecialIdleRows[] = {
+    {0,   482, 449, .22f, {150,762},  {472}},
+    {490, 974, 936, .22f, {128,759},  {472}},
+    {490, 974, 936, .22f, {840,1400}, {1108}},
+    {0,   482, 449, .22f, {870,1405}, {1113}},
+};
+
+static const ClearingEnemyRow clearingSpecialWalkRows[] = {
+    {8,   273, 260, .39f, {162,488,796,1122,1451}, {313,638,966,1275}},
+    {280, 514, 502, .44f, {162,481,796,1119,1451}, {314,642,964,1280}},
+    {514, 745, 729, .45f, {161,479,791,1118,1451}, {296,617,929,1271}},
+    {749, 993, 972, .44f, {152,469,790,1111,1451}, {299,624,945,1270}},
+};
+
+static const ClearingEnemyRow clearingSpecialAttackRows[] = {
+    {0,   258, 253,  .51f, {0,260,458,673,949,1290,1536},         {139,338,563,801,1086,1415}},
+    {258, 520, 506,  .49f, {0,261,459,655,928,1151,1326,1536},    {139,346,561,774,1054,1242,1425}},
+    {520, 765, 745,  .49f, {0,258,434,694,939,1138,1330,1536},    {127,329,587,784,1034,1237,1425}},
+    {775, 1024, 995, .48f, {0,250,462,691,947,1137,1334},         {123,363,574,818,1039,1251}},
+};
+
+static void DrawClearingEnemy(const EnemyGroup *group, const Enemy *enemy) {
+    bool archer = enemy->type == ENEMY_COMMON_RANGED;
+    bool special = enemy->type == ENEMY_SPECIAL;
+    bool melee = enemy->type == ENEMY_COMMON_MELEE;
     bool attack = enemy->state == ENEMY_ATTACK;
     bool walk = enemy->state == ENEMY_WALK;
     // A fileira esquerda do ataque muda de lado no meio do golpe.
-    bool flip = attack && enemy->facing == 2;
-    const ClearingMeleeRow *row = attack ? &clearingMeleeAttackRows[enemy->facing < 2 ? enemy->facing : 2] :
-        walk ? &clearingMeleeWalkRows[enemy->facing] : &clearingMeleeIdleRows[enemy->facing];
-    int frame = ClearingMeleeFrame(enemy);
+    bool flip = melee && attack && enemy->facing == 2;
+    const ClearingEnemyRow *rows;
+    if (special) rows = attack ? clearingSpecialAttackRows : walk ? clearingSpecialWalkRows : clearingSpecialIdleRows;
+    else if (archer) rows = attack ? clearingArcherAttackRows : walk ? clearingArcherWalkRows : clearingArcherIdleRows;
+    else rows = attack ? clearingMeleeAttackRows : walk ? clearingMeleeWalkRows : clearingMeleeIdleRows;
+    int facing = melee && attack && enemy->facing == 3 ? 2 : enemy->facing;
+    const ClearingEnemyRow *row = &rows[facing];
+    int frame = ClearingEnemyFrame(enemy);
     int left = row->edges[frame];
     int right = row->edges[frame + 1];
     float width = right - left;
@@ -895,16 +997,36 @@ static void DrawClearingMelee(const EnemyGroup *group, const Enemy *enemy) {
                      (row->ground - row->top) * row->scale};
     Rectangle source = {left, row->top, flip ? -width : width, height};
     Rectangle destination = {enemy->position.x, enemy->position.y, width * row->scale, height * row->scale};
-    float fall = enemy->state == ENEMY_DIE ? Clamp(enemy->stateTime / ENEMY_DEFEAT_DURATION, 0, 1) : 0;
-    Color tint = enemy->state == ENEMY_HURT ? (Color){255,160,160,255} : Fade(WHITE, 1 - fall);
-    DrawTexturePro(group->clearingMelee[attack ? 2 : walk ? 1 : 0], source, destination, pivot,
+    float fall = enemy->state == ENEMY_FALLEN ? 1 :
+                 enemy->state == ENEMY_DIE ? Clamp(enemy->stateTime / ENEMY_DEFEAT_DURATION, 0, 1) : 0;
+    Color tint = enemy->state == ENEMY_HURT ? (Color){255,160,160,255} :
+                 Fade(WHITE, 1 - fall * (special ? .25f : 1.0f));
+    const Texture2D *textures = special ? group->clearingSpecial :
+                                archer ? group->clearingArcher : group->clearingMelee;
+    DrawTexturePro(textures[attack ? 2 : walk ? 1 : 0], source, destination, pivot,
                    (enemy->facing == 2 ? -1 : 1) * 75.0f * fall, tint);
+}
+
+static void DrawSealMarkers(const EnemyGroup *group) {
+    for (int i=0; i<ENEMY_COUNT; i++) {
+        const Enemy *enemy = &group->list[i];
+        if (enemy->state != ENEMY_FALLEN) continue;
+        bool boss = enemy->type == ENEMY_BOSS;
+        float size = boss ? 50.0f : 42.0f;
+        float height = group->cemetery && boss ? 195.0f : 55.0f;
+        DrawTexturePro(group->sealMarker, (Rectangle){128,36,1056,1064},
+            (Rectangle){enemy->position.x-size*.5f, enemy->position.y-height-size*.5f, size, size},
+            (Vector2){0},0,WHITE);
+    }
 }
 
 void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
     if (group->cemetery) {
         CemeteryDrawEnemies(group,player,foreground);
-        if (foreground) DrawRangedProjectiles(group);
+        if (foreground) {
+            DrawRangedProjectiles(group);
+            DrawSealMarkers(group);
+        }
         return;
     }
     if (!foreground) for (int i=0; i<ENEMY_ROOT_COUNT; i++) {
@@ -976,14 +1098,9 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
         int frame = EnemyAnimationFrame(enemy);
         if (enemy->state == ENEMY_FALLEN) { row=0; frame=0; }
         Texture2D tex = group->sprites;
-        if (enemy->type == ENEMY_COMMON_MELEE) {
-            DrawClearingMelee(group, enemy);
-        } else if (enemy->type == ENEMY_COMMON_RANGED) {
-            Rectangle src = {(enemy->facing * 4 + frame) * 80.0f, row * 80.0f,
-                             80.0f, 80.0f};
-            DrawTexturePro(group->rangedSprites, src,
-                (Rectangle){enemy->position.x - 38, enemy->position.y - 75, 76, 76},
-                (Vector2){0}, 0, WHITE);
+        if (enemy->type == ENEMY_COMMON_MELEE || enemy->type == ENEMY_COMMON_RANGED ||
+            enemy->type == ENEMY_SPECIAL) {
+            DrawClearingEnemy(group, enemy);
         } else {
         if (enemy->facing < 2 && enemy->state != ENEMY_DIE) {
             tex = enemy->facing == 1 ? group->backSprites : group->frontSprites;
@@ -1005,15 +1122,19 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
             (Vector2){0},0,tint);
         }
         if (enemy->state == ENEMY_FALLEN) DrawText("E: selar",(int)enemy->position.x-30,(int)enemy->position.y+10,16,GOLD);
-        if (enemy->type == ENEMY_SPECIAL && enemy->state == ENEMY_ATTACK && enemy->stateTime < .5f)
+        if (enemy->type == ENEMY_SPECIAL && enemy->state == ENEMY_ATTACK && enemy->stateTime < SPECIAL_CHARGE_START)
             DrawCircleLines((int)enemy->position.x,(int)enemy->position.y,55,ORANGE);
         if (EnemyCanBeHit(enemy) && enemy->health < enemy->maxHealth) {
-            DrawRectangle((int)enemy->position.x-24,(int)enemy->position.y-85,48,5,DARKGRAY);
-            DrawRectangle((int)enemy->position.x-24,(int)enemy->position.y-85,
+            int healthY = (int)enemy->position.y - (enemy->type == ENEMY_SPECIAL ? 106 : 85);
+            DrawRectangle((int)enemy->position.x-24,healthY,48,5,DARKGRAY);
+            DrawRectangle((int)enemy->position.x-24,healthY,
                           48*enemy->health/enemy->maxHealth,5,RED);
         }
     }
-    if (foreground) DrawRangedProjectiles(group);
+    if (foreground) {
+        DrawRangedProjectiles(group);
+        DrawSealMarkers(group);
+    }
 }
 
 void DrawEnemyDebug(const EnemyGroup *group) {
@@ -1024,7 +1145,9 @@ void DrawEnemyDebug(const EnemyGroup *group) {
         DrawCircleLines((int)center.x,(int)center.y,EnemyHurtRadius(enemy),GREEN);
         DrawCircleV(enemy->position,3.0f,YELLOW);
         int frame = IsGuardianSpawn(group, enemy) ? GuardianSpawnFrame(enemy) : EnemyAnimationFrame(enemy);
-        if (!group->cemetery && enemy->type == ENEMY_COMMON_MELEE) frame = ClearingMeleeFrame(enemy);
+        if (!group->cemetery && (enemy->type == ENEMY_COMMON_MELEE || enemy->type == ENEMY_COMMON_RANGED ||
+                                enemy->type == ENEMY_SPECIAL))
+            frame = ClearingEnemyFrame(enemy);
         if (!group->cemetery && enemy->type == ENEMY_BOSS &&
             (enemy->state == ENEMY_DIE || enemy->state == ENEMY_FALLEN))
             frame = GuardianDefeatFrame(enemy);
