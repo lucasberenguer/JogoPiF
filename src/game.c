@@ -648,6 +648,9 @@ int main(void) {
                         bodySource = (Rectangle){poseFrame * 128.0f, bodyFacing * 112.0f, 128, 112};
                         bodyDestination = (Rectangle){player.x - 64, player.y - 108, 128, 112};
                     } else if (currentWeapon == WEAPON_GUN) {
+                        // Só a folha da pose parada ordena os perfis como direita, esquerda.
+                        if (!firing && !walking && bodyFacing >= 2)
+                            bodySource.y = (5 - bodyFacing) * bodySource.height;
                         // A arte da arma tem o corpo mais estreito que o sprite normal.
                         // Usa a mesma escala para espera, caminhada e disparo.
                         float width = bodyFacing < 2 ? 68.0f : 76.0f;
