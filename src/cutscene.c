@@ -33,7 +33,7 @@ static float Ease(float value) {
 
 static void PlayCue(const OpeningCutscene *scene) {
     if (scene->beat < INTRO_BEAT_COUNT && scene->cues[scene->beat].stream.buffer) {
-        SetSoundVolume(scene->cues[scene->beat], 0.45f);
+        SetSoundVolume(scene->cues[scene->beat], 0.45f*scene->effectsVolume);
         PlaySound(scene->cues[scene->beat]);
     }
 }
@@ -42,16 +42,6 @@ static void LoadOpeningAudio(OpeningCutscene *scene) {
     // Each optional WAV is a mix of the effects for that beat; the score spans the whole scene.
     const char *musicPath = INTRO_DIR "trilha.ogg";
     char path[96];
-    bool available = FileExists(musicPath);
-    for (int i = 0; !available && i < INTRO_BEAT_COUNT; i++) {
-        snprintf(path, sizeof(path), "%s%s", INTRO_DIR, beats[i].cue);
-        available = FileExists(path);
-    }
-    if (!available) return;
-    if (!IsAudioDeviceReady()) {
-        InitAudioDevice();
-        scene->ownsAudio = IsAudioDeviceReady();
-    }
     if (!IsAudioDeviceReady()) return;
 
     for (int i = 0; i < INTRO_BEAT_COUNT; i++) {
@@ -61,6 +51,7 @@ static void LoadOpeningAudio(OpeningCutscene *scene) {
     if (FileExists(musicPath)) {
         scene->music = LoadMusicStream(musicPath);
         if (scene->music.stream.buffer) {
+            scene->music.looping = false;
             SetMusicVolume(scene->music, 0.0f);
             PlayMusicStream(scene->music);
         }
@@ -68,8 +59,8 @@ static void LoadOpeningAudio(OpeningCutscene *scene) {
     PlayCue(scene);
 }
 
-bool InitOpeningCutscene(OpeningCutscene *scene) {
-    *scene = (OpeningCutscene){0};
+bool InitOpeningCutscene(OpeningCutscene *scene, float musicVolume, float effectsVolume) {
+    *scene = (OpeningCutscene){.musicVolume=musicVolume, .effectsVolume=effectsVolume};
     for (int i = 0; i < OATH_INSERT; i++) {
         char path[96];
         snprintf(path, sizeof(path), INTRO_DIR "quadro_%02d.png", i+1);
@@ -94,7 +85,6 @@ void UnloadOpeningCutscene(OpeningCutscene *scene) {
     for (int i = 0; i < INTRO_BEAT_COUNT; i++)
         if (scene->cues[i].stream.buffer) UnloadSound(scene->cues[i]);
     if (scene->music.stream.buffer) UnloadMusicStream(scene->music);
-    if (scene->ownsAudio) CloseAudioDevice();
     *scene = (OpeningCutscene){0};
 }
 
@@ -105,7 +95,6 @@ void UpdateOpeningCutscene(OpeningCutscene *scene, float dt) {
         return;
     }
     dt = fmaxf(0.0f, dt);
-    scene->age += dt;
     bool advance = scene->beat < INTRO_BEAT_COUNT &&
         (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER));
     if (advance) {
@@ -113,6 +102,15 @@ void UpdateOpeningCutscene(OpeningCutscene *scene, float dt) {
         if (scene->beat == INTRO_BEAT_COUNT-1) scene->finalBeatAtAdvance = scene->elapsed;
         scene->beat++;
         scene->elapsed = 0.0f;
+        if (scene->music.stream.buffer && scene->beat < INTRO_BEAT_COUNT) {
+            float position = 0.0f;
+            for (int i = 0; i < scene->beat; i++) position += beats[i].duration;
+            StopMusicStream(scene->music);
+            SeekMusicStream(scene->music, position);
+            SetMusicVolume(scene->music, 0.0f);
+            PlayMusicStream(scene->music);
+            scene->musicFade = 0.0f;
+        }
         PlayCue(scene);
     } else {
         int previous = scene->beat;
@@ -129,12 +127,11 @@ void UpdateOpeningCutscene(OpeningCutscene *scene, float dt) {
     float fade = scene->beat == INTRO_BEAT_COUNT ? 1.0f-Ease(scene->elapsed/outroDuration) : 1.0f;
     if (scene->beat == INTRO_BEAT_COUNT) {
         for (int i = 0; i < INTRO_BEAT_COUNT; i++)
-            if (scene->cues[i].stream.buffer) SetSoundVolume(scene->cues[i], 0.45f*fade);
+            if (scene->cues[i].stream.buffer) SetSoundVolume(scene->cues[i], 0.45f*fade*scene->effectsVolume);
     }
     if (scene->music.stream.buffer) {
-        float swell = scene->beat == INTRO_BEAT_COUNT ? 1.0f :
-            scene->beat == INTRO_BEAT_COUNT-1 ? Ease(scene->elapsed / beats[scene->beat].duration) : 0.0f;
-        SetMusicVolume(scene->music, (0.28f + 0.16f*swell)*Ease(scene->age)*fade);
+        scene->musicFade = Clamp01(scene->musicFade + dt*5.0f);
+        SetMusicVolume(scene->music, 0.70f*scene->musicVolume*Ease(scene->musicFade)*fade);
         UpdateMusicStream(scene->music);
     }
 }

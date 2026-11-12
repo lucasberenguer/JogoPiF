@@ -84,7 +84,19 @@ Em `assets/cutscenes/intro/`, os sete PNGs mostram o campo, o sobrevivente,
 a descida do anjo, o despertar, o juramento, a mão e o confronto. A descida e
 o despertar ocupam o mesmo momento narrativo. O painel lateral do juramento
 usa a ilustração vertical `quadro_04_complemento.png`. Para adicionar áudio, coloque
-`trilha.ogg` e os WAVs nomeados em `beats` nessa pasta. Todos são opcionais.
+os WAVs nomeados em `beats` nessa pasta. A faixa `trilha.ogg` acompanha
+os 40,75 s da cena. Avançar um quadro reposiciona a música.
+
+## Áudio
+
+Menu, combate normal e minibosses usam as faixas em `assets/audio/`.
+Os OGGs incluem a sobreposição entre fim e começo. O raylib repete a
+faixa e o jogo suaviza as trocas entre elas.
+
+Em **Configurações**, arraste as barras ou use cima/baixo para escolher
+**Música** ou **Efeitos sonoros** e esquerda/direita para ajustar.
+As preferências são compartilhadas entre o menu inicial e a pausa e salvas
+em `audio_pif.cfg`, ao lado do executável.
 
 ## Testar a clareira
 

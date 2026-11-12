@@ -198,10 +198,13 @@ bool InitMenu(Menu *m) {
         }
     }
     if (!m->video) TraceLog(LOG_WARNING, "Video do menu indisponivel; usando o fundo animado");
+    InitGameAudio(&m->audio);
     return true;
 }
 
 void UnloadMenu(Menu *m) {
+    if (m->volumeChanged) SaveAudioSettings(&m->audio);
+    UnloadGameAudio(&m->audio);
     if (m->pause.shader.id) UnloadShader(m->pause.shader);
     if (m->pause.labels.id) UnloadTexture(m->pause.labels);
     if (m->pause.frame.id) UnloadTexture(m->pause.frame);
@@ -222,8 +225,11 @@ void UnloadMenu(Menu *m) {
 static Rectangle PauseButtonBounds(int index) {
     return MenuButtonBounds(index, 836.0f, 543.0f, 370.0f);
 }
-static const Rectangle pauseFullscreen = {626, 403, 420, 126};
+static const Rectangle pauseFullscreen = {626, 268, 420, 126};
 static const Rectangle pauseBack = {696, 710, 280, 84};
+static const Rectangle volumeBars[AUDIO_CHANNELS] = {
+    {566, 456, 540, 16}, {566, 575, 540, 16}
+};
 
 static Rectangle PauseCanvas(void) {
     float scale = fminf(GetScreenWidth()/1672.0f, GetScreenHeight()/941.0f);
@@ -231,22 +237,74 @@ static Rectangle PauseCanvas(void) {
     return (Rectangle){(GetScreenWidth()-width)/2, (GetScreenHeight()-height)/2, width, height};
 }
 
-PauseAction UpdatePauseMenu(PauseMenu *pause) {
+static Vector2 SettingsMouse(Rectangle canvas) {
+    Vector2 mouse = GetMousePosition();
+    float scale = canvas.width / 1672.0f;
+    return (Vector2){(mouse.x-canvas.x)/scale, (mouse.y-canvas.y)/scale};
+}
+
+static bool UpdateSettings(Menu *menu) {
+    Vector2 mouse = SettingsMouse(PauseCanvas());
+    bool click = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+    bool back = IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_BACKSPACE) ||
+                (click && CheckCollisionPointRec(mouse, pauseBack));
+    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_DOWN) ||
+        IsKeyPressed(KEY_W) || IsKeyPressed(KEY_S))
+        menu->volumeFocus = 1-menu->volumeFocus;
+    if (click) {
+        for (int i = 0; i < AUDIO_CHANNELS; i++) {
+            Rectangle bar = volumeBars[i];
+            bar.y -= 19;
+            bar.height += 38;
+            if (CheckCollisionPointRec(mouse, bar)) {
+                menu->volumeFocus = i;
+                menu->volumeDrag = i+1;
+            }
+        }
+    }
+
+    int channel = menu->volumeDrag ? menu->volumeDrag-1 : menu->volumeFocus;
+    int value = menu->audio.volume[channel];
+    if (menu->volumeDrag && (click || IsMouseButtonDown(MOUSE_BUTTON_LEFT))) {
+        Rectangle bar = volumeBars[channel];
+        value = (int)roundf(100.0f*(mouse.x-bar.x)/bar.width);
+    } else {
+        if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) value -= 5;
+        if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) value += 5;
+    }
+    value = (int)fmaxf(0, fminf(100, value));
+    if (value != menu->audio.volume[channel]) {
+        menu->audio.volume[channel] = value;
+        menu->volumeChanged = true;
+    }
+    if (back || !IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+        if (menu->volumeChanged) {
+            SaveAudioSettings(&menu->audio);
+            if (channel == AUDIO_EFFECTS) PlayAudioFeedback(&menu->audio);
+            menu->volumeChanged = false;
+        }
+        menu->volumeDrag = 0;
+    }
+    if (!back && (IsKeyPressed(KEY_F) || IsKeyPressed(KEY_ENTER) ||
+                  (click && CheckCollisionPointRec(mouse, pauseFullscreen))))
+        ToggleFullscreen();
+    return back;
+}
+
+PauseAction UpdatePauseMenu(Menu *menu) {
+    PauseMenu *pause = &menu->pause;
     float dt = GetFrameTime();
     pause->time += dt;
-    Rectangle canvas = PauseCanvas();
-    float scale = canvas.width / 1672.0f;
-    Vector2 mouse = GetMousePosition();
-    mouse = (Vector2){(mouse.x-canvas.x)/scale, (mouse.y-canvas.y)/scale};
+    Vector2 mouse = SettingsMouse(PauseCanvas());
     bool click = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     bool escape = IsKeyPressed(KEY_ESCAPE);
+    if (pause->page == PAUSE_SETTINGS) {
+        if (UpdateSettings(menu)) pause->page = PAUSE_OPTIONS;
+        return PAUSE_NONE;
+    }
     if (pause->page != PAUSE_OPTIONS) {
         if (escape || IsKeyPressed(KEY_BACKSPACE) || (click && CheckCollisionPointRec(mouse, pauseBack))) {
             pause->page = PAUSE_OPTIONS;
-        } else if (pause->page == PAUSE_SETTINGS &&
-                   (IsKeyPressed(KEY_F) || IsKeyPressed(KEY_ENTER) ||
-                    (click && CheckCollisionPointRec(mouse, pauseFullscreen)))) {
-            ToggleFullscreen();
         }
         return PAUSE_NONE;
     }
@@ -261,6 +319,7 @@ PauseAction UpdatePauseMenu(PauseMenu *pause) {
     UpdateButtonFocus(pause->buttonFocus, pause->selected, dt);
     if (click ? !CheckCollisionPointRec(mouse, PauseButtonBounds(pause->selected)) :
                 !IsKeyPressed(KEY_ENTER) && !IsKeyPressed(KEY_SPACE)) return PAUSE_NONE;
+    PlayAudioFeedback(&menu->audio);
     if (pause->selected == 0) return PAUSE_RESUME;
     if (pause->selected == 3) return PAUSE_MAIN_MENU;
     pause->page = pause->selected == 1 ? PAUSE_SETTINGS : PAUSE_CONTROLS;
@@ -342,6 +401,31 @@ static void DrawPauseTextButton(const Menu *menu, Rectangle canvas, Rectangle lo
     DrawPauseText(canvas, label, logical.y + (logical.height-fontSize)/2, fontSize, RAYWHITE);
 }
 
+static void DrawSettings(const Menu *menu, Rectangle canvas) {
+    DrawMenuPanel(PauseRect(canvas, (Rectangle){395, 148, 882, 668}));
+    DrawPauseText(canvas, "Configurações", 205, 55, GOLD);
+    DrawPauseTextButton(menu, canvas, pauseFullscreen,
+                        IsWindowFullscreen() ? "Tela cheia ligada" : "Tela cheia desligada", 34);
+    static const char *names[AUDIO_CHANNELS] = {"Música", "Efeitos sonoros"};
+    float scale = canvas.width/1672.0f;
+    for (int i = 0; i < AUDIO_CHANNELS; i++) {
+        Rectangle bar = PauseRect(canvas, volumeBars[i]);
+        int size = (int)fmaxf(12, 33*scale);
+        bool focused = menu->volumeFocus == i;
+        DrawText(names[i], (int)bar.x, (int)(bar.y-48*scale), size, focused ? GOLD : RAYWHITE);
+        const char *percent = TextFormat("%d%%", menu->audio.volume[i]);
+        DrawText(percent, (int)(bar.x+bar.width-MeasureText(percent,size)),
+                 (int)(bar.y-48*scale), size, RAYWHITE);
+        DrawRectangleRounded(bar, .6f, 8, (Color){87, 47, 53, 255});
+        float filled = bar.width*menu->audio.volume[i]/100.0f;
+        if (filled > 0.0f)
+            DrawRectangleRec((Rectangle){bar.x,bar.y,filled,bar.height}, focused ? GOLD : ORANGE);
+        DrawCircleV((Vector2){bar.x+filled,bar.y+bar.height/2}, 11*scale, focused ? GOLD : RAYWHITE);
+    }
+    DrawPauseText(canvas, "Setas ajustam o volume  ·  F ou Enter alterna tela cheia", 641, 25, LIGHTGRAY);
+    DrawPauseTextButton(menu, canvas, pauseBack, "Voltar  ·  Esc", 28);
+}
+
 void DrawPauseMenu(const Menu *menu) {
     const PauseMenu *pause = &menu->pause;
     Rectangle canvas = PauseCanvas();
@@ -377,22 +461,19 @@ void DrawPauseMenu(const Menu *menu) {
         return;
     }
 
+    if (pause->page == PAUSE_SETTINGS) {
+        DrawSettings(menu, canvas);
+        return;
+    }
     Rectangle panel = PauseRect(canvas, (Rectangle){395, 148, 882, 668});
     DrawMenuPanel(panel);
     DrawPauseTextButton(menu, canvas, pauseBack, "Voltar  ·  Esc", 28);
-    if (pause->page == PAUSE_SETTINGS) {
-        DrawPauseText(canvas, "Configurações", 211, 60, GOLD);
-        DrawPauseTextButton(menu, canvas, pauseFullscreen,
-                            IsWindowFullscreen() ? "Tela cheia ligada" : "Tela cheia desligada", 34);
-        DrawPauseText(canvas, "F ou Enter alterna o modo de tela", 542, 30, RAYWHITE);
-    } else {
-        DrawPauseText(canvas, "Controles", 211, 60, GOLD);
-        DrawPauseText(canvas, "WASD  ·  Mover", 331, 37, RAYWHITE);
-        DrawPauseText(canvas, "Espaço  ·  Esquivar com qualquer arma", 400, 37, RAYWHITE);
-        DrawPauseText(canvas, "Clique esquerdo  ·  Atacar com katana ou arma de fogo", 469, 30, RAYWHITE);
-        DrawPauseText(canvas, "Clique direito  ·  Acelerar a Bíblia ou esquivar", 531, 34, RAYWHITE);
-        DrawPauseText(canvas, "E  ·  Interagir e selar", 600, 37, RAYWHITE);
-    }
+    DrawPauseText(canvas, "Controles", 211, 60, GOLD);
+    DrawPauseText(canvas, "WASD  ·  Mover", 331, 37, RAYWHITE);
+    DrawPauseText(canvas, "Espaço  ·  Esquivar com qualquer arma", 400, 37, RAYWHITE);
+    DrawPauseText(canvas, "Clique esquerdo  ·  Atacar com katana ou arma de fogo", 469, 30, RAYWHITE);
+    DrawPauseText(canvas, "Clique direito  ·  Acelerar a Bíblia ou esquivar", 531, 34, RAYWHITE);
+    DrawPauseText(canvas, "E  ·  Interagir e selar", 600, 37, RAYWHITE);
 }
 
 MenuAction UpdateMenu(Menu *m) {
@@ -420,8 +501,7 @@ MenuAction UpdateMenu(Menu *m) {
         return MENU_NONE;
     }
     if (m->page == 1) {
-        if (IsKeyPressed(KEY_F) || IsKeyPressed(KEY_ENTER)) ToggleFullscreen();
-        if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_BACKSPACE)) m->page = 0;
+        if (UpdateSettings(m)) m->page = 0;
         return MENU_NONE;
     }
     if (m->page == 2) {
@@ -439,6 +519,7 @@ MenuAction UpdateMenu(Menu *m) {
     UpdateButtonFocus(m->buttonFocus, m->selected == 1 && !m->hasSave ? -1 : m->selected, dt);
     if (!click && !IsKeyPressed(KEY_ENTER) && !IsKeyPressed(KEY_SPACE)) return MENU_NONE;
     if (click && !CheckCollisionPointRec(mouse, ButtonBounds(m->selected))) return MENU_NONE;
+    if (m->selected != 1 || m->hasSave) PlayAudioFeedback(&m->audio);
     switch (m->selected) {
         case 0: if (m->hasSave) { m->page = 3; return MENU_NONE; } return MENU_START;
         case 1: return m->hasSave ? MENU_CONTINUE : MENU_NONE;
@@ -510,12 +591,13 @@ void DrawMenu(const Menu *m) {
                                   GetScreenWidth()/2-210,GetScreenHeight()-42,18,RAYWHITE);
         return;
     }
+    if (m->page==1) {
+        DrawSettings(m, PauseCanvas());
+        return;
+    }
     Rectangle p = {GetScreenWidth()/2.0f-330, GetScreenHeight()/2.0f-140,660,280};
     DrawMenuPanel(p);
-    if (m->page==1) {
-        DrawText("CONFIGURACOES",(int)p.x+50,(int)p.y+34,34,GOLD);
-        DrawText("F ou Enter: alternar tela cheia",(int)p.x+50,(int)p.y+110,23,RAYWHITE);
-    } else if (m->page==2) {
+    if (m->page==2) {
         DrawText("CREDITOS",(int)p.x+50,(int)p.y+34,34,GOLD);
         DrawText("Jogo PIF",(int)p.x+50,(int)p.y+110,26,RAYWHITE);
     } else {

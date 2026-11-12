@@ -22,6 +22,7 @@ set(SOURCES
     src/menu.c
     src/menu_video.c
     src/cutscene.c
+    src/game_audio.c
     src/weapon_select.c
     src/bible.c
     src/gun.c
@@ -51,7 +52,7 @@ if(BUILD_TESTING)
     target_include_directories(player_collision_test PRIVATE src)
     target_link_libraries(player_collision_test PRIVATE raylib)
     add_test(NAME player_collision COMMAND player_collision_test)
-    add_executable(encounter_test tests/encounter_test.c src/encounter.c src/presentation.c src/enemy.c src/cemetery_enemy.c src/clearing.c src/menu.c src/menu_video.c)
+    add_executable(encounter_test tests/encounter_test.c src/encounter.c src/presentation.c src/enemy.c src/cemetery_enemy.c src/clearing.c src/menu.c src/menu_video.c src/game_audio.c)
     target_include_directories(encounter_test PRIVATE src)
     target_link_libraries(encounter_test PRIVATE raylib)
     if(WIN32)

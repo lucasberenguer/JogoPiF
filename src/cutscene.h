@@ -9,12 +9,13 @@ typedef struct OpeningCutscene {
     Texture2D art[INTRO_ART_COUNT];
     Sound cues[INTRO_BEAT_COUNT];
     Music music;
-    float elapsed, age, finalBeatAtAdvance;
+    float elapsed, finalBeatAtAdvance;
+    float musicVolume, effectsVolume, musicFade;
     int beat;
-    bool finished, ownsAudio;
+    bool finished;
 } OpeningCutscene;
 
-bool InitOpeningCutscene(OpeningCutscene *scene);
+bool InitOpeningCutscene(OpeningCutscene *scene, float musicVolume, float effectsVolume);
 void UpdateOpeningCutscene(OpeningCutscene *scene, float dt);
 void DrawOpeningCutscene(const OpeningCutscene *scene);
 void UnloadOpeningCutscene(OpeningCutscene *scene);

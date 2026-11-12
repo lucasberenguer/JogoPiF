@@ -51,7 +51,8 @@ O Pátio dos Guardiões foi retirado da sequência. Cutscene de descoberta do pa
 - Caminhada e arremesso do Coveiro: 12 quadros por direção. Caminhada 18 quadros/s, arremesso com preparação até 0,8 s e recuperação até 1,65 s; movimento corporal e pequeno avanço nos golpes. Após teste do usuário, deslocamento corporal foi reduzido 8% (fator 0,92), incluindo investidas. Velocidade das pás preservada.
 - Pás: ida 620/740 unidades/s nas fases 1/2, retorno 660/760, raio de contato 43; oito quadros de giro, vento e poeira. Um acerto por trajeto de ida/volta; movimento subdividido para evitar atravessar colisões.
 - Ao entrar numa área: apresentação **ENTRANDO EM + nome**, 2,8 s, seguida da apresentação da onda. Combate pausado durante apresentações.
-- A abertura em HQ toca uma vez por sessão, após a confirmação da arma em uma nova partida. Usa oito ilustrações em seis momentos narrativos e dura cerca de 41 s. O quarto momento, Juramento, inclui uma ilustração vertical no painel lateral. **Espaço** ou **Enter** avança e **Esc** segue para a Clareira. A transição reutiliza a apresentação de área com o subtítulo **A Terra dos que Não Descansam**. Checkpoints e novas tentativas após Game Over seguem direto ao jogo. A trilha e os efeitos ainda não foram fornecidos.
+- A abertura em HQ toca uma vez por sessão, após a confirmação da arma em uma nova partida. Usa oito ilustrações em seis momentos narrativos e dura cerca de 41 s. O quarto momento, Juramento, inclui uma ilustração vertical no painel lateral. **Espaço** ou **Enter** avança e reposiciona a trilha, e **Esc** segue para a Clareira. A transição reutiliza a apresentação de área com o subtítulo **A Terra dos que Não Descansam**. Checkpoints e novas tentativas após Game Over seguem direto ao jogo. A trilha foi integrada. Os WAVs de efeitos narrativos continuam opcionais.
+- Menu, ondas normais e minibosses têm faixas próprias em loop com sobreposição entre fim e começo. A troca de faixa tem fade e a música de combate baixa de volume nas pausas e apresentações. Configurações no menu inicial e na pausa oferecem volumes independentes de música e efeitos, salvos em `audio_pif.cfg` ao lado do executável.
 - Ao concluir: mensagem de área limpa e depois **NOVA AREA DESBLOQUEADA + próximo nome**, 3,2 s. Atualmente o anúncio após o cemitério ainda diz "Vila Abandonada"; trocar para **Vila Lascada** ao integrar a vila. O anúncio não significa que a vila já seja acessível.
 
 ## Arquivos úteis
@@ -62,6 +63,7 @@ O Pátio dos Guardiões foi retirado da sequência. Cutscene de descoberta do pa
 - `src/clearing.c`: mapas e colisões.
 - `src/encounter.c`, `src/presentation.c`: progressão, selos, recompensas e apresentações.
 - `src/cutscene.c` e `assets/cutscenes/intro/`: duração, legendas, composição, ilustrações e caminhos de áudio da abertura.
+- `src/game_audio.c` e `assets/audio/`: reprodução das faixas do jogo, volumes e persistência.
 - `assets/coveiro_walk_v4.png`, `coveiro_throw_v4.png`, `coveiro_slam_v3.png`, `coveiro_charge_v3.png`, `coveiro_pa_vento_v4.png`: assets atuais do chefe.
 - `design/coveiro_v4_notas.md`: especificações e notas das artes geradas com imagegen.
 - `README.md` contém partes históricas do protótipo, inclusive informações antigas sobre inimigos/checkpoints; conferir implementação e este documento.
@@ -100,6 +102,8 @@ A correção do branco foi conferida em capturas da pausa com o renderizador ant
 O teste de encontro também confere que a queda do Guardião ainda exige o selo, que a apresentação bloqueia a interação e que, depois dela, apenas a interação junto ao altar libera a passagem. A captura do altar liberado fica em `out/review/audit/clearing_altar_open.png`.
 
 A abertura foi conferida em 1280×720 e 800×700. O fluxo de jogo foi exercitado com entradas simuladas até a primeira onda e a repetição após Game Over, tanto no avanço automático quanto ao pular com Esc. As capturas ficam em `out/review/audit/intro_*.png`.
+
+Áudio validado com os quatro testes do projeto e um teste adicional em janela raylib: repetição das três faixas, avanço da trilha da abertura, alteração por teclado e persistência dos dois volumes. A captura de Configurações fica em `out/review/audit/pausa_config_audio.png`.
 
 ## O que é salvo e o que precisa de backup
 

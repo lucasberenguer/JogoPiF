@@ -3,6 +3,7 @@
 #include "raylib.h"
 #include "run_progress.h"
 #include "menu_video.h"
+#include "game_audio.h"
 typedef enum MenuAction { MENU_NONE, MENU_START, MENU_CONTINUE, MENU_QUIT } MenuAction;
 typedef enum PauseAction { PAUSE_NONE, PAUSE_RESUME, PAUSE_MAIN_MENU } PauseAction;
 typedef enum PausePage { PAUSE_OPTIONS, PAUSE_SETTINGS, PAUSE_CONTROLS } PausePage;
@@ -20,6 +21,9 @@ typedef struct Menu {
     Texture2D hero[10];
     Texture2D buttons[4];
     PauseMenu pause;
+    GameAudio audio;
+    int volumeFocus, volumeDrag;
+    bool volumeChanged;
     MenuVideo *video;
     Texture2D videoFrame;
     double videoInterval, videoElapsed;
@@ -33,7 +37,7 @@ bool InitMenu(Menu *menu);
 void UnloadMenu(Menu *menu);
 MenuAction UpdateMenu(Menu *menu);
 void DrawMenu(const Menu *menu);
-PauseAction UpdatePauseMenu(PauseMenu *pause);
+PauseAction UpdatePauseMenu(Menu *menu);
 void DrawPauseMenu(const Menu *menu);
 bool SaveMenuCheckpoint(int weapon);
 int LoadMenuCheckpointWeapon(void);

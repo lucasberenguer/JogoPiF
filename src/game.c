@@ -223,6 +223,15 @@ int main(void) {
     float entryFadeRemaining = 0.0f;
 
     while (!WindowShouldClose()) {
+        GameTrack track = TRACK_SILENT;
+        float musicStrength = 1.0f;
+        if (screen == 0) track = TRACK_MENU;
+        else if ((screen == 2 || screen == 3) && playerHealth > 0 &&
+                 encounter.progress.stage <= CLEARING_BOSS_STAGE) {
+            track = encounter.progress.stage == CLEARING_BOSS_STAGE ? TRACK_MINIBOSS : TRACK_COMBAT;
+            if (screen == 3 || EncounterPaused(&encounter)) musicStrength = 0.42f;
+        }
+        UpdateGameMusic(&menu.audio, track, musicStrength, GetFrameTime());
         if (screen == 0) {
             MenuAction action = UpdateMenu(&menu);
             if (action == MENU_QUIT) break;
@@ -284,7 +293,8 @@ int main(void) {
             if (choice >= 0) {
                 if (!openingSeen) {
                     openingSeen = true;
-                    if (InitOpeningCutscene(&opening)) {
+                    if (InitOpeningCutscene(&opening, menu.audio.volume[AUDIO_MUSIC]/100.0f,
+                                            menu.audio.volume[AUDIO_EFFECTS]/100.0f)) {
                         currentWeapon = choice;
                         screen = OPENING_SCREEN;
                         BeginDrawing();
@@ -371,7 +381,7 @@ int main(void) {
         }
         if (screen == 3 || IsKeyPressed(KEY_ESCAPE)) {
             if (screen == 3) {
-                PauseAction action = UpdatePauseMenu(&menu.pause);
+                PauseAction action = UpdatePauseMenu(&menu);
                 if (action == PAUSE_RESUME) screen = 2;
                 else if (action == PAUSE_MAIN_MENU) screen = 0;
             } else {
