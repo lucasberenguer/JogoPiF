@@ -74,6 +74,17 @@ int main(void) {
     assert(!encounter.presentation.areaEntry && encounter.presentation.wave==1);
     assert(EncounterPaused(&encounter));
     Capture("audit/clearing_collision_updated.png",&encounter,&enemies,&clearing,clearing.spawn);
+    EnemyGroup meleePreview = enemies;
+    for (int i=0;i<ENEMY_COUNT;i++) meleePreview.list[i]=(Enemy){.state=ENEMY_GONE};
+    for (int row=0;row<3;row++) {
+        for (int facing=0;facing<4;facing++) {
+            meleePreview.list[row*4+facing]=(Enemy){.type=ENEMY_COMMON_MELEE,
+                .state=row==0 ? ENEMY_IDLE : row==1 ? ENEMY_WALK : ENEMY_ATTACK,
+                .stateTime=.34f,.walkTime=.28f,.facing=facing,
+                .position={455+220*facing,345+165*row},.health=45,.maxHealth=45};
+        }
+    }
+    Capture("audit/clearing_melee_directions.png",&encounter,&meleePreview,&clearing,player);
     for (int wave=1;wave<=CLEARING_WAVES;wave++) {
         assert(encounter.progress.stage==wave);
         assert(EnemiesRemaining(&enemies)==7+(wave-1)*4);

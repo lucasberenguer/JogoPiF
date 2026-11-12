@@ -128,6 +128,21 @@ int main(void) {
     assert(EnemiesRemaining(&group)==7);
     CheckGuardianAttacks(&map, &group);
     CheckGuardianMelee(&map, &group);
+    for (int i=0;i<ENEMY_COUNT;i++) group.list[i]=(Enemy){.state=ENEMY_GONE};
+    Enemy *melee = &group.list[0];
+    *melee = (Enemy){.type=ENEMY_COMMON_MELEE,.state=ENEMY_IDLE,
+        .position={400,400},.health=45,.maxHealth=45,.power=1};
+    Vector2 meleeTarget = {460,400};
+    int meleeTargetHealth = 100;
+    UpdateEnemies(&group,&map,meleeTarget,.01f,false,&meleeTargetHealth,100);
+    assert(melee->state==ENEMY_ATTACK && melee->facing==3);
+    UpdateEnemies(&group,&map,meleeTarget,.30f,false,&meleeTargetHealth,100);
+    assert(meleeTargetHealth==100 && !melee->attackConnected);
+    UpdateEnemies(&group,&map,meleeTarget,.02f,false,&meleeTargetHealth,100);
+    assert(meleeTargetHealth==88 && melee->attackConnected);
+    group.playerHitCooldown=0;
+    UpdateEnemies(&group,&map,meleeTarget,.30f,false,&meleeTargetHealth,100);
+    assert(meleeTargetHealth==88 && melee->state==ENEMY_IDLE);
     map.cemetery=true;
     ResetEnemies(&group,&map);
     assert(EnemiesRemaining(&group)==7);

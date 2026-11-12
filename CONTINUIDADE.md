@@ -46,6 +46,7 @@ O Pátio dos Guardiões foi retirado da sequência. Cutscene de descoberta do pa
 - O shader da pausa aceita tanto a moldura RGB enviada por builds antigos quanto a moldura com alfa pré-multiplicado do build atual. Isso evita que o quadriculado branco apareça ao carregar os assets do repositório com um executável antigo.
 - A katana mira no cursor no momento do clique. O arco visual e o dano usam a direção exata do golpe e o alcance base de 105 unidades. A pose usa a direção cardinal mais próxima.
 - A mira da arma de fogo usa os perfis da folha de espera na ordem direita e esquerda. Caminhada e disparo usam a ordem esquerda e direita.
+- O inimigo corpo a corpo comum da Clareira tem novas poses nas quatro direções, com cinco quadros de espera e oito de caminhada e ataque. O ataque à esquerda espelha a sequência direita para manter a orientação durante todo o golpe. O dano coincide com o quinto quadro, e o fundo vinho da folha de ataque é filtrado no carregamento.
 - Vida de inimigos do cemitério: +10% em relação à base da clareira, arredondada para cima. Guardião 2.200 HP; Coveiro 2.420 HP.
 - Direções de esqueletos corrigidas com frente/costas e espelhamento lateral. Magos usam linhas direcionais corretas; fogo verde tem animação de voo/impacto e colisão ajustada. Esquiva e invulnerabilidade ainda impedem dano intencionalmente.
 - Coveiro possui raízes, arremesso da pá e investida; segunda fase acrescenta raízes laterais, três pás e segunda investida com novo aviso. Novos atlas evitam recortes de pés/cabeça.

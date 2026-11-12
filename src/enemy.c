@@ -7,6 +7,9 @@
 #define ENEMY_ATTACK_RANGE 64.0f
 #define ENEMY_ATTACK_DAMAGE 12
 #define ENEMY_HURT_RADIUS 20.0f
+#define CLEARING_MELEE_ATTACK_DURATION .62f
+#define CLEARING_MELEE_ATTACK_FRAMES 8
+#define CLEARING_MELEE_IMPACT_FRAME 4
 #define RANGED_MIN_DISTANCE 170.0f
 #define RANGED_MAX_DISTANCE 300.0f
 #define RANGED_SHOT_SPEED 365.0f
@@ -129,6 +132,17 @@ bool EnemyShouldDrop(EnemyType type, int roll) {
 
 static bool GuardianEnraged(const Enemy *enemy);
 
+static int ClearingMeleeFrame(const Enemy *enemy) {
+    switch (enemy->state) {
+        case ENEMY_IDLE: return (int)(enemy->stateTime * 7.5f) % 5;
+        case ENEMY_WALK: return (int)(enemy->walkTime * 11.0f) % 8;
+        case ENEMY_ATTACK:
+            return (int)fminf(enemy->stateTime / CLEARING_MELEE_ATTACK_DURATION *
+                             CLEARING_MELEE_ATTACK_FRAMES, CLEARING_MELEE_ATTACK_FRAMES - 1);
+        default: return 0;
+    }
+}
+
 int EnemyAnimationFrame(const Enemy *enemy) {
     if (enemy->type == ENEMY_BOSS) {
         if (enemy->state == ENEMY_ATTACK && enemy->guardianMelee)
@@ -153,6 +167,36 @@ int EnemyAnimationFrame(const Enemy *enemy) {
     int frame = (int)(elapsed*speed);
     return enemy->state == ENEMY_IDLE || enemy->state == ENEMY_WALK
         ? frame % count : (frame < count ? frame : count-1);
+}
+
+static Texture2D LoadClearingMeleeAttack(void) {
+    Texture2D source = LoadTexture("assets/clareira_melee_ataque.png");
+    if (!source.id) return source;
+    Shader shader = LoadShader(NULL, "assets/shaders/clareira_melee.fs");
+    RenderTexture2D target = LoadRenderTexture(source.width, source.height);
+    Texture2D result = {0};
+    if (shader.id && target.id) {
+        SetTextureFilter(source, TEXTURE_FILTER_POINT);
+        BeginTextureMode(target);
+        ClearBackground(BLANK);
+        // GL_ONE sobre o alvo vazio preserva RGB e alfa produzidos pelo shader.
+        BeginBlendMode(BLEND_ALPHA_PREMULTIPLY);
+        BeginShaderMode(shader);
+        DrawTexture(source, 0, 0, WHITE);
+        EndShaderMode();
+        EndBlendMode();
+        EndTextureMode();
+        Image image = LoadImageFromTexture(target.texture);
+        if (image.data) {
+            ImageFlipVertical(&image);
+            result = LoadTextureFromImage(image);
+            UnloadImage(image);
+        }
+    }
+    if (target.id) UnloadRenderTexture(target);
+    if (shader.id) UnloadShader(shader);
+    UnloadTexture(source);
+    return result;
 }
 
 bool InitEnemies(EnemyGroup *group) {
@@ -188,6 +232,9 @@ bool InitEnemies(EnemyGroup *group) {
     for (int i=0;i<3;i++) SetTextureFilter(group->boss[i], TEXTURE_FILTER_POINT);
     for (int i=0;i<3;i++) SetTextureFilter(group->effects[i], TEXTURE_FILTER_POINT);
     group->rangedSprites = LoadTexture("assets/inimigo_ranged.png");
+    group->clearingMelee[0] = LoadTexture("assets/clareira_melee_idle.png");
+    group->clearingMelee[1] = LoadTexture("assets/clareira_melee_andar.png");
+    group->clearingMelee[2] = LoadClearingMeleeAttack();
     group->bossSprites = LoadTexture("assets/boss_clareira.png");
     group->guardianSpawn = LoadTexture("assets/boss_clareira_spawn.png");
     group->guardianDefeat = LoadTexture("assets/boss_clareira_derrota.png");
@@ -202,6 +249,7 @@ bool InitEnemies(EnemyGroup *group) {
     if (!group->sprites.id || !group->backSprites.id || !group->frontSprites.id ||
         !group->rangedSprites.id || !group->bossSprites.id || !group->bossWalk.id || !group->bossAttack.id ||
         !group->guardianSpawn.id || !group->guardianDefeat.id ||
+        !group->clearingMelee[0].id || !group->clearingMelee[1].id || !group->clearingMelee[2].id ||
         !group->roots.id || !group->rootWave.id || !group->curse.id || !group->guardianMelee.id ||
         !group->bossPortrait.id || !group->cemeteryPortrait.id) {
         UnloadEnemies(group);
@@ -211,6 +259,7 @@ bool InitEnemies(EnemyGroup *group) {
     SetTextureFilter(group->backSprites, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->frontSprites, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->rangedSprites, TEXTURE_FILTER_POINT);
+    for (int i=0; i<3; i++) SetTextureFilter(group->clearingMelee[i], TEXTURE_FILTER_POINT);
     SetTextureFilter(group->bossSprites, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->guardianSpawn, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->guardianDefeat, TEXTURE_FILTER_POINT);
@@ -239,6 +288,7 @@ void UnloadEnemies(EnemyGroup *group) {
     if (group->backSprites.id) UnloadTexture(group->backSprites);
     if (group->frontSprites.id) UnloadTexture(group->frontSprites);
     if (group->rangedSprites.id) UnloadTexture(group->rangedSprites);
+    for (int i=0; i<3; i++) if (group->clearingMelee[i].id) UnloadTexture(group->clearingMelee[i]);
     if (group->bossSprites.id) UnloadTexture(group->bossSprites);
     if (group->guardianSpawn.id) UnloadTexture(group->guardianSpawn);
     if (group->guardianDefeat.id) UnloadTexture(group->guardianDefeat);
@@ -570,7 +620,10 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 continue;
             }
             bool mage = group->cemetery && enemy->type == ENEMY_COMMON_RANGED;
-            if (!enemy->attackConnected && enemy->stateTime >= (mage ? .55f : .32f)) {
+            bool clearingMelee = !group->cemetery && enemy->type == ENEMY_COMMON_MELEE;
+            bool impact = clearingMelee ? ClearingMeleeFrame(enemy) >= CLEARING_MELEE_IMPACT_FRAME :
+                          enemy->stateTime >= (mage ? .55f : .32f);
+            if (!enemy->attackConnected && impact) {
                 enemy->attackConnected = true;
                 if (enemy->type == ENEMY_COMMON_RANGED) {
                     FireRangedProjectile(group, enemy, player);
@@ -582,7 +635,10 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                     group->playerHitCooldown = 0.65f;
                 }
             }
-            if (enemy->stateTime >= (mage ? .95f : .62f)) { enemy->state = ENEMY_IDLE; enemy->stateTime = 0; }
+            if (enemy->stateTime >= (mage ? .95f : CLEARING_MELEE_ATTACK_DURATION)) {
+                enemy->state = ENEMY_IDLE;
+                enemy->stateTime = 0;
+            }
             continue;
         }
         if (*playerHealth <= 0) { enemy->state = ENEMY_IDLE; continue; }
@@ -795,6 +851,56 @@ static void DrawGuardianDefeat(Texture2D texture, const Enemy *enemy) {
         DrawText("E: selar", (int)enemy->position.x - 30, (int)enemy->position.y + 10, 18, GOLD);
 }
 
+typedef struct ClearingMeleeRow {
+    int top, bottom, ground;
+    float scale;
+    int edges[9];
+    int pivots[8];
+} ClearingMeleeRow;
+
+// Os pivôs acompanham o corpo e a linha do chão, mesmo quando o arco se estende para o lado.
+static const ClearingMeleeRow clearingMeleeIdleRows[] = {
+    {747, 995, 961, .36f, {160,406,657,906,1155,1430}, {278,529,781,1034,1285}},
+    {0,   254, 238, .35f, {160,406,657,906,1155,1430}, {279,530,785,1036,1289}},
+    {254, 502, 471, .39f, {160,406,657,906,1155,1430}, {277,532,785,1037,1289}},
+    {502, 747, 710, .39f, {160,406,657,906,1155,1430}, {280,531,780,1034,1286}},
+};
+
+static const ClearingMeleeRow clearingMeleeWalkRows[] = {
+    {270, 480, 449, .46f, {157,340,500,660,820,980,1140,1300,1480}, {257,419,579,741,899,1058,1219,1378}},
+    {0,   245, 212, .43f, {157,340,500,660,820,980,1140,1300,1480}, {256,417,577,736,895,1056,1215,1376}},
+    {515, 730, 698, .44f, {157,340,500,660,820,980,1140,1300,1480}, {265,429,592,750,909,1068,1230,1388}},
+    {770, 985, 951, .46f, {157,340,500,660,820,980,1140,1300,1480}, {258,414,575,732,893,1050,1216,1376}},
+};
+
+static const ClearingMeleeRow clearingMeleeAttackRows[] = {
+    {18,  257, 240, .53f, {150,317,480,629,796,981,1152,1329,1490}, {235,395,550,713,877,1049,1212,1415}},
+    {272, 510, 483, .49f, {151,319,485,644,790,990,1144,1327,1490}, {236,397,557,715,881,1056,1224,1415}},
+    {751, 960, 936, .49f, {149,319,484,642,799,997,1151,1327,1490}, {237,402,560,718,880,1053,1223,1414}},
+};
+
+static void DrawClearingMelee(const EnemyGroup *group, const Enemy *enemy) {
+    bool attack = enemy->state == ENEMY_ATTACK;
+    bool walk = enemy->state == ENEMY_WALK;
+    // A fileira esquerda do ataque muda de lado no meio do golpe.
+    bool flip = attack && enemy->facing == 2;
+    const ClearingMeleeRow *row = attack ? &clearingMeleeAttackRows[enemy->facing < 2 ? enemy->facing : 2] :
+        walk ? &clearingMeleeWalkRows[enemy->facing] : &clearingMeleeIdleRows[enemy->facing];
+    int frame = ClearingMeleeFrame(enemy);
+    int left = row->edges[frame];
+    int right = row->edges[frame + 1];
+    float width = right - left;
+    float height = row->bottom - row->top;
+    Vector2 pivot = {(flip ? right - row->pivots[frame] : row->pivots[frame] - left) * row->scale,
+                     (row->ground - row->top) * row->scale};
+    Rectangle source = {left, row->top, flip ? -width : width, height};
+    Rectangle destination = {enemy->position.x, enemy->position.y, width * row->scale, height * row->scale};
+    float fall = enemy->state == ENEMY_DIE ? Clamp(enemy->stateTime / ENEMY_DEFEAT_DURATION, 0, 1) : 0;
+    Color tint = enemy->state == ENEMY_HURT ? (Color){255,160,160,255} : Fade(WHITE, 1 - fall);
+    DrawTexturePro(group->clearingMelee[attack ? 2 : walk ? 1 : 0], source, destination, pivot,
+                   (enemy->facing == 2 ? -1 : 1) * 75.0f * fall, tint);
+}
+
 void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
     if (group->cemetery) {
         CemeteryDrawEnemies(group,player,foreground);
@@ -870,7 +976,9 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
         int frame = EnemyAnimationFrame(enemy);
         if (enemy->state == ENEMY_FALLEN) { row=0; frame=0; }
         Texture2D tex = group->sprites;
-        if (enemy->type == ENEMY_COMMON_RANGED) {
+        if (enemy->type == ENEMY_COMMON_MELEE) {
+            DrawClearingMelee(group, enemy);
+        } else if (enemy->type == ENEMY_COMMON_RANGED) {
             Rectangle src = {(enemy->facing * 4 + frame) * 80.0f, row * 80.0f,
                              80.0f, 80.0f};
             DrawTexturePro(group->rangedSprites, src,
@@ -916,6 +1024,7 @@ void DrawEnemyDebug(const EnemyGroup *group) {
         DrawCircleLines((int)center.x,(int)center.y,EnemyHurtRadius(enemy),GREEN);
         DrawCircleV(enemy->position,3.0f,YELLOW);
         int frame = IsGuardianSpawn(group, enemy) ? GuardianSpawnFrame(enemy) : EnemyAnimationFrame(enemy);
+        if (!group->cemetery && enemy->type == ENEMY_COMMON_MELEE) frame = ClearingMeleeFrame(enemy);
         if (!group->cemetery && enemy->type == ENEMY_BOSS &&
             (enemy->state == ENEMY_DIE || enemy->state == ENEMY_FALLEN))
             frame = GuardianDefeatFrame(enemy);
