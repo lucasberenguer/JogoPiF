@@ -1,4 +1,5 @@
 #include "encounter.h"
+#include "game_text.h"
 #include "menu.h"
 #include <assert.h>
 #include <math.h>
@@ -53,6 +54,7 @@ int main(void) {
     SetConfigFlags(FLAG_WINDOW_HIDDEN);
     InitWindow(1280,720,"Encounter audit");
     assert(IsWindowReady());
+    LoadGameFonts();
     CheckLegacyCheckpoints();
     Clearing clearing={0};
     EnemyGroup enemies={0};
@@ -156,10 +158,10 @@ int main(void) {
     health=100;
     assert(boss->state==ENEMY_SPAWNING && !EnemyCanBeHit(boss));
     Capture("audit/guardian_spawn_start.png",&encounter,&enemies,&clearing,player);
-    for (int frame=0;frame<33;frame++) UpdateEnemies(&enemies,&clearing,player,1.0f/60,false,&health,100);
+    for (int frame=0;frame<90;frame++) UpdateEnemies(&enemies,&clearing,player,1.0f/60,false,&health,100);
     assert(boss->state==ENEMY_SPAWNING);
     Capture("audit/guardian_spawn_middle.png",&encounter,&enemies,&clearing,player);
-    for (int frame=33;frame<68;frame++) UpdateEnemies(&enemies,&clearing,player,1.0f/60,false,&health,100);
+    for (int frame=90;frame<179;frame++) UpdateEnemies(&enemies,&clearing,player,1.0f/60,false,&health,100);
     DamageEnemy(boss,10);
     assert(boss->state==ENEMY_SPAWNING && boss->health==boss->maxHealth && health==100);
     assert(boss->position.x==spawnPosition.x && boss->position.y==spawnPosition.y);
@@ -227,7 +229,7 @@ int main(void) {
     assert(strcmp(encounter.presentation.announcement,"CLAREIRA LIMPA")==0);
     UpdateStagePresentation(&encounter.presentation,3);
     assert(encounter.presentation.areaUnlock && EncounterPaused(&encounter));
-    assert(strcmp(encounter.presentation.mapName,"Cemiterio das Raizes")==0);
+    assert(strcmp(encounter.presentation.mapName,"Cemitério das Raízes")==0);
     Capture("audit/area_unlock.png",&encounter,&enemies,&clearing,player);
     UpdateStagePresentation(&encounter.presentation,4);
     assert(!EncounterPaused(&encounter));
@@ -374,6 +376,7 @@ int main(void) {
     assert(SaveClearingCheckpoint(&encounter.progress));
     UnloadEnemies(&enemies);
     UnloadClearing(&clearing);
+    UnloadGameFonts();
     CloseWindow();
     puts("Four waves, boss fifth wave, rewards, boss roots, seals and checkpoints passed");
     return 0;

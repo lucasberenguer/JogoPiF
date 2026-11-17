@@ -1,9 +1,12 @@
+#include "game_text.h"
 #include "menu.h"
 #include <stdio.h>
 #include <math.h>
 #include "rlgl.h"
 
-enum { PAUSE_SCENE = 0, PAUSE_PLATE = 2, PAUSE_LABEL = 3, PAUSE_FRAME = 4 };
+enum { PAUSE_SCENE = 0, PAUSE_PLATE = 2, PAUSE_ICON = 3, PAUSE_FRAME = 4, MENU_BUTTON = 5 };
+
+static const Color buttonText = {255, 226, 181, 255};
 
 static const char *SavePath(void) {
     static char path[1024];
@@ -335,7 +338,7 @@ static Rectangle PauseRect(Rectangle canvas, Rectangle logical) {
 static void DrawPauseText(Rectangle canvas, const char *label, float y, int size, Color color) {
     float scale = canvas.width / 1672.0f;
     int fontSize = (int)fmaxf(1, size * scale);
-    DrawText(label, (int)(canvas.x + (canvas.width - MeasureText(label, fontSize))/2),
+    DrawGameText(label, (int)(canvas.x + (canvas.width - MeasureGameText(label, fontSize))/2),
              (int)(canvas.y + y*scale), fontSize, color);
 }
 
@@ -356,7 +359,28 @@ static void DrawPausePlate(const Menu *menu, Rectangle bounds, Color tint) {
         DrawRectangleRounded(bounds, .18f, 8, MAROON);
 }
 
+static void DrawButtonLabel(const char *label, Rectangle bounds, Color tint) {
+    Rectangle textArea = {bounds.x + bounds.width*.332f, bounds.y + bounds.height*.24f,
+                          bounds.width*.553f, bounds.height*.52f};
+    Color ink = ColorTint(buttonText, tint);
+    if (ink.a < 170) ink.a = 170;
+    DrawGameTextIn(label, textArea, bounds.height*.35f, ink, true);
+}
+
+static void DrawLabeledButton(const Menu *menu, int index, const char *label,
+                              Rectangle bounds, Color tint) {
+    Texture2D button = menu->buttons[index];
+    if (!menu->pause.shader.id) {
+        DrawPausePlate(menu, bounds, tint);
+        DrawGameTextIn(label, bounds, bounds.height*.33f, ColorTint(buttonText, tint), true);
+        return;
+    }
+    DrawPauseLayer(&menu->pause, MENU_BUTTON, button, (Rectangle){0, 0, button.width, button.height}, bounds, tint);
+    DrawButtonLabel(label, bounds, tint);
+}
+
 static void DrawPauseButton(const Menu *menu, Rectangle canvas, int index) {
+    static const char *labels[] = {"Continuar", "Configurações", "Controles", "Voltar ao Menu"};
     const PauseMenu *pause = &menu->pause;
     Rectangle logical = PauseButtonBounds(index);
     Rectangle bounds = PauseRect(canvas, logical);
@@ -364,57 +388,52 @@ static void DrawPauseButton(const Menu *menu, Rectangle canvas, int index) {
     Color tint = MenuButtonTint(bounds, focus, false);
 
     if (index < 2) {
-        Texture2D button = menu->buttons[index+1];
-        DrawTexturePro(button, (Rectangle){0, 0, button.width, button.height},
-                       bounds, (Vector2){0}, 0, tint);
+        DrawLabeledButton(menu, index+1, labels[index], bounds, tint);
         return;
     }
 
     DrawPausePlate(menu, bounds, tint);
     if (!pause->shader.id || !pause->labels.id) {
-        DrawPauseText(canvas, index == 2 ? "Controles" : "Voltar ao Menu", logical.y + 39, 34, GOLD);
+        DrawGameTextIn(labels[index], bounds, bounds.height*.33f, ColorTint(buttonText, tint), true);
         return;
     }
 
     static const Rectangle icons[] = {{651, 402, 128, 82}, {662, 560, 112, 92}};
-    static const Rectangle labels[] = {{880, 404, 319, 78}, {838, 558, 481, 84}};
-    Rectangle icon = icons[index-2], label = labels[index-2];
-    float labelHeight = fminf(bounds.height*.35f, bounds.width*.50f*label.height/label.width);
+    Rectangle icon = icons[index-2];
     float iconHeight = fminf(bounds.height*.37f, bounds.width*.11f*icon.height/icon.width);
-    DrawPauseLayer(pause, PAUSE_LABEL, pause->labels, icon,
+    DrawPauseLayer(pause, PAUSE_ICON, pause->labels, icon,
                    (Rectangle){bounds.x + bounds.width*.21f - icon.width*iconHeight/icon.height/2,
                                bounds.y + (bounds.height-iconHeight)/2,
                                icon.width*iconHeight/icon.height, iconHeight}, tint);
     DrawRectangleRec((Rectangle){bounds.x + bounds.width*.304f, bounds.y + bounds.height*.34f,
                                  bounds.width*.005f, bounds.height*.30f}, Fade(GOLD, .62f));
-    float labelWidth = label.width*labelHeight/label.height;
-    DrawPauseLayer(pause, PAUSE_LABEL, pause->labels, label,
-                   (Rectangle){bounds.x + bounds.width*.618f - labelWidth/2,
-                               bounds.y + (bounds.height-labelHeight)/2, labelWidth, labelHeight}, tint);
+    DrawButtonLabel(labels[index], bounds, tint);
 }
 
 static void DrawPauseTextButton(const Menu *menu, Rectangle canvas, Rectangle logical,
                                 const char *label, int fontSize) {
     Rectangle bounds = PauseRect(canvas, logical);
     float focus = CheckCollisionPointRec(GetMousePosition(), bounds) ? 1.0f : 0.0f;
-    DrawPausePlate(menu, bounds, MenuButtonTint(bounds, focus, false));
-    DrawPauseText(canvas, label, logical.y + (logical.height-fontSize)/2, fontSize, RAYWHITE);
+    Color tint = MenuButtonTint(bounds, focus, false);
+    DrawPausePlate(menu, bounds, tint);
+    DrawGameTextIn(label, bounds, fontSize*canvas.width/1672.0f, ColorTint(buttonText, tint), false);
 }
 
 static void DrawSettings(const Menu *menu, Rectangle canvas) {
     DrawMenuPanel(PauseRect(canvas, (Rectangle){395, 148, 882, 668}));
-    DrawPauseText(canvas, "Configurações", 205, 55, GOLD);
+    DrawGameTextIn("Configurações", PauseRect(canvas, (Rectangle){395, 198, 882, 76}),
+                   62*canvas.width/1672.0f, buttonText, true);
     DrawPauseTextButton(menu, canvas, pauseFullscreen,
                         IsWindowFullscreen() ? "Tela cheia ligada" : "Tela cheia desligada", 34);
     static const char *names[AUDIO_CHANNELS] = {"Música", "Efeitos sonoros"};
     float scale = canvas.width/1672.0f;
     for (int i = 0; i < AUDIO_CHANNELS; i++) {
         Rectangle bar = PauseRect(canvas, volumeBars[i]);
-        int size = (int)fmaxf(12, 33*scale);
+        int size = (int)fmaxf(12, 37*scale);
         bool focused = menu->volumeFocus == i;
-        DrawText(names[i], (int)bar.x, (int)(bar.y-48*scale), size, focused ? GOLD : RAYWHITE);
+        DrawGameText(names[i], (int)bar.x, (int)(bar.y-48*scale), size, focused ? GOLD : RAYWHITE);
         const char *percent = TextFormat("%d%%", menu->audio.volume[i]);
-        DrawText(percent, (int)(bar.x+bar.width-MeasureText(percent,size)),
+        DrawGameText(percent, (int)(bar.x+bar.width-MeasureGameText(percent,size)),
                  (int)(bar.y-48*scale), size, RAYWHITE);
         DrawRectangleRounded(bar, .6f, 8, (Color){87, 47, 53, 255});
         float filled = bar.width*menu->audio.volume[i]/100.0f;
@@ -422,7 +441,7 @@ static void DrawSettings(const Menu *menu, Rectangle canvas) {
             DrawRectangleRec((Rectangle){bar.x,bar.y,filled,bar.height}, focused ? GOLD : ORANGE);
         DrawCircleV((Vector2){bar.x+filled,bar.y+bar.height/2}, 11*scale, focused ? GOLD : RAYWHITE);
     }
-    DrawPauseText(canvas, "Setas ajustam o volume  ·  F ou Enter alterna tela cheia", 641, 25, LIGHTGRAY);
+    DrawPauseText(canvas, "Setas ajustam o volume  ·  F ou Enter alterna tela cheia", 641, 31, LIGHTGRAY);
     DrawPauseTextButton(menu, canvas, pauseBack, "Voltar  ·  Esc", 28);
 }
 
@@ -456,7 +475,9 @@ void DrawPauseMenu(const Menu *menu) {
             Rectangle source = {0, 0, pause->frame.width, pause->frame.height*.67f};
             Rectangle destination = PauseRect(canvas, (Rectangle){300, 23, 1072, 1072*source.height/source.width});
             DrawPauseLayer(pause, PAUSE_FRAME, pause->frame, source, destination, WHITE);
-        } else DrawPauseText(canvas, "Pausa", 170, 82, GOLD);
+        }
+        DrawGameTextIn("Pausa", PauseRect(canvas, (Rectangle){720, 144, 232, 66}),
+                       63*canvas.width/1672.0f, buttonText, true);
         for (int i = 0; i < 4; i++) DrawPauseButton(menu, canvas, i);
         return;
     }
@@ -468,7 +489,8 @@ void DrawPauseMenu(const Menu *menu) {
     Rectangle panel = PauseRect(canvas, (Rectangle){395, 148, 882, 668});
     DrawMenuPanel(panel);
     DrawPauseTextButton(menu, canvas, pauseBack, "Voltar  ·  Esc", 28);
-    DrawPauseText(canvas, "Controles", 211, 60, GOLD);
+    DrawGameTextIn("Controles", PauseRect(canvas, (Rectangle){395, 198, 882, 80}),
+                   65*canvas.width/1672.0f, buttonText, true);
     DrawPauseText(canvas, "WASD  ·  Mover", 331, 37, RAYWHITE);
     DrawPauseText(canvas, "Espaço  ·  Esquivar com qualquer arma", 400, 37, RAYWHITE);
     DrawPauseText(canvas, "Clique esquerdo  ·  Atacar com katana ou arma de fogo", 469, 30, RAYWHITE);
@@ -580,15 +602,19 @@ void DrawMenu(const Menu *m) {
     DrawMenuBackground(m);
     DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,0.25f));
     if (m->page == 0) {
+        static const char *labels[] = {"Iniciar Jogo", "Continuar", "Configurações", "Créditos"};
         for (int i=0; i<4; i++) {
             Rectangle b = ButtonBounds(i);
             bool disabled = i==1 && !m->hasSave;
-            DrawTexturePro(m->buttons[i], (Rectangle){0,0,(float)m->buttons[i].width,
-                           (float)m->buttons[i].height}, b, (Vector2){0}, 0,
-                           MenuButtonTint(b, m->buttonFocus[i], disabled));
+            DrawLabeledButton(m, i, labels[i], b, MenuButtonTint(b, m->buttonFocus[i], disabled));
         }
-        if (!m->hasSave) DrawText("Continuar disponivel apos iniciar uma partida",
-                                  GetScreenWidth()/2-210,GetScreenHeight()-42,18,RAYWHITE);
+        if (!m->hasSave) {
+            const char *hint = "Continuar disponível após iniciar uma partida";
+            float width = fminf(GetScreenWidth()-32, MeasureGameText(hint, 20)+24);
+            Rectangle notice = {(GetScreenWidth()-width)/2, GetScreenHeight()-46, width, 30};
+            DrawRectangleRounded(notice, .35f, 8, Fade(BLACK, .65f));
+            DrawGameTextIn(hint, notice, 20, RAYWHITE, false);
+        }
         return;
     }
     if (m->page==1) {
@@ -597,13 +623,13 @@ void DrawMenu(const Menu *m) {
     }
     Rectangle p = {GetScreenWidth()/2.0f-330, GetScreenHeight()/2.0f-140,660,280};
     DrawMenuPanel(p);
+    DrawGameTextEx(m->page==2 ? "Créditos" : "Nova Partida", (Vector2){p.x+50,p.y+34},
+                   42, buttonText, true);
     if (m->page==2) {
-        DrawText("CREDITOS",(int)p.x+50,(int)p.y+34,34,GOLD);
-        DrawText("Jogo PIF",(int)p.x+50,(int)p.y+110,26,RAYWHITE);
+        DrawGameText("Jogo PIF",(int)p.x+50,(int)p.y+110,26,RAYWHITE);
     } else {
-        DrawText("NOVA PARTIDA",(int)p.x+50,(int)p.y+34,34,GOLD);
-        DrawText("Substituir o progresso salvo?",(int)p.x+50,(int)p.y+105,25,RAYWHITE);
-        DrawText("Enter: confirmar",(int)p.x+50,(int)p.y+155,22,RAYWHITE);
+        DrawGameText("Substituir o progresso salvo?",(int)p.x+50,(int)p.y+105,25,RAYWHITE);
+        DrawGameText("Enter: confirmar",(int)p.x+50,(int)p.y+155,22,RAYWHITE);
     }
-    DrawText("Esc: voltar",(int)p.x+50,(int)p.y+218,22,RAYWHITE);
+    DrawGameText("Esc: voltar",(int)p.x+50,(int)p.y+218,22,RAYWHITE);
 }

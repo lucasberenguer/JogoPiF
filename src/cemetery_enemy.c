@@ -1,3 +1,4 @@
+#include "game_text.h"
 #include "enemy.h"
 #include "raymath.h"
 #include <math.h>
@@ -229,7 +230,7 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
             (Rectangle){enemy->position.x, enemy->position.y+bob, width, height},
             (Vector2){width/2,height*.94f}, lean, tint);
 
-        if (fallen) DrawText("E: selar", (int)enemy->position.x-30, (int)enemy->position.y+10, 16, GOLD);
+        if (fallen) DrawGameText("E: selar", (int)enemy->position.x-30, (int)enemy->position.y+10, 16, GOLD);
         if (enemy->type == ENEMY_SPECIAL && enemy->state == ENEMY_ATTACK && enemy->stateTime < .5f)
             DrawCircleLines((int)enemy->position.x, (int)enemy->position.y, 55, ORANGE);
         if (!boss && EnemyCanBeHit(enemy) && enemy->health < enemy->maxHealth) {

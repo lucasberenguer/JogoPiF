@@ -1,6 +1,6 @@
 # Jogo PIF — continuidade entre computadores e chats
 
-Atualizado em 11/11/2026. Leia junto do código e de `git status` antes de retomar.
+Atualizado em 16/11/2026. Leia junto do código e de `git status` antes de retomar.
 
 ## Retomada rápida
 
@@ -44,6 +44,8 @@ O Pátio dos Guardiões foi retirado da sequência. Cutscene de descoberta do pa
 - Durante a partida, **Esc** pausa e retoma. A tela oferece Continuar Jogo, Configurações, Controles e Voltar ao Menu. Os botões seguem o estilo do menu inicial e o cenário anima a lua, as bandeiras e o rio.
 - Revisão visual da pausa: a moldura tem o quadriculado removido antes da filtragem, o foco é aplicado na própria arte dos botões e os painéis usam o mesmo estilo do menu inicial. As folhas oscilam em ritmos diferentes, a névoa deriva em duas camadas e o pulso lunar ilumina o halo, a névoa e os reflexos do rio.
 - O shader da pausa aceita tanto a moldura RGB enviada por builds antigos quanto a moldura com alfa pré-multiplicado do build atual. Isso evita que o quadriculado branco apareça ao carregar os assets do repositório com um executável antigo.
+- Tipografia compartilhada em `src/game_text.c`: UnifrakturMaguntia nos títulos e botões, Crimson Text Semibold no HUD, nas descrições, nos textos de selamento e nas legendas da HQ. O menu, a pausa e a seleção de armas desenham os rótulos pelas fontes do jogo sobre as artes existentes. Os arquivos de fonte e as licenças SIL OFL ficam em `assets/fonts/` e são copiados com os demais assets.
+- Ajuste de legibilidade: texto corrido 10% maior, espaçamento um pouco mais aberto na fonte gótica e Crimson Text nos botões secundários de configurações e controles. O HUD tem números maiores e contorno escuro. As cartas usam descrições mais curtas, e as legendas e o aviso de continuar têm mais contraste.
 - A katana mira no cursor no momento do clique. O arco visual e o dano usam a direção exata do golpe e o alcance base de 105 unidades. A pose usa a direção cardinal mais próxima.
 - A mira da arma de fogo usa os perfis da folha de espera na ordem direita e esquerda. Caminhada e disparo usam a ordem esquerda e direita.
 - O inimigo corpo a corpo comum da Clareira tem novas poses nas quatro direções, com cinco quadros de espera e oito de caminhada e ataque. O ataque à esquerda espelha a sequência direita para manter a orientação durante todo o golpe. O dano coincide com o quinto quadro, e o fundo vinho da folha de ataque é filtrado no carregamento.
@@ -55,7 +57,8 @@ O Pátio dos Guardiões foi retirado da sequência. Cutscene de descoberta do pa
 - Caminhada e arremesso do Coveiro: 12 quadros por direção. Caminhada 18 quadros/s, arremesso com preparação até 0,8 s e recuperação até 1,65 s; movimento corporal e pequeno avanço nos golpes. Após teste do usuário, deslocamento corporal foi reduzido 8% (fator 0,92), incluindo investidas. Velocidade das pás preservada.
 - Pás: ida 620/740 unidades/s nas fases 1/2, retorno 660/760, raio de contato 43; oito quadros de giro, vento e poeira. Um acerto por trajeto de ida/volta; movimento subdividido para evitar atravessar colisões.
 - Ao entrar numa área: apresentação **ENTRANDO EM + nome**, 2,8 s, seguida da apresentação da onda. Combate pausado durante apresentações.
-- Depois da apresentação do Guardião da Clareira, ele emerge do chão em 23 quadros, ao longo de 1,15 s. A sequência pula uma pose em que ele afundava durante a subida. Durante a entrada, fica parado e invulnerável. O combate começa após a animação.
+- Os anúncios de onda usam Crimson Text Semibold, com número em destaque na faixa escura. O anúncio de miniboss também usa a fonte de leitura no número da onda e no nome do chefe, com espaço para o retrato em janelas menores.
+- Depois da apresentação do Guardião da Clareira, ele emerge do chão em 23 quadros, ao longo de 3 s. A sequência pula uma pose em que ele afundava durante a subida. Durante a entrada, fica parado e invulnerável. O combate começa após a animação.
 - Ao perder toda a vida na segunda fase, o Guardião cai em oito quadros na direção em que estava voltado. A queda dura 0,85 s e a última pose fica no chão até o selamento. O teste de encontro cobre a queda, a abertura do selo e a revanche.
 - A abertura em HQ toca uma vez por sessão, após a confirmação da arma em uma nova partida. Usa oito ilustrações em seis momentos narrativos e dura cerca de 41 s. O quarto momento, Juramento, inclui uma ilustração vertical no painel lateral. **Espaço** ou **Enter** avança e reposiciona a trilha, e **Esc** segue para a Clareira. A transição reutiliza a apresentação de área com o subtítulo **A Terra dos que Não Descansam**. Checkpoints e novas tentativas após Game Over seguem direto ao jogo. A trilha foi integrada. Os WAVs de efeitos narrativos continuam opcionais.
 - Menu, ondas normais e minibosses têm faixas próprias em loop com sobreposição entre fim e começo. A troca de faixa tem fade e a música de combate baixa de volume nas pausas e apresentações. Configurações no menu inicial e na pausa oferecem volumes independentes de música e efeitos, salvos em `audio_pif.cfg` ao lado do executável.
@@ -110,6 +113,12 @@ O teste de encontro também confere que a queda do Guardião ainda exige o selo,
 A abertura foi conferida em 1280×720 e 800×700. O fluxo de jogo foi exercitado com entradas simuladas até a primeira onda e a repetição após Game Over, tanto no avanço automático quanto ao pular com Esc. As capturas ficam em `out/review/audit/intro_*.png`.
 
 Áudio validado com os quatro testes do projeto e um teste adicional em janela raylib: repetição das três faixas, avanço da trilha da abertura, alteração por teclado e persistência dos dois volumes. A captura de Configurações fica em `out/review/audit/pausa_config_audio.png`.
+
+Tipografia validada com os quatro testes de `out/review`, verificação de acentos nas duas fontes e capturas em 1280×720 e 800×450 do menu, pausa, configurações, controles, seleção de armas, abertura, HUD e créditos. As capturas locais ficam em `out/review/audit/typography_*.png`. Os testes de encontro também renderizam as apresentações de área, recompensas e HUD do chefe com as fontes do jogo.
+
+O ajuste de legibilidade passou pelos mesmos quatro testes. A revisão comparou o menu, a pausa, as configurações, as cartas, a abertura e o HUD em capturas de 1280×720 e 800×450. As capturas atualizadas ficam em `out/review/audit/legibility_*.png`.
+
+Os anúncios de onda normal e miniboss foram renderizados durante a entrada e após a faixa se estabilizar, em 1280×720 e 800×450. Capturas em `out/review/audit/wave_text_*.png`.
 
 ## O que é salvo e o que precisa de backup
 

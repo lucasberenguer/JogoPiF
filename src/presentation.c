@@ -1,3 +1,4 @@
+#include "game_text.h"
 #include "presentation.h"
 #include <math.h>
 void BeginStagePresentation(StagePresentation *p,int wave,const char *mapName,const char *bossName) {
@@ -45,20 +46,18 @@ void DrawStagePresentation(const StagePresentation *p,Texture2D sprite,int colum
         float half=w*.34f*reveal;
         DrawLineEx((Vector2){w/2-half,center-85},(Vector2){w/2+half,center-85},2,Fade(GOLD,alpha));
         DrawLineEx((Vector2){w/2-half,center+89},(Vector2){w/2+half,center+89},2,Fade(GOLD,alpha));
-        const char *label=p->areaEntry?(p->areaSubtitle?"":"ENTRANDO EM"):"NOVA AREA DESBLOQUEADA";
-        DrawText(label,(int)((w-MeasureText(label,19))/2),(int)center-61,19,Fade(GOLD,alpha));
-        const char *title=p->areaSubtitle?TextToUpper(p->mapName):p->mapName;
-        int size=44;
-        while(size>18 && MeasureText(title,size)>w*.86f) size--;
-        DrawText(title,(int)((w-MeasureText(title,size))/2+(1-reveal)*65),
-            (int)center-(p->areaSubtitle?33:15),size,Fade(RAYWHITE,alpha));
+        const char *label=p->areaEntry?(p->areaSubtitle?"":"ENTRANDO EM"):"NOVA ÁREA DESBLOQUEADA";
+        DrawGameText(label,(int)((w-MeasureGameText(label,19))/2),(int)center-61,19,Fade(GOLD,alpha));
+        DrawGameTextIn(p->mapName,(Rectangle){w*.07f+(1-reveal)*65,center-(p->areaSubtitle?39:30),w*.86f,58},
+                       52,Fade(RAYWHITE,alpha),true);
         const char *hint=p->areaEntry?(p->areaSubtitle?p->areaSubtitle:""):"O caminho adiante foi revelado";
         int hintSize=p->areaSubtitle?24:18;
-        while(hintSize>12 && MeasureText(hint,hintSize)>w*.86f) hintSize--;
-        DrawText(hint,(int)((w-MeasureText(hint,hintSize))/2),(int)center+(p->areaSubtitle?26:48),
+        while(hintSize>12 && MeasureGameText(hint,hintSize)>w*.86f) hintSize--;
+        DrawGameText(hint,(int)((w-MeasureGameText(hint,hintSize))/2),(int)center+(p->areaSubtitle?26:48),
             hintSize,Fade(p->areaSubtitle?GOLD:LIGHTGRAY,alpha));
         return;
     }
+    const Color headline = {255, 232, 190, 255};
     DrawRectangle(0,0,(int)w,(int)h,Fade(BLACK,alpha*(p->boss?.88f:.22f)));
     if (!p->boss) {
         float y=h*.42f;
@@ -66,8 +65,8 @@ void DrawStagePresentation(const StagePresentation *p,Texture2D sprite,int colum
         DrawLine(0,(int)y,(int)w,(int)y,Fade(GOLD,alpha));
         DrawLine(0,(int)y+118,(int)w,(int)y+118,Fade(GOLD,alpha));
         const char *title=p->announcement?p->announcement:TextFormat("ONDA %d",p->wave);
-        DrawText(title,(int)((w-MeasureText(title,46))/2+slide),(int)y+18,46,Fade(GOLD,alpha));
-        DrawText(p->mapName,(int)((w-MeasureText(p->mapName,21))/2),(int)y+79,21,Fade(RAYWHITE,alpha));
+        DrawGameTextIn(title,(Rectangle){w*.06f+slide,y+8,w*.88f,68},58,Fade(headline,alpha),false);
+        DrawGameTextIn(p->mapName,(Rectangle){w*.06f,y+77,w*.88f,28},22,Fade(RAYWHITE,alpha),false);
     } else {
         DrawRectangle(0,0,(int)w,(int)(h*.10f),Fade(BLACK,alpha));
         DrawRectangle(0,(int)(h*.90f),(int)w,(int)(h*.10f+1),Fade(BLACK,alpha));
@@ -89,9 +88,11 @@ void DrawStagePresentation(const StagePresentation *p,Texture2D sprite,int colum
                 (Rectangle){w*p->portraitCenterX-drawWidth/2-offset,h*.50f-drawHeight/2,drawWidth,drawHeight},
                 (Vector2){0},0,Fade(WHITE,alpha));
         }
-        int font=(int)fminf(38,w*.029f);
-        DrawText(TextFormat("ONDA %d - MINI-BOSS",p->wave),(int)(w*.13f-offset),(int)(h*.38f),20,Fade(GOLD,alpha));
-        DrawText(p->bossName,(int)(w*.13f-offset),(int)(h*.46f),font,Fade(RAYWHITE,alpha));
-        DrawText(p->mapName,(int)(w*.13f-offset),(int)(h*.56f),20,Fade(LIGHTGRAY,alpha));
+        float textX=w*.13f-offset;
+        DrawGameTextEx(TextFormat("ONDA %d - MINI-BOSS",p->wave),(Vector2){textX,h*.37f},
+                       24,Fade(headline,alpha),false);
+        float bossSize=fminf(48, w*.42f/MeasureGameTextEx(p->bossName,1,false).x);
+        DrawGameTextEx(p->bossName,(Vector2){textX,h*.44f},bossSize,Fade(RAYWHITE,alpha),false);
+        DrawGameText(p->mapName,(int)(w*.13f-offset),(int)(h*.56f),20,Fade(LIGHTGRAY,alpha));
     }
 }

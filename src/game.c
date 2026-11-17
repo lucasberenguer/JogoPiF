@@ -1,3 +1,4 @@
+#include "game_text.h"
 #include "raylib.h"
 #include "raymath.h"
 #include "clearing.h"
@@ -186,6 +187,7 @@ int main(void) {
         return 1;
     }
 
+    LoadGameFonts();
     Vector2 player = clearing.spawn;
     int playerHealth = 100;
     int playerMaxHealth = 100;
@@ -367,15 +369,15 @@ int main(void) {
             }
             BeginDrawing();
             ClearBackground((Color){16,10,22,255});
-            DrawText("GAME OVER",(GetScreenWidth()-MeasureText("GAME OVER",52))/2,
-                GetScreenHeight()/2-100,52,RED);
-            DrawText("Sua tentativa terminou.",(GetScreenWidth()-MeasureText("Sua tentativa terminou.",22))/2,
+            DrawGameTextIn("Fim da tentativa", (Rectangle){0,GetScreenHeight()/2-100,GetScreenWidth(),62},
+                           59, (Color){255,119,103,255}, true);
+            DrawGameText("Sua tentativa terminou.",(GetScreenWidth()-MeasureGameText("Sua tentativa terminou.",22))/2,
                 GetScreenHeight()/2-30,22,RAYWHITE);
             DrawRectangleRec(retry,hover?MAROON:DARKGRAY);
             DrawRectangleLinesEx(retry,2,GOLD);
-            DrawText("REPETIR",(int)retry.x+95,(int)retry.y+19,26,RAYWHITE);
-            DrawText("Enter ou R: nova tentativa",(GetScreenWidth()-MeasureText("Enter ou R: nova tentativa",18))/2,
-                (int)retry.y+85,18,GRAY);
+            DrawGameTextIn("Repetir", retry, 34, RAYWHITE, true);
+            DrawGameText("Enter ou R: nova tentativa",(GetScreenWidth()-MeasureGameText("Enter ou R: nova tentativa",18))/2,
+                (int)retry.y+85,18,LIGHTGRAY);
             EndDrawing();
             continue;
         }
@@ -684,7 +686,7 @@ int main(void) {
                     DrawEnemyDebug(&enemies);
                     DrawCircleV(player, 3.0f, YELLOW);
                     DrawCircleLines((int)player.x, (int)player.y-35, 20.0f, SKYBLUE);
-                    DrawText(TextFormat("P face:%d frame:%d scale:%.2f", facing, frame,
+                    DrawGameText(TextFormat("P face:%d frame:%d scale:%.2f", facing, frame,
                                         camera.zoom*0.9375f),
                              (int)player.x-55, (int)player.y-100, 12, WHITE);
                 }
@@ -692,36 +694,36 @@ int main(void) {
 
             int hudOffset = EncounterBossVisible(&encounter, &enemies) ? ENCOUNTER_BOSS_HUD_HEIGHT : 0;
             DrawRectangle(12, 12 + hudOffset, 490, 130, Fade(BLACK, 0.72f));
-            DrawText(currentWeapon == WEAPON_BIBLE ? "WASD: mover  |  Espaco: esquiva" :
-                     "WASD: mover  |  Espaco/botao direito: esquiva", 24, 23 + hudOffset, 17, RAYWHITE);
-            DrawText("F3: colisao | ESC: pausar", 24, 76 + hudOffset, 17, RAYWHITE);
-            DrawText("F4/F5: testar dano e cura", 24, 104 + hudOffset, 17, RAYWHITE);
+            DrawGameText(currentWeapon == WEAPON_BIBLE ? "WASD: mover  |  Espaço: esquiva" :
+                     "WASD: mover  |  Espaço/botão direito: esquiva", 24, 23 + hudOffset, 17, RAYWHITE);
+            DrawGameText("F3: colisão | ESC: pausar", 24, 76 + hudOffset, 17, RAYWHITE);
+            DrawGameText("F4/F5: testar dano e cura", 24, 104 + hudOffset, 17, RAYWHITE);
             if (altarOpen) {
-                DrawText(nearPedestal ? "E: usar o altar e entrar no cemiterio"
-                                      : "Siga o brilho dourado ate o altar",
+                DrawGameText(nearPedestal ? "E: usar o altar e entrar no cemitério"
+                                      : "Siga o brilho dourado até o altar",
                          24, 53 + hudOffset, 18, GOLD);
             } else if (pedestalMessageTime > 0.0f) {
-                DrawText("Conclua as ondas e sele o Guardiao", 24, 53 + hudOffset, 18, GOLD);
+                DrawGameText("Conclua as ondas e sele o Guardião", 24, 53 + hudOffset, 18, GOLD);
             } else if (nearPedestal) {
-                DrawText("O altar esta selado", 24, 53 + hudOffset, 18, GOLD);
+                DrawGameText("O altar está selado", 24, 53 + hudOffset, 18, GOLD);
             } else {
-                DrawText(nearExit ? "Vila: proxima etapa do desenvolvimento"
-                    : clearing.cemetery ? "Cemiterio das Raizes" : "Explore a clareira",
+                DrawGameText(nearExit ? "Vila: próxima etapa do desenvolvimento"
+                    : clearing.cemetery ? "Cemitério das Raízes" : "Explore a clareira",
                     24, 53 + hudOffset, 18, RAYWHITE);
             }
             DrawHud(&hud, playerHealth, playerMaxHealth,
                     dodgeCooldown, dodgeRecovery, hudOffset);
-            DrawText(TextFormat("Arma: %s", WeaponName((Weapon)currentWeapon)),
+            DrawGameText(TextFormat("Arma: %s", WeaponName((Weapon)currentWeapon)),
                      24, 150 + hudOffset, 19, GOLD);
             if (currentWeapon == WEAPON_KATANA)
-                DrawText("Clique esquerdo: corte de katana", 24, 176 + hudOffset, 18, RAYWHITE);
+                DrawGameText("Clique esquerdo: corte de katana", 24, 176 + hudOffset, 18, RAYWHITE);
             if (currentWeapon == WEAPON_BIBLE)
-                DrawText(bible.boostCooldown <= 0.0f
-                             ? "Botao direito: acelerar orbitas"
-                             : TextFormat("Aceleracao: %.1f s", bible.boostCooldown),
+                DrawGameText(bible.boostCooldown <= 0.0f
+                             ? "Botão direito: acelerar órbitas"
+                             : TextFormat("Aceleração: %.1f s", bible.boostCooldown),
                          24, 176 + hudOffset, 18, RAYWHITE);
             if (currentWeapon == WEAPON_GUN)
-                DrawText("Clique esquerdo: disparar (um tiro por clique)", 24, 176 + hudOffset, 18, RAYWHITE);
+                DrawGameText("Clique esquerdo: disparar (um tiro por clique)", 24, 176 + hudOffset, 18, RAYWHITE);
             DrawEncounter(&encounter,&enemies);
             if (entering) {
                 float t = entryFadeRemaining / entryFadeDuration;
@@ -743,6 +745,7 @@ int main(void) {
     UnloadTexture(dodgeSprites);
     UnloadTexture(protagonist);
     UnloadClearing(&clearing);
+    UnloadGameFonts();
     CloseWindow();
     return 0;
 }

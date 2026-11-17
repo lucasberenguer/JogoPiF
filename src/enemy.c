@@ -1,3 +1,4 @@
+#include "game_text.h"
 #include "enemy.h"
 #include "raymath.h"
 #include <math.h>
@@ -21,7 +22,7 @@
 #define CEMETERY_BOSS_BASE_HEALTH 2420
 #define ENEMY_DEFEAT_DURATION .85f
 #define GUARDIAN_DEFEAT_FRAMES 8
-#define GUARDIAN_SPAWN_FPS 20.0f
+#define GUARDIAN_SPAWN_DURATION 3.0f
 #define GUARDIAN_SPAWN_COLUMNS 6
 #define GUARDIAN_SPAWN_RECOIL_FRAME 13 /* Índice na folha, começando em zero. */
 #define GUARDIAN_SPAWN_SCALE .72f
@@ -95,7 +96,8 @@ static bool IsGuardianSpawn(const EnemyGroup *group, const Enemy *enemy) {
 }
 
 static int GuardianSpawnFrame(const Enemy *enemy) {
-    return (int)Clamp(enemy->stateTime * GUARDIAN_SPAWN_FPS, 0, GUARDIAN_SPAWN_FRAMES - 1);
+    float progress = enemy->stateTime / GUARDIAN_SPAWN_DURATION;
+    return (int)Clamp(progress * GUARDIAN_SPAWN_FRAMES, 0, GUARDIAN_SPAWN_FRAMES - 1);
 }
 
 typedef struct GuardianHazard {
@@ -615,7 +617,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         }
         if (enemy->state == ENEMY_SPAWNING) {
             float duration = IsGuardianSpawn(group, enemy)
-                ? GUARDIAN_SPAWN_FRAMES / GUARDIAN_SPAWN_FPS : 1.0f;
+                ? GUARDIAN_SPAWN_DURATION : 1.0f;
             if (enemy->stateTime >= duration) { enemy->state = ENEMY_IDLE; enemy->stateTime = 0; }
             continue;
         }
@@ -901,7 +903,7 @@ static void DrawGuardianDefeat(Texture2D texture, const Enemy *enemy) {
     Rectangle destination = {enemy->position.x, enemy->position.y, width * scale, height * scale};
     DrawTexturePro(texture, source, destination, pivot, 0, WHITE);
     if (enemy->state == ENEMY_FALLEN)
-        DrawText("E: selar", (int)enemy->position.x - 30, (int)enemy->position.y + 10, 18, GOLD);
+        DrawGameText("E: selar", (int)enemy->position.x - 30, (int)enemy->position.y + 10, 18, GOLD);
 }
 
 typedef struct ClearingEnemyRow {
@@ -1121,7 +1123,7 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
             (Rectangle){enemy->position.x-38, enemy->position.y-75, 76, 76},
             (Vector2){0},0,tint);
         }
-        if (enemy->state == ENEMY_FALLEN) DrawText("E: selar",(int)enemy->position.x-30,(int)enemy->position.y+10,16,GOLD);
+        if (enemy->state == ENEMY_FALLEN) DrawGameText("E: selar",(int)enemy->position.x-30,(int)enemy->position.y+10,16,GOLD);
         if (enemy->type == ENEMY_SPECIAL && enemy->state == ENEMY_ATTACK && enemy->stateTime < SPECIAL_CHARGE_START)
             DrawCircleLines((int)enemy->position.x,(int)enemy->position.y,55,ORANGE);
         if (EnemyCanBeHit(enemy) && enemy->health < enemy->maxHealth) {
@@ -1151,7 +1153,7 @@ void DrawEnemyDebug(const EnemyGroup *group) {
         if (!group->cemetery && enemy->type == ENEMY_BOSS &&
             (enemy->state == ENEMY_DIE || enemy->state == ENEMY_FALLEN))
             frame = GuardianDefeatFrame(enemy);
-        DrawText(TextFormat("E%d F%d",enemy->state,frame),
+        DrawGameText(TextFormat("E%d F%d",enemy->state,frame),
                  (int)enemy->position.x-28,(int)enemy->position.y-97,12,GOLD);
     }
 }

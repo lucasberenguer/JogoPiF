@@ -101,6 +101,10 @@ vec4 frame(vec2 uv, bool premultiplied)
     if (premultiplied) {
         // A textura é interpolada em alfa pré-multiplicado. A mistura do raylib usa alfa direto.
         art.rgb /= max(art.a, 1.0 / 255.0);
+        float initial = band(uv.x, 0.412, 0.471, 0.005) * band(uv.y, 0.194, 0.308, 0.006);
+        float letters = band(uv.x, 0.460, 0.594, 0.008) * band(uv.y, 0.226, 0.308, 0.006);
+        float ink = smoothstep(0.11, 0.32, art.g);
+        art.rgb = mix(art.rgb, vec3(0.13, 0.047, 0.055), max(initial, letters) * ink);
     } else {
         // Builds antigos usam a camada 1 e ainda enviam a moldura RGB com o quadriculado.
         float low = min(min(art.r, art.g), art.b);
@@ -114,14 +118,15 @@ vec4 frame(vec2 uv, bool premultiplied)
     return art;
 }
 
-vec4 buttonPlate(vec2 uv)
+vec4 buttonPlate(vec2 uv, bool keepIcon)
 {
     vec4 art = texture(texture0, uv);
     // Reaproveita a moldura de Configurações e encobre apenas a área do rótulo.
-    float interior = band(uv.x, 0.125, 0.873, 0.020) * band(uv.y, 0.288, 0.723, 0.032);
-    vec3 fill = vec3(0.235, 0.021, 0.066);
-    fill += vec3(0.087, 0.013, 0.024) * (1.0 - abs(uv.y - 0.49) * 4.0);
-    art.rgb = mix(art.rgb, fill, interior);
+    float left = keepIcon ? 0.323 : 0.125;
+    float interior = band(uv.x, left, 0.886, 0.018) * band(uv.y, 0.301, 0.697, 0.024);
+    vec3 fill = vec3(0.207, 0.026, 0.066);
+    float ink = smoothstep(0.11, 0.29, art.g);
+    art.rgb = mix(art.rgb, fill, interior * ink);
     return art;
 }
 
@@ -130,7 +135,7 @@ void main()
     vec4 pixel;
     if (layer == 0) pixel = landscape(fragTexCoord);
     else if (layer == 1 || layer == 4) pixel = frame(fragTexCoord, layer == 4);
-    else if (layer == 2) pixel = buttonPlate(fragTexCoord);
+    else if (layer == 2 || layer == 5) pixel = buttonPlate(fragTexCoord, layer == 5);
     else {
         vec4 source = texture(texture0, fragTexCoord);
         float ink = smoothstep(0.32, 0.73, source.g);

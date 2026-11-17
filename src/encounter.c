@@ -1,3 +1,4 @@
+#include "game_text.h"
 #include "encounter.h"
 #include "menu.h"
 #include "raymath.h"
@@ -25,8 +26,8 @@ static void StartStage(Encounter *e, EnemyGroup *enemies, const Clearing *cleari
         e->phase = ENCOUNTER_CLEAR;
     } else {
         e->phase = ENCOUNTER_FIGHT;
-        BeginStagePresentation(&e->presentation,e->progress.stage,clearing->cemetery?"Cemiterio das Raizes":"Clareira do Selo",
-            e->progress.stage==CLEARING_BOSS_STAGE?(clearing->cemetery?"Coveiro das Raizes":"Guardiao da Clareira"):NULL);
+        BeginStagePresentation(&e->presentation,e->progress.stage,clearing->cemetery?"Cemitério das Raízes":"Clareira do Selo",
+            e->progress.stage==CLEARING_BOSS_STAGE?(clearing->cemetery?"Coveiro das Raízes":"Guardião da Clareira"):NULL);
         if (clearing->cemetery) e->presentation.portraitCenterX=.73f;
         if (e->progress.stage == CLEARING_BOSS_STAGE) StartArenaBoss(enemies, clearing, player, e->progress.bossPower);
         else StartEnemyWave(enemies, clearing, e->progress.stage, player, e->progress.damage);
@@ -197,7 +198,7 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
                 BeginStagePresentation(&e->presentation,0,e->progress.map?"A vila sera a proxima etapa":"O altar agora leva ao cemiterio",NULL);
                 e->presentation.announcement=e->progress.map?"CEMITERIO LIMPO":"CLAREIRA LIMPA";
                 e->presentation.duration=e->presentation.remaining=2.5f;
-                QueueAreaUnlock(&e->presentation,e->progress.map?"Vila Abandonada":"Cemiterio das Raizes");
+                QueueAreaUnlock(&e->presentation,e->progress.map?"Vila Abandonada":"Cemitério das Raízes");
                 if (!e->practice) SaveClearingCheckpoint(&e->progress);
             } else {
                 e->phase=ENCOUNTER_REWARD; e->rerolled=false; RollRewards(e);
@@ -238,10 +239,10 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
     }
     bool bossVisible = EncounterBossVisible(e, enemies);
     int statusY = 205 + (bossVisible ? ENCOUNTER_BOSS_HUD_HEIGHT : 0);
-    if (e->progress.stage<=CLEARING_WAVES) DrawText(TextFormat("%s - onda %d/5 | Restantes: %d",
-        e->progress.map?"Cemiterio":"Clareira",e->progress.stage,EnemiesRemaining(enemies)),24,statusY,20,GOLD);
-    else DrawText(e->phase==ENCOUNTER_CLEAR ? (e->progress.map?"Cemiterio limpo":"Clareira limpa - altar liberado") : (e->progress.map?"Onda 5/5 - Coveiro das Raizes":"Onda 5/5 - Guardiao da Clareira"),24,statusY,20,GOLD);
-    if (e->notice[0]) DrawText(e->notice,24,statusY+27,18,RAYWHITE);
+    if (e->progress.stage<=CLEARING_WAVES) DrawGameText(TextFormat("%s - onda %d/5 | Restantes: %d",
+        e->progress.map?"Cemitério":"Clareira",e->progress.stage,EnemiesRemaining(enemies)),24,statusY,20,GOLD);
+    else DrawGameText(e->phase==ENCOUNTER_CLEAR ? (e->progress.map?"Cemitério limpo":"Clareira limpa - altar liberado") : (e->progress.map?"Onda 5/5 - Coveiro das Raízes":"Onda 5/5 - Guardião da Clareira"),24,statusY,20,GOLD);
+    if (e->notice[0]) DrawGameText(e->notice,24,statusY+27,18,RAYWHITE);
     if (bossVisible) {
         const Enemy *boss=&enemies->list[0];
         bool phaseTwo = boss->guardianPhase != GUARDIAN_PHASE_ONE;
@@ -252,27 +253,27 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         DrawRectangle(x,31,w,16,DARKGRAY);
         DrawRectangle(x,31,w*boss->health/boss->maxHealth,16,phaseTwo ? PURPLE : MAROON);
         DrawRectangle(x+w/2,31,2,16,Fade(GOLD,.65f));
-        const char *label = TextFormat("%s  %d/%d  |  %s",e->progress.map?"Coveiro das Raizes":"Guardiao da Clareira",
+        const char *label = TextFormat("%s  %d/%d  |  %s",e->progress.map?"Coveiro das Raízes":"Guardião da Clareira",
                                        boss->health,boss->maxHealth,phase);
-        DrawText(label,(GetScreenWidth()-MeasureText(label,18))/2,10,18,GOLD);
+        DrawGameText(label,(GetScreenWidth()-MeasureGameText(label,18))/2,10,18,GOLD);
     }
     if (!EncounterPaused(e)) return;
     DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,.86f));
     int titleY=(int)(GetScreenHeight()/2-160);
-    const char *title=e->phase==ENCOUNTER_REWARD ? "Escolha seu bonus" :
+    const char *title=e->phase==ENCOUNTER_REWARD ? "Escolha seu bônus" :
                       e->phase==ENCOUNTER_SEAL ? "Selo - combate pausado" : "Fim da tentativa";
-    DrawText(title,(GetScreenWidth()-MeasureText(title,30))/2,titleY,30,GOLD);
+    DrawGameTextIn(title,(Rectangle){0,titleY,GetScreenWidth(),49},42,GOLD,true);
     if (e->phase==ENCOUNTER_DEFEAT) {
-        DrawText("Esc: menu | Continuar reinicia esta onda ou boss",GetScreenWidth()/2-270,titleY+80,20,RAYWHITE);
+        DrawGameText("Esc: menu | Continuar reinicia esta onda ou boss",GetScreenWidth()/2-270,titleY+80,20,RAYWHITE);
         return;
     }
     int count=e->phase==ENCOUNTER_REWARD ? e->rewardCount :
               enemies->list[e->sealEnemy].type==ENEMY_BOSS ? 3 : 2;
     static const char *questions[]={"V e V = V", "V e F = V", "nao V = V", "V ou F = V"};
     if (e->phase==ENCOUNTER_SEAL) {
-        const char *prompt=count==3 ? TextFormat("Qual expressao equivale a: %s ?",bossQuestions[e->question].expression)
+        const char *prompt=count==3 ? TextFormat("Qual expressão equivale a: %s ?",bossQuestions[e->question].expression)
                                     : questions[e->question];
-        DrawText(prompt,(GetScreenWidth()-MeasureText(prompt,22))/2,titleY+60,22,RAYWHITE);
+        DrawGameText(prompt,(GetScreenWidth()-MeasureGameText(prompt,22))/2,titleY+60,22,RAYWHITE);
     }
     for (int i=0;i<count;i++) {
         Rectangle box=ChoiceRect(i,count);
@@ -282,8 +283,8 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         if (e->phase==ENCOUNTER_REWARD) label=RewardText(e,e->rewards[i]);
         else if (count==2) label=i==0?"Verdadeiro":"Falso";
         else label=bossQuestions[e->question].choices[(i+3-e->answer)%3];
-        DrawText(TextFormat("%d. %s",i+1,label),(int)box.x+14,(int)box.y+20,19,RAYWHITE);
+        DrawGameText(TextFormat("%d. %s",i+1,label),(int)box.x+14,(int)box.y+20,19,RAYWHITE);
     }
-    if (e->phase==ENCOUNTER_REWARD) DrawText(e->rerolled?"Novo sorteio utilizado":"R: sortear novamente (1 gratuito)",
+    if (e->phase==ENCOUNTER_REWARD) DrawGameText(e->rerolled?"Novo sorteio utilizado":"R: sortear novamente (1 gratuito)",
         GetScreenWidth()/2-180,GetScreenHeight()/2+145,20,GOLD);
 }
