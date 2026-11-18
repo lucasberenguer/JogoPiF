@@ -4,7 +4,7 @@ Atualizado em 18/11/2026. Leia junto do código e de `git status` antes de retom
 
 ## Retomada rápida
 
-Projeto universitário em C99 + raylib 5.5, aprovado pelo professor. Equipe de quatro pessoas, prazo apertado. Roguelite 2D top-down em pixel art sombrio. O usuário participa de game design, arte e código. Clareira e cemitério estão jogáveis e foram considerados bem nivelados pelo usuário.
+Projeto universitário em C99 + raylib 5.5, aprovado pelo professor. Equipe de quatro pessoas, prazo apertado. **Roguelike** 2D top-down em pixel art sombrio (ao morrer, perde tudo e reinicia). O usuário participa de game design, arte e código. Clareira e cemitério estão jogáveis e foram considerados bem nivelados pelo usuário.
 
 Repositório: https://github.com/lucasberenguer/JogoPiF.git — branch `main`.
 Última entrega de gameplay publicada antes deste documento: `45c550b` (polimento do cemitério, sprites, apresentações de área e modo de teste).
@@ -69,6 +69,23 @@ O Pátio dos Guardiões foi retirado da sequência. Cutscene de descoberta do pa
 - Os cenários do painel usam `Encounter.practice`. Recompensas, revanches, morte e passagem pelo altar preservam esse modo e o checkpoint da campanha. A repetição de um teste após morrer mantém o mapa, a onda e os atributos do teste, incluindo a fase 2 quando selecionada. A abertura funciona como prévia e retorna ao painel. O botão Menu principal permite voltar e usar Continuar para retomar o checkpoint. Abrir o painel em cutscenes pausa os temporizadores e o áudio e preserva uma pausa que já estivesse ativa.
 - Menu, ondas normais e minibosses têm faixas próprias em loop com sobreposição entre fim e começo. A troca de faixa tem fade e a música de combate baixa de volume nas pausas e apresentações. Configurações no menu inicial e na pausa oferecem volumes independentes de música e efeitos, salvos em `audio_pif.cfg` ao lado do executável.
 - Ao concluir: mensagem de área limpa e depois **NOVA AREA DESBLOQUEADA + próximo nome**, 3,2 s. Atualmente o anúncio após o cemitério ainda diz "Vila Abandonada"; trocar para **Vila Lascada** ao integrar a vila. O anúncio não significa que a vila já seja acessível.
+- Upgrades de armas expandidos para **4 níveis** (`weaponLevel` 0 a 4) em `src/encounter.c`, `src/menu.c`, `src/bible.c`, `src/gun.c` e `src/game.c`, mantendo dano +20% por nível e adicionando habilidades:
+  - **Katana:** Nv. 1 alcance 130; Nv. 2 acertar golpe reduz cooldown do dash em 0,6 s; Nv. 3 arco ampliado e empurrão; Nv. 4 onda de choque vermelha a longa distância (cooldown 2,5 s).
+  - **Bíblia Sagrada:** Nv. 1 5 livros e raio 102; Nv. 2 aceleração 1,65 s e cooldown 2,8 s; Nv. 3 6 livros e destruição de projéteis inimigos durante aceleração; Nv. 4 poça de água benta no chão (cooldown 3,5 s) causando dano contínuo.
+  - **Arma de Fogo:** Nv. 1 cadência 0,14 s e projétil mais rápido; Nv. 2 disparo duplo; Nv. 3 disparo triplo; Nv. 4 duas pistolas simultâneas herdando todos os upgrades anteriores.
+- Validação em `out/review` após merge com `a474bb4` (tipografia própria em `src/game_text.c`), upgrades de arma, arte final da Vila Lascada, sprites do Líder da Vila, horda de aldeões necróticos e botão **Teste** no menu: build concluído e 4/4 testes aprovados (`enemy_audit`, `map_connectivity`, `player_collision`, `clearing_encounter`).
+- **Botão "Teste" no menu (`src/menu.c`, `src/menu.h`, `src/game.c`):** botão no canto inferior direito do menu principal (`MENU_TEST_VILLA`) que entra direto na Vila Lascada (`map == 2`, `encounter.practice = true`) preservando a animação de apresentação do mapa na entrada.
+- **Vila Lascada integrada como mapa funcional (`map == 2`):**
+  - Assets `assets/vila.png` (paleta avermelhada/ferrugem mais quente diferenciada do cemitério) e `assets/vila_collision.png` (`1672×941`) + polígono caminhável em `src/clearing.c` (`InitVillage`, `ConfigureVillageBoundary`), com spawn na estrada esquerda e saída no arco superior.
+  - Transição conectada pela saída à direita do Cemitério (`CanEnterVillage` em `src/encounter.c` e `src/game.c`) e suporte em checkpoints (`src/menu.c`).
+  - **Líder da Vila (`500 HP`, 100% humano):** duelo direto ao entrar na Vila usando os spritesheets dedicados `assets/lider_vila_walk.png`, `assets/lider_vila_ataque.png` e `assets/lider_vila_investida.png` (`src/village_enemy.c`), com golpe de machado, investida e pulso de selo pálido na fase 2 (`< 50% HP`), caindo como humano ao ser derrotado.
+  - **Carta de morte (`ENCOUNTER_LETTER`) e horda necrótica:** ao derrotar o Líder, exibe o modal com seu Último Registro; ao fechar, inicia `StartVillageHorde` com `assets/aldeoes_necroticos.png` (cabelo castanho escuro, 19 iniciais + 12 emergindo da terra ao longo do tempo). Ao eliminar toda a horda, libera `VILA LASCADA LIMPA` / `Capela do Anjo` e a saída pelo arco ao topo.
+
+## Decisões confirmadas para o futuro (ainda não implementadas)
+
+- **Roguelike puro:** se morrer, perde tudo e reinicia a run.
+- **Escolha de arma integrada à narrativa:** substituir a seleção fria no menu por uma mini cutscene com o Anjo na entrada da Clareira oferecendo as armas sagradas, reformulando as armas para armas de época (ex.: Espada Sagrada, Arco Sagrado, Bíblia Sagrada). Polimento das animações de habilidades fica para depois.
+- **Escopo enxuto dos mapas restantes:** Capela (sem combate), Inferno Inicial (2 ondas + miniboss), Palácio (2–3 ondas sem miniboss, com templários da Ordem), Topo do Palácio (arena direta do Necromante).
 
 ## Arquivos úteis
 
@@ -85,11 +102,10 @@ O Pátio dos Guardiões foi retirado da sequência. Cutscene de descoberta do pa
 - `design/coveiro_v4_notas.md`: especificações e notas das artes geradas com imagegen.
 - `README.md` contém partes históricas do protótipo, inclusive informações antigas sobre inimigos/checkpoints; conferir implementação e este documento.
 
-## Proposta visual da Vila Lascada — ainda a aprovar
+## Proposta visual da Vila Lascada / Corrompida e chefe aprovado
 
-Praça rural ampla, casas deterioradas nas extremidades, madeira escura, pedra cinza, telhados quebrados e vegetação seca. Entrada à esquerda, saída no alto para a capela. Poço fora do centro, oficina/ferraria numa lateral, carroça quebrada e horta morta nas bordas. Casas apenas exteriores para reduzir escopo. Barricadas rompidas e pertences abandonados mostram fuga; sinais do anjo indicam abrigo na capela.
-
-Miniboss proposto: Ferreiro Corrompido; não confirmado. Não produzir personagem definitivo ou tratar layout como aprovado sem continuar a discussão.
+- **Cenário (em refinamento visual):** Vila medieval abandonada e arruinada com casas variadas nas bordas, praça central ampla para combate, poço, fornalha/ferraria, bancas, carroça, barricadas e selos sagrados nas portas. Entrada à esquerda e saída no alto por arco com runas rumo à capela. Última referência em `design/vila_lascada_conceito_v10.jpg` (campo central amplo, parte superior arruinada e árvore destruída no canto superior direito).
+- **Miniboss aprovado — O Líder da Vila (humano, sem transformação):** Único sobrevivente do massacre da vila pelo exército do Necromante; enterrou pessoalmente seu povo no Cemitério das Raízes e viu os mortos retornarem. Reconhece o poder celestial no protagonista, confunde com a origem do Necromante e luta por vingança direcionada à pessoa errada. É **completamente humano**, sem transformação monstruosa antes, durante ou após a luta. Após a derrota, o jogador encontra um **último registro** escrito por ele revelando sua culpa por ter sobrevivido (texto definitivo ainda a desenvolver). Substitui a proposta antiga de "Ferreiro Corrompido". Conceito visual em `design/lider_vila_conceito_v2.jpg`.
 
 ## Preparar outro notebook Windows
 

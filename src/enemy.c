@@ -289,6 +289,10 @@ bool InitEnemies(EnemyGroup *group) {
     group->rootWave = LoadTexture("assets/boss_clareira_onda.png");
     group->curse = LoadTexture("assets/boss_clareira_maldicao.png");
     group->guardianMelee = LoadTexture("assets/boss_clareira_corpo_a_corpo.png");
+    group->villageBossWalk = LoadTexture("assets/lider_vila_walk.png");
+    group->villageBossAttack = LoadTexture("assets/lider_vila_ataque.png");
+    group->villageBossCharge = LoadTexture("assets/lider_vila_investida.png");
+    group->villageVillager = LoadTexture("assets/aldeoes_necroticos.png");
     if (!group->sprites.id || !group->backSprites.id || !group->frontSprites.id ||
         !group->bossSprites.id || !group->bossWalk.id || !group->bossAttack.id ||
         !group->guardianSpawn.id || !group->guardianDefeat.id ||
@@ -297,7 +301,9 @@ bool InitEnemies(EnemyGroup *group) {
         !group->clearingSpecial[0].id || !group->clearingSpecial[1].id || !group->clearingSpecial[2].id ||
         !group->sealMarker.id ||
         !group->roots.id || !group->rootWave.id || !group->curse.id || !group->guardianMelee.id ||
-        !group->bossPortrait.id || !group->cemeteryPortrait.id) {
+        !group->bossPortrait.id || !group->cemeteryPortrait.id ||
+        !group->villageBossWalk.id || !group->villageBossAttack.id ||
+        !group->villageBossCharge.id || !group->villageVillager.id) {
         UnloadEnemies(group);
         return false;
     }
@@ -321,6 +327,10 @@ bool InitEnemies(EnemyGroup *group) {
     SetTextureFilter(group->rootWave, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->curse, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->guardianMelee, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->villageBossWalk, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->villageBossAttack, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->villageBossCharge, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->villageVillager, TEXTURE_FILTER_POINT);
     return true;
 }
 
@@ -354,6 +364,10 @@ void UnloadEnemies(EnemyGroup *group) {
     if (group->rootWave.id) UnloadTexture(group->rootWave);
     if (group->curse.id) UnloadTexture(group->curse);
     if (group->guardianMelee.id) UnloadTexture(group->guardianMelee);
+    if (group->villageBossWalk.id) UnloadTexture(group->villageBossWalk);
+    if (group->villageBossAttack.id) UnloadTexture(group->villageBossAttack);
+    if (group->villageBossCharge.id) UnloadTexture(group->villageBossCharge);
+    if (group->villageVillager.id) UnloadTexture(group->villageVillager);
     *group = (EnemyGroup){0};
 }
 
@@ -425,14 +439,21 @@ void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
 
 void StartArenaBoss(EnemyGroup *group, const Clearing *clearing, Vector2 player, float power) {
     group->cemetery=clearing->cemetery;
+    group->village=clearing->village;
+    group->villageSpawnRemaining = 0;
+    group->villageSpawnTimer = 0.0f;
     ClearEnemyAttacks(group);
     group->playerHitCooldown = 0;
     for (int i=0; i<ENEMY_COUNT; i++) group->list[i] = (Enemy){.state = ENEMY_GONE};
     Enemy *boss = &group->list[0];
-    int baseHealth = clearing->cemetery ? CEMETERY_BOSS_BASE_HEALTH : ARENA_BOSS_BASE_HEALTH;
+    int baseHealth = clearing->village ? 500 : (clearing->cemetery ? CEMETERY_BOSS_BASE_HEALTH : ARENA_BOSS_BASE_HEALTH);
+    Vector2 bossPos = clearing->village
+        ? (Vector2){clearing->background.width * 0.62f, clearing->background.height * 0.54f}
+        : SpawnPosition(clearing, player);
     *boss = (Enemy){.type = ENEMY_BOSS, .state = ENEMY_SPAWNING,
-        .position = SpawnPosition(clearing, player), .maxHealth = (int)(baseHealth*fmaxf(1, power)),
-        .speed = clearing->cemetery ? 160 : 100, .power = power, .attackCooldown = 1.25f, .lastKatanaSwing = -1,
+        .position = bossPos, .maxHealth = (int)(baseHealth*fmaxf(1, power)),
+        .speed = clearing->village ? 145 : (clearing->cemetery ? 160 : 100),
+        .power = power, .attackCooldown = 1.25f, .lastKatanaSwing = -1,
         .bossAttack = (clearing->cemetery ? COVEIRO_ATTACK_COUNT : GUARDIAN_ATTACK_COUNT) - 1};
     boss->health = boss->maxHealth;
 }
@@ -440,7 +461,7 @@ void StartArenaBoss(EnemyGroup *group, const Clearing *clearing, Vector2 player,
 int EnemiesRemaining(const EnemyGroup *group) {
     int count = 0;
     for (int i=0; i<ENEMY_COUNT; i++) if (group->list[i].state != ENEMY_GONE) count++;
-    return count;
+    return count + (group->village ? group->villageSpawnRemaining : 0);
 }
 
 float EnemyHurtRadius(const Enemy *enemy) { return enemy->type == ENEMY_BOSS ? 48.0f : ENEMY_HURT_RADIUS; }
@@ -591,6 +612,8 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         ClearEnemyAttacks(group);
     if (group->cemetery)
         CemeteryUpdateProjectiles(group, clearing, player, dt, playerDodging, playerHealth);
+    if (group->village)
+        VillageUpdateHorde(group, clearing, player, dt);
     for (int i=0; i<ENEMY_COUNT; i++) {
         Enemy *enemy = &group->list[i];
         if (enemy->state == ENEMY_GONE && enemy->pickupAvailable &&
@@ -627,7 +650,8 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         enemy->bibleHitCooldown = fmaxf(0.0f, enemy->bibleHitCooldown-dt);
         if (enemy->state == ENEMY_DIE) {
             if (enemy->type == ENEMY_BOSS) ClearEnemyAttacks(group);
-            if (enemy->stateTime >= ENEMY_DEFEAT_DURATION) {
+            float dieDuration = (group->village && enemy->type == ENEMY_BOSS) ? 1.1f : ENEMY_DEFEAT_DURATION;
+            if (enemy->stateTime >= dieDuration) {
                 enemy->state = enemy->type == ENEMY_SPECIAL || enemy->type == ENEMY_BOSS ?
                                ENEMY_FALLEN : ENEMY_GONE;
             }
@@ -639,6 +663,10 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         }
         if (group->cemetery && enemy->type == ENEMY_BOSS) {
             CemeteryUpdateBoss(group, clearing, enemy, player, dt, playerDodging, playerHealth);
+            continue;
+        }
+        if (group->village && enemy->type == ENEMY_BOSS) {
+            VillageUpdateBoss(group, clearing, enemy, player, dt, playerDodging, playerHealth);
             continue;
         }
         if (enemy->state == ENEMY_ATTACK) {
@@ -1023,6 +1051,10 @@ static void DrawSealMarkers(const EnemyGroup *group) {
 }
 
 void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
+    if (group->village) {
+        VillageDrawEnemies(group, player, foreground);
+        return;
+    }
     if (group->cemetery) {
         CemeteryDrawEnemies(group,player,foreground);
         if (foreground) {

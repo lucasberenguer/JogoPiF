@@ -47,16 +47,48 @@ void UnloadGun(Gun *gun) {
     *gun = (Gun){0};
 }
 
+static Vector2 RotateDir(Vector2 dir, float radians) {
+    float c = cosf(radians), s = sinf(radians);
+    return (Vector2){dir.x * c - dir.y * s, dir.x * s + dir.y * c};
+}
+
+static void SpawnGunShot(Gun *gun, Vector2 pos, Vector2 dir, float delay,
+                         bool spawned[GUN_MAX_SHOTS]) {
+    for (int i = 0; i < GUN_MAX_SHOTS; i++) {
+        if (gun->shots[i].life <= 0.0f) {
+            gun->shots[i] = (GunShot){pos, dir, SHOT_LIFE, delay};
+            spawned[i] = true;
+            return;
+        }
+    }
+}
+
+static void SpawnSpreadShots(Gun *gun, Vector2 pos, Vector2 aim, int level,
+                             float delay, bool spawned[GUN_MAX_SHOTS]) {
+    if (level < 2) {
+        SpawnGunShot(gun, pos, aim, delay, spawned);
+    } else if (level == 2) {
+        SpawnGunShot(gun, pos, RotateDir(aim, -5.0f * DEG2RAD), delay, spawned);
+        SpawnGunShot(gun, pos, RotateDir(aim, 5.0f * DEG2RAD), delay, spawned);
+    } else {
+        SpawnGunShot(gun, pos, RotateDir(aim, -9.0f * DEG2RAD), delay, spawned);
+        SpawnGunShot(gun, pos, aim, delay, spawned);
+        SpawnGunShot(gun, pos, RotateDir(aim, 9.0f * DEG2RAD), delay, spawned);
+    }
+}
+
 void ResetGun(Gun *gun) {
     memset(gun->shots, 0, sizeof(gun->shots));
     memset(gun->impacts, 0, sizeof(gun->impacts));
     gun->poseRemaining = 0.0f;
     gun->shotCooldown = 0.0f;
     gun->aim = (Vector2){1.0f, 0.0f};
+    gun->level = 0;
 }
 
 void UpdateGun(Gun *gun, const Clearing *clearing, Vector2 player,
-               Vector2 aimWorld, float dt, bool triggerPressed) {
+               Vector2 aimWorld, float dt, bool triggerPressed, int level) {
+    gun->level = level;
     gun->poseRemaining = fmaxf(0.0f, gun->poseRemaining-dt);
     gun->shotCooldown = fmaxf(0.0f, gun->shotCooldown-dt);
     for (int i=0; i<GUN_MAX_IMPACTS; i++)
@@ -66,23 +98,27 @@ void UpdateGun(Gun *gun, const Clearing *clearing, Vector2 player,
     if (Vector2LengthSqr(delta) > 4.0f) gun->aim = Vector2Normalize(delta);
     gun->muzzle = Vector2Add(origin, Vector2Scale(gun->aim, 32.0f));
 
-    int newShot = -1;
+    bool spawned[GUN_MAX_SHOTS] = {false};
+    float interval = level >= 1 ? 0.14f : SHOT_INTERVAL;
+    float speed = level >= 1 ? 920.0f : SHOT_SPEED;
     if (triggerPressed && gun->shotCooldown <= 0.0f) {
-        for (int i=0; i<GUN_MAX_SHOTS; i++) {
-            if (gun->shots[i].life <= 0.0f) {
-                gun->shots[i] = (GunShot){gun->muzzle, gun->aim, SHOT_LIFE,
-                                         GUN_POSE_DURATION * 2.0f / GUN_POSE_FRAMES};
-                newShot = i;
-                gun->poseRemaining = GUN_POSE_DURATION;
-                gun->shotCooldown = SHOT_INTERVAL;
-                break;
-            }
+        float delay = GUN_POSE_DURATION * 2.0f / GUN_POSE_FRAMES;
+        if (level >= 4) {
+            Vector2 perp = {-gun->aim.y, gun->aim.x};
+            Vector2 muzzleA = Vector2Add(gun->muzzle, Vector2Scale(perp, 13.0f));
+            Vector2 muzzleB = Vector2Subtract(gun->muzzle, Vector2Scale(perp, 13.0f));
+            SpawnSpreadShots(gun, muzzleA, gun->aim, level, delay, spawned);
+            SpawnSpreadShots(gun, muzzleB, gun->aim, level, delay, spawned);
+        } else {
+            SpawnSpreadShots(gun, gun->muzzle, gun->aim, level, delay, spawned);
         }
+        gun->poseRemaining = GUN_POSE_DURATION;
+        gun->shotCooldown = interval;
     }
     for (int i=0; i<GUN_MAX_SHOTS; i++) {
         GunShot *shot = &gun->shots[i];
         if (shot->life <= 0.0f) continue;
-        float activeDt = i == newShot ? 0.0f : dt;
+        float activeDt = spawned[i] ? 0.0f : dt;
         if (shot->delay > 0.0f) {
             float anticipation = fminf(activeDt, shot->delay);
             shot->delay -= anticipation;
@@ -90,7 +126,7 @@ void UpdateGun(Gun *gun, const Clearing *clearing, Vector2 player,
             if (shot->delay > 0.0f || activeDt <= 0.0f) continue;
         }
         activeDt = fminf(activeDt, shot->life);
-        Vector2 travel = Vector2Scale(shot->direction, SHOT_SPEED*activeDt);
+        Vector2 travel = Vector2Scale(shot->direction, speed*activeDt);
         int steps = (int)(Vector2Length(travel)/7.0f)+1;
         Vector2 step = Vector2Scale(travel, 1.0f/steps);
         for (int j=0; j<steps; j++) {

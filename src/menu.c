@@ -28,6 +28,10 @@ static Rectangle ButtonBounds(int i) {
     return MenuButtonBounds(i, GetScreenWidth()/2.0f, centerY, w);
 }
 
+static Rectangle TestButtonBounds(void) {
+    return (Rectangle){GetScreenWidth() - 196.0f, GetScreenHeight() - 74.0f, 168.0f, 48.0f};
+}
+
 static void UpdateButtonFocus(float focus[4], int selected, float dt) {
     float blend = 1.0f - expf(-18.0f*dt);
     for (int i = 0; i < 4; i++) focus[i] += ((i == selected ? 1.0f : 0.0f) - focus[i])*blend;
@@ -135,13 +139,13 @@ bool LoadClearingCheckpoint(RunProgress *p) {
     else if (fields!=11) loaded.weapon=-1;
     loaded.guardianIntroSeen=currentFormat ? seen==1 : loaded.map==1 || loaded.stage>=CLEARING_COMPLETE_STAGE;
     UnloadFileText(data);
-    bool valid=(!currentFormat || seen==0 || seen==1) && loaded.map>=0 && loaded.map<=1 && loaded.weapon>=0 && loaded.weapon<3 && loaded.stage>=1 && loaded.stage<=CLEARING_COMPLETE_STAGE &&
+    bool valid=(!currentFormat || seen==0 || seen==1) && loaded.map>=0 && loaded.map<=2 && loaded.weapon>=0 && loaded.weapon<3 && loaded.stage>=1 && loaded.stage<=CLEARING_COMPLETE_STAGE &&
         loaded.health>0 && loaded.health<=loaded.maxHealth && loaded.maxHealth<=10000 &&
         isfinite(loaded.damage) && loaded.damage>=1 && loaded.damage<=100 &&
         isfinite(loaded.speed) && loaded.speed>=100 && loaded.speed<=1000 &&
         isfinite(loaded.bossPower) && loaded.bossPower>=1 && loaded.bossPower<=100 &&
         loaded.strongWeapon>=-1 && loaded.strongWeapon<3;
-    for (int i=0;i<3;i++) if (loaded.weaponLevel[i]<0 || loaded.weaponLevel[i]>3) valid=false;
+    for (int i=0;i<3;i++) if (loaded.weaponLevel[i]<0 || loaded.weaponLevel[i]>4) valid=false;
     if (valid) *p=loaded;
     return valid;
 }
@@ -546,6 +550,10 @@ MenuAction UpdateMenu(Menu *m) {
     if (mouseDelta.x != 0.0f || mouseDelta.y != 0.0f)
         for (int i=0; i<4; i++) if (CheckCollisionPointRec(mouse, ButtonBounds(i))) m->selected = i;
     bool click = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+    if (click && CheckCollisionPointRec(mouse, TestButtonBounds())) {
+        PlayAudioFeedback(&m->audio);
+        return MENU_TEST_VILLA;
+    }
     UpdateButtonFocus(m->buttonFocus, m->selected == 1 && !m->hasSave ? -1 : m->selected, dt);
     if (!click && !IsKeyPressed(KEY_ENTER) && !IsKeyPressed(KEY_SPACE)) return MENU_NONE;
     if (click && !CheckCollisionPointRec(mouse, ButtonBounds(m->selected))) return MENU_NONE;
@@ -624,6 +632,11 @@ void DrawMenu(const Menu *m) {
             DrawRectangleRounded(notice, .35f, 8, Fade(BLACK, .65f));
             DrawGameTextIn(hint, notice, 20, RAYWHITE, false);
         }
+        Rectangle testBox = TestButtonBounds();
+        bool testHover = CheckCollisionPointRec(GetMousePosition(), testBox);
+        DrawRectangleRounded(testBox, .25f, 8, testHover ? (Color){92, 34, 40, 235} : (Color){38, 18, 24, 220});
+        DrawRectangleRoundedLinesEx(testBox, .25f, 8, 2, testHover ? GOLD : (Color){184, 145, 76, 220});
+        DrawGameTextIn("Teste", testBox, 24, testHover ? GOLD : RAYWHITE, true);
         return;
     }
     if (m->page==1) {

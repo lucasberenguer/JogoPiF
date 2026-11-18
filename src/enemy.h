@@ -83,6 +83,11 @@ typedef struct EnemyGroup {
     EnemyRoot rootAttacks[ENEMY_ROOT_COUNT];
     float playerHitCooldown;
     bool cemetery;
+    bool village;
+    int villageSpawnRemaining;
+    float villageSpawnTimer;
+    float villageHordePower;
+    Texture2D villageBossWalk, villageBossAttack, villageBossCharge, villageVillager;
     Texture2D skeleton,mage,boss[3],effects[3];
     Texture2D skeletonFront,skeletonBack,coveiroWalk,greenFire;
     EnemyImpact impacts[16];
@@ -121,4 +126,11 @@ void CemeteryUpdateBoss(EnemyGroup *, const Clearing *, Enemy *, Vector2, float,
 void CemeteryUpdateProjectiles(EnemyGroup *, const Clearing *, Vector2, float, bool, int *);
 void CemeteryDrawEnemies(const EnemyGroup *,Vector2,bool);
 void DrawEnemyProjectiles(const EnemyGroup *);
+void StartVillageHorde(EnemyGroup *group, const Clearing *clearing,
+                       Vector2 player, float power);
+void VillageUpdateHorde(EnemyGroup *group, const Clearing *clearing,
+                        Vector2 player, float dt);
+void VillageUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss,
+                       Vector2 player, float dt, bool dodging, int *playerHealth);
+void VillageDrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground);
 #endif

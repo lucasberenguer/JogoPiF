@@ -14,6 +14,7 @@
 #include "dev_tools.h"
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 static Camera2D FitClearing(const Clearing *clearing) {
     const float mapWidth = (float) clearing->background.width;
@@ -40,6 +41,19 @@ static Vector2 FacingVector(int facing) {
         default: return (Vector2) { 0.0f, 1.0f };
     }
 }
+
+#define KATANA_MAX_SHOCKWAVES 4
+#define KATANA_SHOCKWAVE_COOLDOWN 2.5f
+#define KATANA_SHOCKWAVE_SPEED 620.0f
+#define KATANA_SHOCKWAVE_LIFE 0.95f
+#define KATANA_SHOCKWAVE_RADIUS 32.0f
+
+typedef struct KatanaShockwave {
+    Vector2 position;
+    Vector2 direction;
+    float life;
+    bool hitEnemies[ENEMY_COUNT];
+} KatanaShockwave;
 
 typedef struct KatanaSprites {
     Texture2D idle;
@@ -210,9 +224,11 @@ int main(void) {
     float pedestalMessageTime = 0.0f;
     const float katanaAttackDuration = 0.42f;
     const float katanaAttackRecovery = 0.45f;
-    const float katanaAttackRange = 105.0f;
     float katanaAttackRemaining = 0.0f;
     float katanaAttackCooldown = 0.0f;
+    float katanaShockwaveCooldown = 0.0f;
+    KatanaShockwave katanaShockwaves[KATANA_MAX_SHOCKWAVES] = {0};
+    bool katanaDashReducedThisSwing = false;
     int katanaAttackFacing = 0;
     Vector2 katanaAttackDirection = {0.0f, 1.0f};
     int gunAttackFacing = 0;
@@ -360,10 +376,13 @@ int main(void) {
             } else if (action == MENU_CONTINUE) {
                 RunProgress progress;
                 if (LoadClearingCheckpoint(&progress)) {
-                    if (clearing.cemetery!=(progress.map==1)) {
+                    int currentMap = clearing.village ? 2 : (clearing.cemetery ? 1 : 0);
+                    if (currentMap != progress.map) {
                         UnloadClearing(&clearing);
                         clearing=(Clearing){0};
-                        if (!(progress.map?InitCemetery(&clearing):InitClearing(&clearing))) break;
+                        bool loadedMap = progress.map == 2 ? InitVillage(&clearing)
+                            : (progress.map == 1 ? InitCemetery(&clearing) : InitClearing(&clearing));
+                        if (!loadedMap) break;
                     }
                     BeginEncounter(&encounter,&enemies,&clearing,progress,clearing.spawn);
                     currentWeapon=progress.weapon;
@@ -372,6 +391,30 @@ int main(void) {
                     playerSpeed=progress.speed;
                     screen=2;
                 }
+            } else if (action == MENU_TEST_VILLA) {
+                if (!clearing.village) {
+                    UnloadClearing(&clearing);
+                    clearing = (Clearing){0};
+                    if (!InitVillage(&clearing)) break;
+                }
+                RunProgress progress = {
+                    .map = 2,
+                    .stage = CLEARING_BOSS_STAGE,
+                    .weapon = WEAPON_KATANA,
+                    .health = 140,
+                    .maxHealth = 140,
+                    .speed = 235.0f,
+                    .damage = 28.0f,
+                    .bossPower = 1.0f,
+                    .weaponLevel = {2, 0, 0}
+                };
+                BeginEncounter(&encounter, &enemies, &clearing, progress, clearing.spawn);
+                encounter.practice = true;
+                currentWeapon = progress.weapon;
+                playerMaxHealth = progress.maxHealth;
+                playerHealth = progress.health;
+                playerSpeed = progress.speed;
+                screen = 2;
             }
             if (screen == 2) {
                 player = clearing.spawn;
@@ -385,6 +428,8 @@ int main(void) {
                 katanaAttackRemaining = 0.0f;
                 katanaAttackCooldown = 0.0f;
                 katanaAttackId = 0;
+                katanaShockwaveCooldown = 0.0f;
+                memset(katanaShockwaves, 0, sizeof(katanaShockwaves));
                 entryFadeRemaining = entryFadeDuration;
             }
             BeginDrawing();
@@ -431,7 +476,7 @@ int main(void) {
                     }
                     TraceLog(LOG_WARNING, "Abertura indisponivel. Iniciando a partida.");
                 }
-                if (clearing.cemetery) {
+                if (clearing.cemetery || clearing.village) {
                     Clearing next={0};
                     if (!InitClearing(&next)) break;
                     UnloadClearing(&clearing);
@@ -457,6 +502,8 @@ int main(void) {
                 katanaAttackRemaining = 0.0f;
                 katanaAttackCooldown = 0.0f;
                 katanaAttackId = 0;
+                katanaShockwaveCooldown = 0.0f;
+                memset(katanaShockwaves, 0, sizeof(katanaShockwaves));
                 entryFadeRemaining = entryFadeDuration;
                 screen = 2;
             }
@@ -473,7 +520,7 @@ int main(void) {
             if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_R) ||
                 (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))) {
                 bool practice=encounter.practice;
-                if (!practice && clearing.cemetery) {
+                if (!practice && (clearing.cemetery || clearing.village)) {
                     UnloadClearing(&clearing);
                     clearing=(Clearing){0};
                     if (!InitClearing(&clearing)) break;
@@ -499,6 +546,8 @@ int main(void) {
                 dodgeRemaining=dodgeCooldown=0;
                 katanaAttackRemaining=katanaAttackCooldown=0;
                 katanaAttackId=0; walkTime=0; facing=0;
+                katanaShockwaveCooldown = 0.0f;
+                memset(katanaShockwaves, 0, sizeof(katanaShockwaves));
                 pedestalMessageTime=0;
                 entryFadeRemaining=entryFadeDuration;
                 continue;
@@ -571,20 +620,25 @@ int main(void) {
         if (entering) entryFadeRemaining = fmaxf(0.0f, entryFadeRemaining - fminf(GetFrameTime(),.05f));
         if (!entering && IsKeyPressed(KEY_F3)) showCollisionGuide = !showCollisionGuide;
         if (!entering && IsKeyPressed(KEY_F6)) showSpriteDebug = !showSpriteDebug;
-        bool nearExit = clearing.cemetery && CheckCollisionPointRec(player, clearing.exit);
-        bool nearPedestal = !clearing.cemetery &&
+        bool nearExit = (clearing.cemetery || clearing.village) &&
+            CheckCollisionPointRec(player, clearing.exit);
+        bool nearPedestal = !clearing.cemetery && !clearing.village &&
             CheckCollisionPointCircle(player, clearing.pedestal, CLEARING_ALTAR_RADIUS);
         bool altarOpen = ClearingAltarOpen(&encounter, &clearing);
         bool interactPressed = IsKeyPressed(KEY_E);
         if (!entering && playerHealth > 0 &&
-            CanEnterCemetery(&encounter, &clearing, player, interactPressed)) {
+            (CanEnterCemetery(&encounter, &clearing, player, interactPressed) ||
+             CanEnterVillage(&encounter, &clearing, player, interactPressed))) {
+            bool toVillage = clearing.cemetery;
             Clearing next = {0};
-            if (InitCemetery(&next)) {
+            if (toVillage ? InitVillage(&next) : InitCemetery(&next)) {
                 UnloadClearing(&clearing);
                 clearing = next;
                 player = clearing.spawn;
                 RunProgress nextProgress=encounter.progress;
-                nextProgress.map=1; nextProgress.stage=1; nextProgress.bossPower=1;
+                nextProgress.map = toVillage ? 2 : 1;
+                nextProgress.stage = toVillage ? CLEARING_BOSS_STAGE : 1;
+                nextProgress.bossPower=1;
                 nextProgress.health=playerHealth;
                 bool practice=encounter.practice;
                 BeginEncounter(&encounter,&enemies,&clearing,nextProgress,player);
@@ -593,6 +647,8 @@ int main(void) {
                 ResetGun(&gun);
                 ResetBible(&bible);
                 dodgeRemaining = katanaAttackRemaining = 0;
+                katanaShockwaveCooldown = 0.0f;
+                memset(katanaShockwaves, 0, sizeof(katanaShockwaves));
                 entryFadeRemaining = entryFadeDuration;
                 continue;
             }
@@ -605,16 +661,34 @@ int main(void) {
             playerHealth += 5;
             if (playerHealth > playerMaxHealth) playerHealth = playerMaxHealth;
         }
+        int weaponLevel = (currentWeapon >= 0 && currentWeapon < 3)
+            ? encounter.progress.weaponLevel[currentWeapon] : 0;
+        float katanaAttackRange = (currentWeapon == WEAPON_KATANA && weaponLevel >= 1) ? 130.0f : 105.0f;
+        float katanaArcDot = (currentWeapon == WEAPON_KATANA && weaponLevel >= 3) ? -0.35f : -0.12f;
+
         if (dodgeCooldown > 0.0f) dodgeCooldown -= deltaTime;
         if (katanaAttackCooldown > 0.0f) katanaAttackCooldown -= deltaTime;
+        if (katanaShockwaveCooldown > 0.0f) katanaShockwaveCooldown -= deltaTime;
         if (katanaAttackRemaining > 0.0f)
             katanaAttackRemaining = fmaxf(0.0f, katanaAttackRemaining - deltaTime);
+        for (int s = 0; s < KATANA_MAX_SHOCKWAVES; s++) {
+            if (katanaShockwaves[s].life <= 0.0f) continue;
+            if (!entering) {
+                katanaShockwaves[s].position = Vector2Add(
+                    katanaShockwaves[s].position,
+                    Vector2Scale(katanaShockwaves[s].direction, KATANA_SHOCKWAVE_SPEED * deltaTime));
+                katanaShockwaves[s].life = fmaxf(0.0f, katanaShockwaves[s].life - deltaTime);
+                if (IsClearingBlocked(&clearing, katanaShockwaves[s].position))
+                    katanaShockwaves[s].life = 0.0f;
+            }
+        }
         bool bibleActivationStarted = false;
         if (currentWeapon == WEAPON_BIBLE) {
             float previousActivation = bible.activationRemaining;
             UpdateBible(&bible, entering ? 0.0f : deltaTime,
                         !entering && dodgeRemaining <= 0.0f && !IsKeyPressed(KEY_SPACE) &&
-                        IsMouseButtonPressed(MOUSE_BUTTON_RIGHT));
+                        IsMouseButtonPressed(MOUSE_BUTTON_RIGHT),
+                        weaponLevel, !entering && EnemiesRemaining(&enemies) > 0, player);
             bibleActivationStarted = previousActivation <= 0.0f &&
                                      bible.activationRemaining > 0.0f;
         }
@@ -637,8 +711,23 @@ int main(void) {
                 ? (katanaAttackDirection.x < 0.0f ? 2 : 3)
                 : (katanaAttackDirection.y < 0.0f ? 1 : 0);
             katanaAttackId++;
+            katanaDashReducedThisSwing = false;
             katanaAttackRemaining = katanaAttackDuration;
             katanaAttackCooldown = katanaAttackRecovery;
+            if (weaponLevel >= 4 && katanaShockwaveCooldown <= 0.0f) {
+                for (int s = 0; s < KATANA_MAX_SHOCKWAVES; s++) {
+                    if (katanaShockwaves[s].life <= 0.0f) {
+                        katanaShockwaves[s] = (KatanaShockwave){
+                            .position = Vector2Add((Vector2){player.x, player.y - 35.0f},
+                                                   Vector2Scale(katanaAttackDirection, 28.0f)),
+                            .direction = katanaAttackDirection,
+                            .life = KATANA_SHOCKWAVE_LIFE
+                        };
+                        katanaShockwaveCooldown = KATANA_SHOCKWAVE_COOLDOWN;
+                        break;
+                    }
+                }
+            }
         }
         if (dodgePressed && dodgeRemaining <= 0.0f && dodgeCooldown <= 0.0f) {
             katanaAttackRemaining = 0.0f;
@@ -708,12 +797,21 @@ int main(void) {
             float previousPose = gun.poseRemaining;
             UpdateGun(&gun, &clearing, player, aimWorld,
                       entering ? 0.0f : deltaTime,
-                      !entering && !dodging && IsMouseButtonPressed(MOUSE_BUTTON_LEFT));
+                      !entering && !dodging && IsMouseButtonPressed(MOUSE_BUTTON_LEFT),
+                      weaponLevel);
             if (gun.poseRemaining > previousPose) gunAttackFacing = facing;
         }
         if (bibleActivationStarted) bibleAttackFacing = facing;
         if (!entering) {
             Vector2 playerCenter = {player.x, player.y-35.0f};
+            if (currentWeapon == WEAPON_BIBLE) {
+                for (int p = 0; p < ENEMY_PROJECTILE_COUNT; p++) {
+                    if (enemies.projectiles[p].remaining > 0.0f &&
+                        BibleBlocksCircle(&bible, player, enemies.projectiles[p].position, 6.0f)) {
+                        enemies.projectiles[p].remaining = 0.0f;
+                    }
+                }
+            }
             for (int i=0; i<ENEMY_COUNT; i++) {
                 Enemy *enemy = &enemies.list[i];
                 if (!EnemyCanBeHit(enemy)) continue;
@@ -721,22 +819,45 @@ int main(void) {
                 if (currentWeapon == WEAPON_GUN) {
                     int damage = GunHitCircle(&gun, center, EnemyHurtRadius(enemy));
                     if (damage) DamageEnemy(enemy, (int)ceilf(damage*EncounterDamage(&encounter)));
-                } else if (currentWeapon == WEAPON_BIBLE && enemy->bibleHitCooldown <= 0.0f &&
-                           BibleTouchesCircle(&bible, player, center, EnemyHurtRadius(enemy)) &&
-                           MapHasClearPath(&clearing,player,enemy->position)) {
-                    DamageEnemy(enemy, (int)ceilf(BibleContactDamage()*EncounterDamage(&encounter)));
-                    KnockbackEnemy(enemy, &clearing, player, 36.0f);
-                    enemy->bibleHitCooldown = 0.45f;
-                } else if (currentWeapon == WEAPON_KATANA && katanaAttackRemaining > 0.0f &&
-                           katanaAttackRemaining <= katanaAttackDuration*0.5f &&
-                           enemy->lastKatanaSwing != katanaAttackId) {
-                    Vector2 delta = Vector2Subtract(center, playerCenter);
-                    float distance = Vector2Length(delta);
-                    if (distance < katanaAttackRange+EnemyHurtRadius(enemy) && distance > 0.0f &&
-                        Vector2DotProduct(delta, katanaAttackDirection) >= -0.12f*distance &&
+                } else if (currentWeapon == WEAPON_BIBLE) {
+                    if (enemy->bibleHitCooldown <= 0.0f &&
+                        BibleTouchesCircle(&bible, player, center, EnemyHurtRadius(enemy)) &&
                         MapHasClearPath(&clearing,player,enemy->position)) {
-                        DamageEnemy(enemy, (int)ceilf(25*EncounterDamage(&encounter)));
-                        enemy->lastKatanaSwing = katanaAttackId;
+                        DamageEnemy(enemy, (int)ceilf(BibleContactDamage()*EncounterDamage(&encounter)));
+                        KnockbackEnemy(enemy, &clearing, player, 36.0f);
+                        enemy->bibleHitCooldown = 0.45f;
+                    }
+                    if (weaponLevel >= 4 && BibleHolyWaterHits(&bible, enemy->position, EnemyHurtRadius(enemy))) {
+                        DamageEnemy(enemy, (int)ceilf(8 * EncounterDamage(&encounter)));
+                    }
+                } else if (currentWeapon == WEAPON_KATANA) {
+                    if (katanaAttackRemaining > 0.0f &&
+                        katanaAttackRemaining <= katanaAttackDuration*0.5f &&
+                        enemy->lastKatanaSwing != katanaAttackId) {
+                        Vector2 delta = Vector2Subtract(center, playerCenter);
+                        float distance = Vector2Length(delta);
+                        if (distance < katanaAttackRange+EnemyHurtRadius(enemy) && distance > 0.0f &&
+                            Vector2DotProduct(delta, katanaAttackDirection) >= katanaArcDot*distance &&
+                            MapHasClearPath(&clearing,player,enemy->position)) {
+                            DamageEnemy(enemy, (int)ceilf(25*EncounterDamage(&encounter)));
+                            enemy->lastKatanaSwing = katanaAttackId;
+                            if (weaponLevel >= 2 && !katanaDashReducedThisSwing) {
+                                dodgeCooldown = fmaxf(0.0f, dodgeCooldown - 0.6f);
+                                katanaDashReducedThisSwing = true;
+                            }
+                            if (weaponLevel >= 3) {
+                                KnockbackEnemy(enemy, &clearing, player, 42.0f);
+                            }
+                        }
+                    }
+                    for (int s = 0; s < KATANA_MAX_SHOCKWAVES; s++) {
+                        KatanaShockwave *wave = &katanaShockwaves[s];
+                        if (wave->life <= 0.0f || wave->hitEnemies[i]) continue;
+                        float limit = KATANA_SHOCKWAVE_RADIUS + EnemyHurtRadius(enemy);
+                        if (Vector2DistanceSqr(wave->position, center) <= limit * limit) {
+                            DamageEnemy(enemy, (int)ceilf(22 * EncounterDamage(&encounter)));
+                            wave->hitEnemies[i] = true;
+                        }
                     }
                 }
             }
@@ -753,6 +874,7 @@ int main(void) {
             BeginMode2D(camera);
                 DrawClearing(&clearing);
                 if (altarOpen) DrawClearingAltarGlow(&clearing, (float)GetTime());
+                if (currentWeapon == WEAPON_BIBLE) DrawBiblePools(&bible);
                 DrawEnemies(&enemies, player, false);
                 if (currentWeapon == WEAPON_BIBLE) DrawBible(&bible, player, false);
                 if (currentWeapon == WEAPON_BIBLE) DrawBibleActivation(&bible, player);
@@ -818,7 +940,7 @@ int main(void) {
                     if (attacking && katanaAttackRemaining <= katanaAttackDuration * .5f) {
                         Vector2 center = {player.x, player.y - 35};
                         float angle = atan2f(katanaAttackDirection.y, katanaAttackDirection.x) * RAD2DEG;
-                        float halfArc = acosf(-.12f) * RAD2DEG;
+                        float halfArc = acosf(katanaArcDot) * RAD2DEG;
                         float opacity = katanaAttackRemaining / (katanaAttackDuration * .5f);
                         DrawRing(center, katanaAttackRange - 7, katanaAttackRange,
                                  angle - halfArc, angle + halfArc, 32, Fade(MAROON, opacity * .55f));
@@ -829,6 +951,16 @@ int main(void) {
                         bodySource,
                         bodyDestination,
                         (Vector2) { 0, 0 }, 0.0f, WHITE);
+                }
+                for (int s = 0; s < KATANA_MAX_SHOCKWAVES; s++) {
+                    const KatanaShockwave *wave = &katanaShockwaves[s];
+                    if (wave->life <= 0.0f) continue;
+                    float angle = atan2f(wave->direction.y, wave->direction.x) * RAD2DEG;
+                    float alpha = fminf(1.0f, wave->life / 0.25f);
+                    DrawRing(wave->position, 18.0f, 34.0f, angle - 48.0f, angle + 48.0f, 20,
+                             Fade(RED, 0.72f * alpha));
+                    DrawRing(wave->position, 26.0f, 34.0f, angle - 42.0f, angle + 42.0f, 20,
+                             Fade((Color){255, 130, 130, 255}, 0.85f * alpha));
                 }
                 if (currentWeapon == WEAPON_BIBLE) DrawBible(&bible, player, true);
                 if (currentWeapon == WEAPON_GUN) DrawGun(&gun);
@@ -863,8 +995,11 @@ int main(void) {
             } else if (nearPedestal) {
                 DrawGameText("O altar está selado", 24, 53 + hudOffset, 18, GOLD);
             } else {
-                DrawGameText(nearExit ? "Vila: próxima etapa do desenvolvimento"
-                    : clearing.cemetery ? "Cemitério das Raízes" : "Explore a clareira",
+                DrawGameText(nearExit
+                    ? (clearing.village ? "Capela do Anjo: próxima etapa do desenvolvimento"
+                                        : "Saída para a Vila Lascada")
+                    : (clearing.village ? "Vila Lascada"
+                        : (clearing.cemetery ? "Cemitério das Raízes" : "Explore a clareira")),
                     24, 53 + hudOffset, 18, RAYWHITE);
             }
             DrawHud(&hud, playerHealth, playerMaxHealth,

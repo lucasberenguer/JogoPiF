@@ -1,15 +1,30 @@
 #include "bible.h"
 #include <math.h>
+#include <string.h>
 
-#define BIBLE_COUNT 4
-#define BIBLE_RADIUS 90.0f
 #define BIBLE_HIT_RADIUS 17.0f
+#define BIBLE_POOL_RADIUS 62.0f
+#define BIBLE_POOL_DURATION 3.0f
+#define BIBLE_POOL_INTERVAL 3.5f
+#define BIBLE_POOL_TICK 0.45f
 #define BIBLE_PI 3.14159265358979323846f
 
+static int BibleBookCount(int level) {
+    if (level >= 3) return 6;
+    if (level >= 1) return 5;
+    return 4;
+}
+
+static float BibleOrbitRadius(int level) {
+    return level >= 1 ? 102.0f : 90.0f;
+}
+
 static Vector2 BookCenter(const Bible *b, Vector2 player, int index) {
-    float angle = b->angle + index * (2.0f * BIBLE_PI / BIBLE_COUNT);
-    return (Vector2){player.x + cosf(angle) * BIBLE_RADIUS,
-                     player.y - 34.0f + sinf(angle) * BIBLE_RADIUS};
+    int count = BibleBookCount(b->level);
+    float radius = BibleOrbitRadius(b->level);
+    float angle = b->angle + index * (2.0f * BIBLE_PI / count);
+    return (Vector2){player.x + cosf(angle) * radius,
+                     player.y - 34.0f + sinf(angle) * radius};
 }
 
 bool InitBible(Bible *b) {
@@ -40,12 +55,17 @@ void ResetBible(Bible *b) {
     b->boostRemaining = 0.0f;
     b->boostCooldown = 0.0f;
     b->activationRemaining = 0.0f;
+    b->level = 0;
+    b->holyWaterCooldown = 0.6f;
+    memset(b->pools, 0, sizeof(b->pools));
 }
 
-void UpdateBible(Bible *b, float dt, bool activate) {
+void UpdateBible(Bible *b, float dt, bool activate, int level,
+                 bool inCombat, Vector2 player) {
+    b->level = level;
     if (activate && b->boostCooldown <= 0.0f) {
-        b->boostRemaining = 1.25f;
-        b->boostCooldown = 4.0f;
+        b->boostRemaining = level >= 2 ? 1.65f : 1.25f;
+        b->boostCooldown = level >= 2 ? 2.8f : 4.0f;
         b->activationRemaining = BIBLE_ACTIVATION_DURATION;
     }
     bool boosted = b->boostRemaining > 0.0f;
@@ -56,29 +76,70 @@ void UpdateBible(Bible *b, float dt, bool activate) {
     if (b->boostCooldown > 0.0f) b->boostCooldown = fmaxf(0.0f, b->boostCooldown - dt);
     if (b->activationRemaining > 0.0f)
         b->activationRemaining = fmaxf(0.0f, b->activationRemaining - dt);
+
+    if (level >= 4 && inCombat) {
+        b->holyWaterCooldown -= dt;
+        if (b->holyWaterCooldown <= 0.0f) {
+            int slot = 0;
+            for (int i = 0; i < BIBLE_MAX_POOLS; i++) {
+                if (b->pools[i].remaining <= 0.0f) { slot = i; break; }
+                if (b->pools[i].remaining < b->pools[slot].remaining) slot = i;
+            }
+            b->pools[slot] = (HolyWaterPool){player, BIBLE_POOL_DURATION, 0.0f, false};
+            b->holyWaterCooldown = BIBLE_POOL_INTERVAL;
+        }
+    }
+    for (int i = 0; i < BIBLE_MAX_POOLS; i++) {
+        HolyWaterPool *p = &b->pools[i];
+        p->tickReady = false;
+        if (p->remaining <= 0.0f) continue;
+        p->remaining = fmaxf(0.0f, p->remaining - dt);
+        p->tickTimer -= dt;
+        if (p->tickTimer <= 0.0f) {
+            p->tickReady = true;
+            p->tickTimer = BIBLE_POOL_TICK;
+        }
+    }
+}
+
+void DrawBiblePools(const Bible *b) {
+    for (int i = 0; i < BIBLE_MAX_POOLS; i++) {
+        const HolyWaterPool *p = &b->pools[i];
+        if (p->remaining <= 0.0f) continue;
+        float alpha = fminf(1.0f, p->remaining / 0.6f);
+        float pulse = 1.0f + 0.05f * sinf(b->animationTime * 6.0f + (float)i);
+        float r = BIBLE_POOL_RADIUS * pulse;
+        DrawCircleV(p->position, r, Fade((Color){60, 175, 255, 255}, 0.24f * alpha));
+        DrawCircleLines((int)p->position.x, (int)p->position.y, r,
+                        Fade((Color){155, 230, 255, 255}, 0.65f * alpha));
+        DrawCircleLines((int)p->position.x, (int)p->position.y, r * 0.62f,
+                        Fade(WHITE, 0.35f * alpha));
+    }
 }
 
 void DrawBible(const Bible *b, Vector2 player, bool foreground) {
     Vector2 orbitCenter = {player.x, player.y - 34.0f};
+    int count = BibleBookCount(b->level);
+    float radius = BibleOrbitRadius(b->level);
     if (!foreground) {
         for (int i=0; i<72; i++) {
             float a = i * (2.0f * BIBLE_PI / 72.0f);
             float next = (i+1) * (2.0f * BIBLE_PI / 72.0f);
-            Vector2 p = {orbitCenter.x + cosf(a)*BIBLE_RADIUS,
-                         orbitCenter.y + sinf(a)*BIBLE_RADIUS};
-            Vector2 q = {orbitCenter.x + cosf(next)*BIBLE_RADIUS,
-                         orbitCenter.y + sinf(next)*BIBLE_RADIUS};
+            Vector2 p = {orbitCenter.x + cosf(a)*radius,
+                         orbitCenter.y + sinf(a)*radius};
+            Vector2 q = {orbitCenter.x + cosf(next)*radius,
+                         orbitCenter.y + sinf(next)*radius};
             DrawLineEx(p, q, 1.2f, Fade(GOLD, 0.18f));
         }
     }
-    for (int i=0; i<BIBLE_COUNT; i++) {
+    for (int i=0; i<count; i++) {
         Vector2 center = BookCenter(b, player, i);
         if ((center.y >= orbitCenter.y) != foreground) continue;
-        float angle = b->angle + i * (2.0f * BIBLE_PI / BIBLE_COUNT);
+        float angle = b->angle + i * (2.0f * BIBLE_PI / count);
         for (int j=1; j<=3; j++) {
             float trailAngle = angle - j * 0.11f;
-            Vector2 trail = {orbitCenter.x + cosf(trailAngle)*BIBLE_RADIUS,
-                             orbitCenter.y + sinf(trailAngle)*BIBLE_RADIUS};
+            Vector2 trail = {orbitCenter.x + cosf(trailAngle)*radius,
+                             orbitCenter.y + sinf(trailAngle)*radius};
             DrawCircleV(trail, j==1 ? 2.8f : 1.6f,
                         Fade(GOLD, (b->boostRemaining>0.0f ? 0.55f : 0.32f)/j));
         }
@@ -110,9 +171,27 @@ void DrawBibleActivation(const Bible *b, Vector2 player) {
 bool BibleTouchesCircle(const Bible *b, Vector2 player,
                         Vector2 enemy, float enemyRadius) {
     float limit = BIBLE_HIT_RADIUS + enemyRadius;
-    for (int i=0; i<BIBLE_COUNT; i++) {
+    int count = BibleBookCount(b->level);
+    for (int i=0; i<count; i++) {
         Vector2 book = BookCenter(b, player, i);
         float dx = book.x - enemy.x, dy = book.y - enemy.y;
+        if (dx*dx + dy*dy <= limit*limit) return true;
+    }
+    return false;
+}
+
+bool BibleBlocksCircle(const Bible *b, Vector2 player,
+                       Vector2 point, float radius) {
+    if (b->level < 3 || b->boostRemaining <= 0.0f) return false;
+    return BibleTouchesCircle(b, player, point, radius + 8.0f);
+}
+
+bool BibleHolyWaterHits(const Bible *b, Vector2 enemy, float enemyRadius) {
+    float limit = BIBLE_POOL_RADIUS + enemyRadius;
+    for (int i = 0; i < BIBLE_MAX_POOLS; i++) {
+        const HolyWaterPool *p = &b->pools[i];
+        if (p->remaining <= 0.0f || !p->tickReady) continue;
+        float dx = p->position.x - enemy.x, dy = p->position.y - enemy.y;
         if (dx*dx + dy*dy <= limit*limit) return true;
     }
     return false;

@@ -169,6 +169,51 @@ bool InitCemetery(Clearing *map) {
     return true;
 }
 
+void ConfigureVillageBoundary(Clearing *map) {
+    float w = (float)map->background.width, h = (float)map->background.height;
+    const float pts[][2] = {
+        {0.00f, 0.44f}, {0.15f, 0.44f}, {0.22f, 0.46f}, {0.35f, 0.46f}, {0.40f, 0.36f},
+        {0.43f, 0.28f}, {0.46f, 0.24f}, {0.46f, 0.16f}, {0.55f, 0.16f}, {0.55f, 0.24f},
+        {0.58f, 0.28f}, {0.62f, 0.42f}, {0.78f, 0.49f}, {0.83f, 0.46f}, {0.88f, 0.52f},
+        {0.84f, 0.65f}, {0.79f, 0.77f}, {0.70f, 0.78f}, {0.65f, 0.85f}, {0.58f, 0.85f},
+        {0.53f, 0.80f}, {0.42f, 0.80f}, {0.36f, 0.83f}, {0.29f, 0.78f}, {0.24f, 0.69f},
+        {0.19f, 0.59f}, {0.12f, 0.55f}, {0.00f, 0.55f}
+    };
+    map->boundaryCount = (int)(sizeof(pts) / sizeof(pts[0]));
+    for (int i = 0; i < map->boundaryCount; i++) {
+        map->boundary[i] = (Vector2){pts[i][0] * w, pts[i][1] * h};
+    }
+}
+
+bool InitVillage(Clearing *map) {
+    *map = (Clearing){0};
+    map->background = LoadTexture("assets/vila.png");
+    if (!map->background.id) return false;
+    SetTextureFilter(map->background, TEXTURE_FILTER_POINT);
+    Image colImg = LoadImage("assets/vila_collision.png");
+    if (colImg.data == NULL || colImg.width != map->background.width ||
+        colImg.height != map->background.height) {
+        if (colImg.data != NULL) UnloadImage(colImg);
+        UnloadClearing(map);
+        return false;
+    }
+    map->collisionPixels = LoadImageColors(colImg);
+    map->collisionGuide = LoadTextureFromImage(colImg);
+    UnloadImage(colImg);
+    if (map->collisionPixels == NULL || map->collisionGuide.id == 0) {
+        UnloadClearing(map);
+        return false;
+    }
+    SetTextureFilter(map->collisionGuide, TEXTURE_FILTER_POINT);
+    map->village = true;
+    float w = (float)map->background.width, h = (float)map->background.height;
+    map->playableBounds = (Rectangle){0.0f, 0.0f, w, h};
+    map->spawn = (Vector2){w * 0.08f, h * 0.465f};
+    map->pedestal = (Vector2){-1000.0f, -1000.0f};
+    map->exit = (Rectangle){w * 0.43f, h * 0.21f, w * 0.14f, h * 0.06f};
+    return true;
+}
+
 void ConfigureClearingBoundary(Clearing *map) {
     const Vector2 outline[] = {
         {190,238},
@@ -461,9 +506,9 @@ void DrawClearingCollisionGuide(const Clearing *clearing) {
         for (int j=0;j<shape->count;j++)
             DrawLineEx(shape->vertices[j],shape->vertices[(j+1)%shape->count],2,RED);
     }
-    if (clearing->cemetery) DrawRectangleLinesEx(clearing->exit,2,GREEN);
+    if (clearing->cemetery || clearing->village) DrawRectangleLinesEx(clearing->exit,2,GREEN);
     if (!clearing->boundaryCount) DrawRectangleLinesEx(clearing->playableBounds, 3.0f, RED);
-    if (!clearing->cemetery)
+    if (!clearing->cemetery && !clearing->village)
         DrawCircleLines((int) clearing->pedestal.x,
                         (int) clearing->pedestal.y, CLEARING_ALTAR_RADIUS, BLUE);
 }
@@ -476,7 +521,7 @@ bool IsClearingBlocked(const Clearing *clearing, Vector2 point) {
         if (!CheckCollisionPointPoly(point,clearing->boundary,clearing->boundaryCount)) return true;
         for (int i=0;i<clearing->shapeCount;i++)
             if (CheckCollisionPointPoly(point,clearing->shapes[i].vertices,clearing->shapes[i].count)) return true;
-        if (clearing->cemetery) return false;
+        if (clearing->cemetery || clearing->village) return false;
         /* Isolated small altar stone remains solid inside the new perimeter. */
         Vector2 rock={clearing->background.width*.622f,clearing->background.height*.228f};
         return CheckCollisionPointCircle(point,rock,22);

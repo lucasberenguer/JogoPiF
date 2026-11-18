@@ -3,7 +3,7 @@
 #include "raylib.h"
 #include "clearing.h"
 
-#define GUN_MAX_SHOTS 48
+#define GUN_MAX_SHOTS 96
 #define GUN_MAX_IMPACTS 16
 #define GUN_POSE_DURATION 0.32f
 #define GUN_POSE_FRAMES 8
@@ -29,13 +29,14 @@ typedef struct Gun {
     Vector2 aim;
     float poseRemaining;
     float shotCooldown;
+    int level;
 } Gun;
 
 bool InitGun(Gun *gun);
 void UnloadGun(Gun *gun);
 void ResetGun(Gun *gun);
 void UpdateGun(Gun *gun, const Clearing *clearing, Vector2 player,
-               Vector2 aimWorld, float deltaTime, bool triggerPressed);
+               Vector2 aimWorld, float deltaTime, bool triggerPressed, int level);
 void DrawGun(const Gun *gun);
 int GunHitCircle(Gun *gun, Vector2 enemy, float enemyRadius);
 #endif

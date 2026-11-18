@@ -26,10 +26,15 @@ static void StartStage(Encounter *e, EnemyGroup *enemies, const Clearing *cleari
         e->phase = ENCOUNTER_CLEAR;
     } else {
         e->phase = ENCOUNTER_FIGHT;
-        BeginStagePresentation(&e->presentation,e->progress.stage,clearing->cemetery?"Cemitério das Raízes":"Clareira do Selo",
-            e->progress.stage==CLEARING_BOSS_STAGE?(clearing->cemetery?"Coveiro das Raízes":"Guardião da Clareira"):NULL);
-        if (clearing->cemetery) e->presentation.portraitCenterX=.73f;
-        e->guardianIntroPending=!clearing->cemetery && e->progress.stage==CLEARING_BOSS_STAGE &&
+        const char *areaTitle = clearing->village ? "Vila Lascada"
+            : (clearing->cemetery ? "Cemitério das Raízes" : "Clareira do Selo");
+        const char *bossTitle = clearing->village ? "Líder da Vila"
+            : (clearing->cemetery ? "Coveiro das Raízes" : "Guardião da Clareira");
+        BeginStagePresentation(&e->presentation,e->progress.stage,areaTitle,
+            e->progress.stage==CLEARING_BOSS_STAGE?bossTitle:NULL);
+        if (clearing->cemetery || clearing->village) e->presentation.portraitCenterX=.73f;
+        e->guardianIntroPending=!clearing->cemetery && !clearing->village &&
+                                e->progress.stage==CLEARING_BOSS_STAGE &&
                                 !e->progress.guardianIntroSeen;
         if (e->progress.stage == CLEARING_BOSS_STAGE) StartArenaBoss(enemies, clearing, player, e->progress.bossPower);
         else StartEnemyWave(enemies, clearing, e->progress.stage, player, e->progress.damage);
@@ -38,14 +43,17 @@ static void StartStage(Encounter *e, EnemyGroup *enemies, const Clearing *cleari
 
 void BeginEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing,
                     RunProgress progress, Vector2 player) {
-    progress.map=clearing->cemetery?1:0;
+    progress.map = clearing->village ? 2 : (clearing->cemetery ? 1 : 0);
+    if (clearing->village && progress.stage < CLEARING_BOSS_STAGE)
+        progress.stage = CLEARING_BOSS_STAGE;
     *e = (Encounter){.progress=progress, .sealEnemy=-1};
     StartStage(e, enemies, clearing, player);
     BeginAreaEntry(&e->presentation);
 }
 
 bool EncounterPaused(const Encounter *e) {
-    return e->guardianIntroPending || e->presentation.remaining>0 || e->phase == ENCOUNTER_REWARD || e->phase == ENCOUNTER_SEAL || e->phase == ENCOUNTER_DEFEAT;
+    return e->guardianIntroPending || e->presentation.remaining>0 || e->phase == ENCOUNTER_REWARD ||
+           e->phase == ENCOUNTER_SEAL || e->phase == ENCOUNTER_LETTER || e->phase == ENCOUNTER_DEFEAT;
 }
 
 void CompleteGuardianIntro(Encounter *e, bool cinematicPlayed) {
@@ -58,7 +66,7 @@ void CompleteGuardianIntro(Encounter *e, bool cinematicPlayed) {
 }
 
 bool ClearingAltarOpen(const Encounter *e, const Clearing *clearing) {
-    return !clearing->cemetery && e->phase == ENCOUNTER_CLEAR &&
+    return !clearing->cemetery && !clearing->village && e->phase == ENCOUNTER_CLEAR &&
            e->progress.stage == CLEARING_COMPLETE_STAGE;
 }
 
@@ -66,6 +74,14 @@ bool CanEnterCemetery(const Encounter *e, const Clearing *clearing,
                       Vector2 player, bool interactPressed) {
     return interactPressed && ClearingAltarOpen(e, clearing) && !EncounterPaused(e) &&
            CheckCollisionPointCircle(player, clearing->pedestal, CLEARING_ALTAR_RADIUS);
+}
+
+bool CanEnterVillage(const Encounter *e, const Clearing *clearing,
+                     Vector2 player, bool interactPressed) {
+    (void)interactPressed;
+    return clearing->cemetery && e->phase == ENCOUNTER_CLEAR &&
+           e->progress.stage == CLEARING_COMPLETE_STAGE && !EncounterPaused(e) &&
+           CheckCollisionPointRec(player, clearing->exit);
 }
 
 float EncounterDamage(const Encounter *e) {
@@ -90,7 +106,7 @@ static void RollRewards(Encounter *e) {
     int swap = GetRandomValue(0,99) < 80 ? GetRandomValue(0,2) : -1;
     for (int i=0; i<3; i++) {
         int kind=GetRandomValue(0,3);
-        if (kind == REWARD_WEAPON && e->progress.weaponLevel[e->progress.weapon] >= 3)
+        if (kind == REWARD_WEAPON && e->progress.weaponLevel[e->progress.weapon] >= 4)
             kind=REWARD_DAMAGE;
         if (i==swap) kind=REWARD_SWAP;
         e->rewards[i]=(Reward){kind, kind==REWARD_SWAP ?
@@ -125,7 +141,7 @@ static void ApplyReward(Encounter *e, Reward reward, int *health) {
     } else if (reward.kind==REWARD_SPEED) e->progress.speed+=15;
     else if (reward.kind==REWARD_WEAPON) {
         if (strong) e->progress.strongWeapon=e->progress.weapon;
-        else if (e->progress.weaponLevel[e->progress.weapon]<3) e->progress.weaponLevel[e->progress.weapon]++;
+        else if (e->progress.weaponLevel[e->progress.weapon]<4) e->progress.weaponLevel[e->progress.weapon]++;
     } else {
         int old=e->progress.weapon;
         e->progress.weapon=reward.weapon;
@@ -199,6 +215,12 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
     if (*health<=0) { e->phase=ENCOUNTER_DEFEAT; return false; }
     if (e->guardianIntroPending || e->presentation.remaining>0) return false;
     if (e->phase==ENCOUNTER_FIGHT) {
+        if (e->progress.map == 2 && !e->villageHordeStarted &&
+            enemies->list[0].type == ENEMY_BOSS && enemies->list[0].state == ENEMY_FALLEN) {
+            ClearEnemyAttacks(enemies);
+            e->phase = ENCOUNTER_LETTER;
+            return false;
+        }
         if (EnemiesRemaining(enemies)==0) {
             ClearEnemyAttacks(enemies);
             if (e->progress.stage==CLEARING_BOSS_STAGE) {
@@ -206,16 +228,33 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
                 e->progress.health=*health;
                 e->phase=ENCOUNTER_CLEAR;
                 e->notice[0]=0;
-                BeginStagePresentation(&e->presentation,0,e->progress.map?"A vila sera a proxima etapa":"O altar agora leva ao cemiterio",NULL);
-                e->presentation.announcement=e->progress.map?"CEMITERIO LIMPO":"CLAREIRA LIMPA";
+                const char *sub = e->progress.map == 2
+                    ? "Ultimo registro: \"Sobrevivi, mas falhei em salva-los...\""
+                    : (e->progress.map == 1 ? "A saida a direita leva a Vila Lascada"
+                                            : "O altar agora leva ao cemiterio");
+                BeginStagePresentation(&e->presentation, 0, sub, NULL);
+                e->presentation.announcement = e->progress.map == 2 ? "VILA LASCADA LIMPA"
+                    : (e->progress.map == 1 ? "CEMITERIO LIMPO" : "CLAREIRA LIMPA");
                 e->presentation.duration=e->presentation.remaining=2.5f;
-                QueueAreaUnlock(&e->presentation,e->progress.map?"Vila Abandonada":"Cemitério das Raízes");
+                QueueAreaUnlock(&e->presentation, e->progress.map == 2 ? "Capela do Anjo"
+                    : (e->progress.map == 1 ? "Vila Lascada" : "Cemitério das Raízes"));
                 if (!e->practice) SaveClearingCheckpoint(&e->progress);
             } else {
                 e->phase=ENCOUNTER_REWARD; e->rerolled=false; RollRewards(e);
             }
-        } else if (IsKeyPressed(KEY_E)) {
+        } else if (IsKeyPressed(KEY_E) && !(e->progress.map == 2 && !e->villageHordeStarted)) {
             OpenEncounterSeal(e,enemies,player);
+        }
+    } else if (e->phase==ENCOUNTER_LETTER) {
+        if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_E) ||
+            IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            e->villageHordeStarted = true;
+            e->phase = ENCOUNTER_FIGHT;
+            StartVillageHorde(enemies, clearing, player, e->progress.damage);
+            BeginStagePresentation(&e->presentation, 0, "Os aldeoes mortos erguem-se da terra!", NULL);
+            e->presentation.announcement = "A MALDICAO DESPERTA";
+            e->presentation.duration = e->presentation.remaining = 2.2f;
+            return true;
         }
     } else if (e->phase==ENCOUNTER_REWARD) {
         if (IsKeyPressed(KEY_R) && !e->rerolled) { e->rerolled=true; RollRewards(e); }
@@ -238,21 +277,52 @@ static const char *RewardText(const Encounter *e, Reward reward) {
         case REWARD_DAMAGE: return "Dano\n+15% de dano base";
         case REWARD_HEALTH: return "Vida maxima\n+20 de vida";
         case REWARD_SPEED: return "Velocidade\n+15 de velocidade";
-        case REWARD_WEAPON: return TextFormat("%s\nUpgrade %d/3\nDano +20%%",WeaponTitle(reward.weapon),e->progress.weaponLevel[reward.weapon]+1);
+        case REWARD_WEAPON: {
+            int nextLevel = e->progress.weaponLevel[reward.weapon] + 1;
+            const char *perk = "Dano +20%";
+            if (reward.weapon == 0) {
+                if (nextLevel == 1) perk = "Lamina Estendida (+alcance)";
+                else if (nextLevel == 2) perk = "Passo da Ordem (-recarga dash)";
+                else if (nextLevel == 3) perk = "Corte Amplo (+arco e recuo)";
+                else if (nextLevel == 4) perk = "Onda Rubra (onda de choque)";
+            } else if (reward.weapon == 1) {
+                if (nextLevel == 1) perk = "Canone Expandido (5 livros)";
+                else if (nextLevel == 2) perk = "Vortice Sagrado (+aceleracao)";
+                else if (nextLevel == 3) perk = "Escudo (6 livros, bloqueia tiros)";
+                else if (nextLevel == 4) perk = "Agua Benta (poca de dano)";
+            } else if (reward.weapon == 2) {
+                if (nextLevel == 1) perk = "Cadencia Rapida (+tiros/vel)";
+                else if (nextLevel == 2) perk = "Disparo Duplo (2 projeteis)";
+                else if (nextLevel == 3) perk = "Disparo Triplo (3 projeteis)";
+                else if (nextLevel == 4) perk = "Pistolas Duplas (2x os tiros)";
+            }
+            return TextFormat("%s (%d/4)\n%s\nDano +20%%", WeaponTitle(reward.weapon), nextLevel, perk);
+        }
         default: return TextFormat("Trocar por %s\nSubstitui a arma atual\nBonus surpresa",WeaponTitle(reward.weapon));
     }
 }
 
 void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
     if (e->presentation.remaining>0) {
-        DrawStagePresentation(&e->presentation,e->progress.map?enemies->cemeteryPortrait:enemies->bossPortrait,1,1);
+        DrawStagePresentation(&e->presentation,e->progress.map==1?enemies->cemeteryPortrait:enemies->bossPortrait,1,1);
         return;
     }
     bool bossVisible = EncounterBossVisible(e, enemies);
     int statusY = 205 + (bossVisible ? ENCOUNTER_BOSS_HUD_HEIGHT : 0);
+    const char *mapLabel = e->progress.map == 2 ? "Vila Lascada"
+        : (e->progress.map == 1 ? "Cemitério" : "Clareira");
+    const char *clearLabel = e->progress.map == 2 ? "Vila Lascada limpa - siga pelo arco ao topo"
+        : (e->progress.map == 1 ? "Cemitério limpo - siga pela saída à direita"
+                                : "Clareira limpa - altar liberado");
+    const char *bossLabel = e->progress.map == 2 ? "Líder da Vila"
+        : (e->progress.map == 1 ? "Coveiro das Raízes" : "Guardião da Clareira");
     if (e->progress.stage<=CLEARING_WAVES) DrawGameText(TextFormat("%s - onda %d/5 | Restantes: %d",
-        e->progress.map?"Cemitério":"Clareira",e->progress.stage,EnemiesRemaining(enemies)),24,statusY,20,GOLD);
-    else DrawGameText(e->phase==ENCOUNTER_CLEAR ? (e->progress.map?"Cemitério limpo":"Clareira limpa - altar liberado") : (e->progress.map?"Onda 5/5 - Coveiro das Raízes":"Onda 5/5 - Guardião da Clareira"),24,statusY,20,GOLD);
+        mapLabel,e->progress.stage,EnemiesRemaining(enemies)),24,statusY,20,GOLD);
+    else DrawGameText(e->phase==ENCOUNTER_CLEAR ? clearLabel :
+        (e->progress.map == 2 ? (e->villageHordeStarted ?
+            TextFormat("Horda da Vila - Restantes: %d", EnemiesRemaining(enemies)) :
+            "Duelo - Líder da Vila")
+            : TextFormat("Onda 5/5 - %s", bossLabel)),24,statusY,20,GOLD);
     if (e->notice[0]) DrawGameText(e->notice,24,statusY+27,18,RAYWHITE);
     if (bossVisible) {
         const Enemy *boss=&enemies->list[0];
@@ -264,12 +334,37 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         DrawRectangle(x,31,w,16,DARKGRAY);
         DrawRectangle(x,31,w*boss->health/boss->maxHealth,16,phaseTwo ? PURPLE : MAROON);
         DrawRectangle(x+w/2,31,2,16,Fade(GOLD,.65f));
-        const char *label = TextFormat("%s  %d/%d  |  %s",e->progress.map?"Coveiro das Raízes":"Guardião da Clareira",
+        const char *label = TextFormat("%s  %d/%d  |  %s",bossLabel,
                                        boss->health,boss->maxHealth,phase);
         DrawGameText(label,(GetScreenWidth()-MeasureGameText(label,18))/2,10,18,GOLD);
     }
     if (!EncounterPaused(e)) return;
     DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,.86f));
+    if (e->phase == ENCOUNTER_LETTER) {
+        int sw = GetScreenWidth(), sh = GetScreenHeight();
+        int bw = (int)fminf(720.0f, sw - 80.0f), bh = 380;
+        int bx = (sw - bw) / 2, by = (sh - bh) / 2;
+        DrawRectangle(bx, by, bw, bh, (Color){38, 28, 22, 245});
+        DrawRectangleLinesEx((Rectangle){(float)bx, (float)by, (float)bw, (float)bh}, 2, GOLD);
+        const char *ltitle = "Último Registro do Líder da Vila";
+        DrawGameTextIn(ltitle, (Rectangle){(float)bx, (float)(by + 18), (float)bw, 34}, 28, GOLD, true);
+        static const char *lines[] = {
+            "\"Quando a névoa rubra desceu sobre a Vila Lascada, nenhum",
+            "dos nossos conseguiu resistir à febre que tomou o vale.",
+            "Enterramos dezenas no Cemitério das Raízes antes que os",
+            "próprios mortos começassem a responder ao chamado do selo.",
+            "",
+            "Eu fui o único que permaneceu de pé, preso à culpa de",
+            "sobreviver... Se você me derrubou, cuidado: a terra da",
+            "vila ainda guarda os que não descansaram.\""
+        };
+        for (int i = 0; i < 8; i++) {
+            DrawGameText(lines[i], bx + 36, by + 76 + i * 28, 19, RAYWHITE);
+        }
+        const char *hint = "[Espaço / Enter / Clique] Continuar";
+        DrawGameText(hint, (sw - MeasureGameText(hint, 19)) / 2, by + bh - 44, 19, GOLD);
+        return;
+    }
     int titleY=(int)(GetScreenHeight()/2-160);
     const char *title=e->phase==ENCOUNTER_REWARD ? "Escolha seu bônus" :
                       e->phase==ENCOUNTER_SEAL ? "Selo - combate pausado" : "Fim da tentativa";

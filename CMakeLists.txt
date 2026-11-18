@@ -31,6 +31,7 @@ set(SOURCES
     src/gun.c
     src/enemy.c
     src/cemetery_enemy.c
+    src/village_enemy.c
     src/encounter.c
     src/presentation.c
 )
@@ -43,7 +44,7 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
-    add_executable(enemy_audit_test tests/enemy_audit_test.c src/enemy.c src/cemetery_enemy.c src/clearing.c src/game_text.c)
+    add_executable(enemy_audit_test tests/enemy_audit_test.c src/enemy.c src/cemetery_enemy.c src/village_enemy.c src/clearing.c src/game_text.c)
     target_include_directories(enemy_audit_test PRIVATE src)
     target_link_libraries(enemy_audit_test PRIVATE raylib)
     add_test(NAME enemy_audit COMMAND enemy_audit_test)
@@ -55,7 +56,7 @@ if(BUILD_TESTING)
     target_include_directories(player_collision_test PRIVATE src)
     target_link_libraries(player_collision_test PRIVATE raylib)
     add_test(NAME player_collision COMMAND player_collision_test)
-    add_executable(encounter_test tests/encounter_test.c src/encounter.c src/presentation.c src/enemy.c src/cemetery_enemy.c src/clearing.c src/menu.c src/menu_video.c src/game_audio.c src/game_text.c src/dev_tools.c)
+    add_executable(encounter_test tests/encounter_test.c src/encounter.c src/presentation.c src/enemy.c src/cemetery_enemy.c src/village_enemy.c src/clearing.c src/menu.c src/menu_video.c src/game_audio.c src/game_text.c src/dev_tools.c)
     target_include_directories(encounter_test PRIVATE src)
     target_link_libraries(encounter_test PRIVATE raylib)
     if(WIN32)
