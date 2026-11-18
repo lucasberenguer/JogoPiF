@@ -27,8 +27,10 @@ static CinematicTransition Transition(const char *value) {
     return CINEMATIC_CUT;
 }
 
-static bool LoadSequence(GuardianCutscene *scene) {
-    char *data = LoadFileText(GUARDIAN_DIR "data/sequencia.ini");
+static bool LoadSequence(GuardianCutscene *scene, const char *sequence) {
+    char path[384];
+    snprintf(path,sizeof(path),"%sdata/%s",scene->assetDirectory,sequence);
+    char *data = LoadFileText(path);
     if (!data) return false;
     char *content=data;
     if (!strncmp(content,"\xEF\xBB\xBF",3)) content+=3;
@@ -87,12 +89,20 @@ static bool LoadSequence(GuardianCutscene *scene) {
             if (strstr(value,"seal")) shot->effects |= CINEMATIC_SEAL;
             if (strstr(value,"corruption")) shot->effects |= CINEMATIC_CORRUPTION;
             if (strstr(value,"dust")) shot->effects |= CINEMATIC_DUST;
+            if (strstr(value,"purify")) shot->effects |= CINEMATIC_PURIFY;
+            if (strstr(value,"cyan")) shot->effects |= CINEMATIC_CYAN;
+            if (strstr(value,"gold")) shot->effects |= CINEMATIC_GOLD;
+            if (strstr(value,"wisp")) shot->effects |= CINEMATIC_WISP;
         } else if (!strcmp(key,"speaker")) snprintf(shot->speaker,sizeof(shot->speaker),"%s",value);
         else if (!strcmp(key,"dialogue")) snprintf(shot->dialogue,sizeof(shot->dialogue),"%s",value);
         else if (!strcmp(key,"audio_event")) snprintf(shot->audioEvent,sizeof(shot->audioEvent),"%s",value);
         else if (!strcmp(key,"music")) snprintf(shot->music,sizeof(shot->music),"%s",value);
         else if (!strcmp(key,"title")) snprintf(shot->title,sizeof(shot->title),"%s",value);
         else if (!strcmp(key,"subtitle")) snprintf(shot->subtitle,sizeof(shot->subtitle),"%s",value);
+        else if (!strcmp(key,"chapter")) snprintf(shot->chapter,sizeof(shot->chapter),"%s",value);
+        else if (!strcmp(key,"tagline")) snprintf(shot->tagline,sizeof(shot->tagline),"%s",value);
+        else if (!strcmp(key,"chapter_card")) shot->chapterCard=!strcmp(value,"true");
+        else if (!strcmp(key,"music_start")) shot->musicStart=strtof(value,NULL);
         else if (!strcmp(key,"next")) {
             if (strcmp(value,"duration") && strcmp(value,"advance")) valid=false;
             shot->waitsForInput = !strcmp(value,"advance");
@@ -103,6 +113,7 @@ static bool LoadSequence(GuardianCutscene *scene) {
         GuardianScene *s = &scene->scenes[i];
         const float numbers[] = {s->duration,s->fadeIn,s->fadeOut,s->cueAt,s->cueGain,s->zoomStart,s->zoomEnd,
             s->narrationAt,s->narrationDuration,s->narrationFade,
+            s->musicStart,
             s->focusStart.x,s->focusStart.y,s->focusEnd.x,s->focusEnd.y,s->sealPosition.x,s->sealPosition.y};
         for (int n=0; n<(int)(sizeof(numbers)/sizeof(*numbers)); n++)
             if (!isfinite(numbers[n])) valid=false;
@@ -118,6 +129,7 @@ static bool LoadSequence(GuardianCutscene *scene) {
             (s->narration[0] && (s->dialogue[0] || s->speaker[0] || s->title[0])) ||
             s->narrationAt<0 || s->narrationFade<=0 || s->narrationDuration<2*s->narrationFade ||
             (s->narration[0] && s->narrationAt+s->narrationDuration>s->duration) ||
+            s->musicStart<0 || (s->chapterCard && (s->dialogue[0] || s->narration[0])) ||
             (s->type==GUARDIAN_EFFECT && !s->effects && !s->audioEvent[0])) valid=false;
         for (int j=0; j<i; j++) if (!strcmp(s->id,scene->scenes[j].id)) valid=false;
     }
@@ -157,14 +169,18 @@ static void EnterScene(GuardianCutscene *scene) {
                 scene->music.looping = true;
                 SetMusicVolume(scene->music,0);
                 PlayMusicStream(scene->music);
+                if (shot->musicStart>0 && shot->musicStart<GetMusicTimeLength(scene->music))
+                    SeekMusicStream(scene->music,shot->musicStart);
             }
         }
     }
 }
 
-bool InitGuardianCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume) {
+static bool InitSequence(GuardianCutscene *scene, const char *directory, const char *sequence,
+                         float musicVolume, float effectsVolume) {
     *scene = (GuardianCutscene){.musicVolume=musicVolume,.effectsVolume=effectsVolume};
-    if (!LoadSequence(scene)) { UnloadGuardianCutscene(scene); return false; }
+    snprintf(scene->assetDirectory,sizeof(scene->assetDirectory),"%s",directory);
+    if (!LoadSequence(scene,sequence)) { UnloadGuardianCutscene(scene); return false; }
     for (int i=0; i<scene->count; i++) {
         GuardianScene *shot = &scene->scenes[i];
         shot->artIndex = -1;
@@ -172,8 +188,8 @@ bool InitGuardianCutscene(GuardianCutscene *scene, float musicVolume, float effe
             if (!strcmp(shot->image,scene->scenes[j].image)) shot->artIndex=scene->scenes[j].artIndex;
         if (shot->artIndex < 0 && shot->image[0]) {
             if (scene->artCount == GUARDIAN_ART_LIMIT) { UnloadGuardianCutscene(scene); return false; }
-            char path[256];
-            snprintf(path,sizeof(path),GUARDIAN_DIR "images/%s",shot->image);
+            char path[384];
+            snprintf(path,sizeof(path),"%simages/%s",scene->assetDirectory,shot->image);
             if (FileExists(path)) {
                 Texture2D art = LoadTexture(path);
                 if (art.id) {
@@ -185,13 +201,22 @@ bool InitGuardianCutscene(GuardianCutscene *scene, float musicVolume, float effe
             if (shot->artIndex < 0) TraceLog(LOG_WARNING,"Imagem da cutscene ausente: %s",path);
         }
         if (IsAudioDeviceReady() && shot->audioEvent[0]) {
-            char path[256];
-            snprintf(path,sizeof(path),GUARDIAN_DIR "audio/%s.wav",shot->audioEvent);
+            char path[384];
+            snprintf(path,sizeof(path),"%saudio/%s.wav",scene->assetDirectory,shot->audioEvent);
             if (FileExists(path)) shot->cue = LoadSound(path);
         }
     }
     EnterScene(scene);
     return true;
+}
+
+bool InitGuardianCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume) {
+    return InitSequence(scene,GUARDIAN_DIR,"sequencia.ini",musicVolume,effectsVolume);
+}
+
+bool InitGuardianAftermath(GuardianCutscene *scene, bool passage, float musicVolume, float effectsVolume) {
+    return InitSequence(scene,"assets/cutscenes/guardian_aftermath/",
+        passage ? "passagem.ini" : "libertacao.ini",musicVolume,effectsVolume);
 }
 
 void UnloadGuardianCutscene(GuardianCutscene *scene) {
@@ -238,6 +263,7 @@ void UpdateGuardianCutscene(GuardianCutscene *scene, float dt, GuardianCutsceneI
     if (input.skip) {
         StopCinematicAudio(scene);
         scene->finished=true;
+        scene->skipped=true;
         scene->paused=false;
         return;
     }
@@ -254,6 +280,15 @@ void UpdateGuardianCutscene(GuardianCutscene *scene, float dt, GuardianCutsceneI
         scene->letters=(float)letters;
         next=false;
     }
+    if (scene->exiting) {
+        scene->exitElapsed+=dt;
+        next=scene->exitElapsed>=shot->fadeOut;
+    } else if (next && shot->waitsForInput && shot->fadeOut>0 &&
+               (shot->transitionOut==CINEMATIC_FADE || shot->transitionOut==CINEMATIC_WHITE)) {
+        scene->exiting=true;
+        scene->exitElapsed=0;
+        next=false;
+    }
     scene->elapsed+=dt;
     scene->letters=fminf((float)letters,scene->letters+dt*34);
     if (next) {
@@ -264,6 +299,8 @@ void UpdateGuardianCutscene(GuardianCutscene *scene, float dt, GuardianCutsceneI
         }
         scene->current++;
         scene->elapsed=scene->letters=0;
+        scene->exiting=false;
+        scene->exitElapsed=0;
         EnterScene(scene);
         shot=&scene->scenes[scene->current];
     }
@@ -274,6 +311,8 @@ void UpdateGuardianCutscene(GuardianCutscene *scene, float dt, GuardianCutsceneI
             strcmp(shot->music,scene->scenes[scene->current+1].music);
         if (changesMusic && !shot->dialogue[0] && shot->fadeOut>0)
             gain=Ease((shot->duration-scene->elapsed)/shot->fadeOut);
+        if (changesMusic && scene->exiting)
+            gain*=1-Ease(scene->exitElapsed/shot->fadeOut);
         float step=dt*1.5f;
         scene->musicGain+=fmaxf(-step,fminf(step,gain-scene->musicGain));
         SetMusicVolume(scene->music,.42f*scene->musicVolume*scene->musicGain);
@@ -289,6 +328,7 @@ static Vector2 ArtPoint(Vector2 point, Rectangle source, Rectangle destination, 
 static void DrawShot(const GuardianCutscene *scene, int index, Rectangle canvas, float elapsed, float alpha) {
     const GuardianScene *shot=&scene->scenes[index];
     DrawRectangleRec(canvas,Fade((Color){15,7,13,255},alpha));
+    if (shot->chapterCard) { DrawRectangleRec(canvas,Fade(BLACK,alpha)); return; }
     if (shot->artIndex < 0) return;
     Texture2D art=scene->art[shot->artIndex];
     float progress=Ease(elapsed/shot->duration), scale=canvas.width/1280;
@@ -308,11 +348,34 @@ static void DrawShot(const GuardianCutscene *scene, int index, Rectangle canvas,
     DrawTexturePro(art,source,destination,(Vector2){0},0,Fade(WHITE,alpha));
     if (shot->effects & CINEMATIC_CORRUPTION)
         DrawRectangleRec(canvas,Fade((Color){66,4,58,255},alpha*(.035f+.025f*sinf(elapsed*1.8f))));
-    if (shot->effects & CINEMATIC_SEAL) {
+    if (shot->effects & (CINEMATIC_SEAL|CINEMATIC_CYAN|CINEMATIC_GOLD|CINEMATIC_PURIFY)) {
         Vector2 seal=ArtPoint(shot->sealPosition,source,destination,art);
         float pulse=.5f+.5f*sinf(elapsed*3.1f);
+        Color light=(shot->effects&CINEMATIC_GOLD)?(Color){255,207,112,255}:
+            (shot->effects&(CINEMATIC_CYAN|CINEMATIC_PURIFY))?(Color){91,240,233,255}:
+            (Color){238,77,173,255};
         DrawCircleGradient((int)seal.x,(int)seal.y,canvas.width*.10f,
-            Fade((Color){238,77,173,255},alpha*(.055f+.07f*pulse)),BLANK);
+            Fade(light,alpha*(.055f+.07f*pulse)),BLANK);
+    }
+    if (shot->effects&(CINEMATIC_PURIFY|CINEMATIC_CYAN|CINEMATIC_GOLD)) {
+        float purity=Ease(elapsed/4);
+        for (int i=0; i<44; i++) {
+            float seed=i*17.137f;
+            float x=canvas.x+canvas.width*fmodf(seed*.137f+sinf(elapsed*.22f+i)*.012f+1,1);
+            float y=canvas.y+canvas.height*(1-fmodf(seed*.079f+elapsed*.035f,1));
+            Color ink=(shot->effects&CINEMATIC_GOLD)?(Color){255,212,130,255}:(Color){120,250,241,255};
+            if ((shot->effects&CINEMATIC_PURIFY) && i%3==0)
+                ink=(Color){216,91,220,(unsigned char)(255*(1-purity))};
+            DrawCircleGradient((int)x,(int)y,(3+i%3)*scale,Fade(ink,alpha*.32f),BLANK);
+        }
+    }
+    if (shot->effects&CINEMATIC_WISP) {
+        float travel=Ease(elapsed/3.5f);
+        Vector2 point={.72f+(shot->sealPosition.x-.72f)*travel,
+                       .63f+(shot->sealPosition.y-.63f)*travel-sinf(travel*PI)*.12f};
+        Vector2 light=ArtPoint(point,source,destination,art);
+        DrawCircleGradient((int)light.x,(int)light.y,26*scale,Fade((Color){107,255,241,255},alpha*.5f),BLANK);
+        DrawCircleV(light,2.5f*scale,Fade((Color){218,255,244,255},alpha*.85f));
     }
     if (shot->effects & CINEMATIC_FOG) {
         for (int i=0; i<4; i++) {
@@ -460,7 +523,16 @@ void DrawGuardianCutscene(const GuardianCutscene *scene) {
             remaining-=letters+1;
         }
     }
-    if (shot->title[0]) {
+    if (shot->chapterCard) {
+        DrawGameTextIn(shot->chapter,(Rectangle){canvas.x+80*scale,canvas.y+160*scale,1120*scale,50*scale},
+                       38*scale,Fade((Color){229,187,133,255},enter),false);
+        DrawGameTextIn(shot->title,(Rectangle){canvas.x+60*scale,canvas.y+240*scale,1160*scale,85*scale},
+                       64*scale,Fade((Color){255,235,210,255},enter),true);
+        DrawGameTextIn(shot->subtitle,(Rectangle){canvas.x+60*scale,canvas.y+325*scale,1160*scale,85*scale},
+                       64*scale,Fade((Color){255,235,210,255},enter),true);
+        DrawGameTextIn(shot->tagline,(Rectangle){canvas.x+80*scale,canvas.y+455*scale,1120*scale,50*scale},
+                       30*scale,Fade((Color){229,205,171,255},enter),false);
+    } else if (shot->title[0]) {
         Rectangle band={canvas.x,canvas.y+440*scale,canvas.width,160*scale};
         DrawRectangleRec(band,Fade((Color){18,9,22,255},.9f*enter));
         DrawGameTextIn(shot->title,(Rectangle){band.x+40*scale,band.y+20*scale,band.width-80*scale,58*scale},
@@ -477,8 +549,9 @@ void DrawGuardianCutscene(const GuardianCutscene *scene) {
     else controls=IsGamepadAvailable(0)?"A  Avançar    ·    B  Pular    ·    Start  Pausar":
             "Espaço / Enter  Avançar    ·    Esc  Pular    ·    P  Pausar";
     DrawGameTextIn(controls,hint,fmaxf(16,18*scale),(Color){244,226,202,255},false);
-    if (!shot->dialogue[0] && shot->fadeOut>0) {
-        float exit=Ease((scene->elapsed-shot->duration+shot->fadeOut)/shot->fadeOut);
+    if ((!shot->dialogue[0] || scene->exiting) && shot->fadeOut>0) {
+        float exit=scene->exiting ? Ease(scene->exitElapsed/shot->fadeOut) :
+            Ease((scene->elapsed-shot->duration+shot->fadeOut)/shot->fadeOut);
         if (shot->transitionOut==CINEMATIC_FADE || shot->transitionOut==CINEMATIC_WHITE)
             DrawRectangleRec(canvas,Fade(shot->transitionOut==CINEMATIC_WHITE?WHITE:BLACK,exit));
     }

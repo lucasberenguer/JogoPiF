@@ -481,13 +481,14 @@ void DrawClearing(const Clearing *clearing) {
 }
 
 void DrawClearingAltarGlow(const Clearing *clearing, float time) {
+    const Color cyan={101,240,229,255};
     Vector2 sigil = {clearing->pedestal.x, clearing->pedestal.y - 82.0f};
     float pulse = 0.5f + 0.5f*sinf(time*2.4f);
     DrawCircleGradient((int)sigil.x, (int)sigil.y, 70.0f + 8.0f*pulse,
-                       Fade(GOLD, 0.42f + 0.18f*pulse), Fade(GOLD, 0.0f));
-    DrawRing(sigil, 33.0f, 35.0f, 0, 360, 40, Fade(YELLOW, 0.32f + 0.25f*pulse));
+                       Fade(cyan, 0.35f + 0.15f*pulse), Fade(cyan, 0.0f));
+    DrawRing(sigil, 33.0f, 35.0f, 0, 360, 40, Fade(cyan, 0.32f + 0.25f*pulse));
     DrawEllipse((int)clearing->pedestal.x, (int)clearing->pedestal.y + 19,
-                43.0f, 11.0f, Fade(GOLD, 0.16f + 0.10f*pulse));
+                43.0f, 11.0f, Fade(cyan, 0.16f + 0.10f*pulse));
 }
 
 void DrawClearingForeground(const Clearing *clearing, Vector2 player) {

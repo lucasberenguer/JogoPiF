@@ -30,6 +30,12 @@ bool UpdateEncounter(Encounter *encounter, EnemyGroup *enemies, const Clearing *
                      Vector2 player, int *health);
 bool EncounterPaused(const Encounter *encounter);
 void CompleteGuardianIntro(Encounter *encounter, bool cinematicPlayed);
+bool GuardianLiberationPending(const Encounter *encounter);
+bool GuardianPassagePending(const Encounter *encounter);
+void CompleteGuardianLiberation(Encounter *encounter);
+bool BeginGuardianPassage(Encounter *encounter, const Clearing *map, Vector2 player, bool interact);
+bool CompleteGuardianPassage(Encounter *encounter, EnemyGroup *enemies, Clearing *map,
+                             Vector2 *player, int health);
 bool ClearingAltarOpen(const Encounter *encounter, const Clearing *clearing);
 bool CanEnterCemetery(const Encounter *encounter, const Clearing *clearing,
                       Vector2 player, bool interactPressed);

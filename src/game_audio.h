@@ -17,6 +17,7 @@ typedef struct GameAudio {
 
 void InitGameAudio(GameAudio *audio);
 void UpdateGameMusic(GameAudio *audio, GameTrack track, float strength, float dt);
+void StopGameMusic(GameAudio *audio);
 void PlayAudioFeedback(const GameAudio *audio);
 void SaveAudioSettings(const GameAudio *audio);
 void UnloadGameAudio(GameAudio *audio);

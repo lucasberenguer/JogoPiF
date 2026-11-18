@@ -18,9 +18,9 @@ static Rectangle Place(Rectangle logical) {
 
 static Rectangle Control(int index) {
     if (index<6) return Place((Rectangle){28+(index%2)*546,110+(index/2)*62,518,48});
-    if (index==15) return Place((Rectangle){862,598,230,42});
+    if (index==17) return Place((Rectangle){862,598,230,42});
     int button=index-6;
-    return Place((Rectangle){28+(button%3)*364,318+(button/3)*70,336,56});
+    return Place((Rectangle){28+(button%3)*364,306+(button/3)*56,336,48});
 }
 
 static void AdjustField(DevTools *tools, int index, int direction) {
@@ -36,20 +36,20 @@ static void AdjustField(DevTools *tools, int index, int direction) {
 
 DevAction UpdateDevTools(DevTools *tools, bool inPractice) {
     if (IsKeyPressed(KEY_ESCAPE)) return DEV_CLOSE;
-    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_TAB)) tools->selected=(tools->selected+1)%16;
-    if (IsKeyPressed(KEY_UP)) tools->selected=(tools->selected+15)%16;
+    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_TAB)) tools->selected=(tools->selected+1)%18;
+    if (IsKeyPressed(KEY_UP)) tools->selected=(tools->selected+17)%18;
     int direction=(int)IsKeyPressed(KEY_RIGHT)-(int)IsKeyPressed(KEY_LEFT);
     if (direction) {
         if (tools->selected<6) AdjustField(tools,tools->selected,direction);
-        else tools->selected=(tools->selected+direction+16)%16;
+        else tools->selected=(tools->selected+direction+18)%18;
     }
     Vector2 mouse=GetMousePosition(), motion=GetMouseDelta();
     if (motion.x!=0 || motion.y!=0)
-        for (int i=0; i<16; i++) if (CheckCollisionPointRec(mouse,Control(i))) tools->selected=i;
+        for (int i=0; i<18; i++) if (CheckCollisionPointRec(mouse,Control(i))) tools->selected=i;
     bool activate=IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE);
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         activate=false;
-        for (int i=0; i<16; i++) if (CheckCollisionPointRec(mouse,Control(i))) {
+        for (int i=0; i<18; i++) if (CheckCollisionPointRec(mouse,Control(i))) {
             tools->selected=i;
             activate=true;
         }
@@ -66,7 +66,7 @@ DevAction UpdateDevTools(DevTools *tools, bool inPractice) {
     }
     if (!inPractice && (tools->selected==12 || tools->selected==13)) return DEV_NONE;
     static const DevAction actions[]={DEV_STAGE,DEV_BOSS_ONE,DEV_BOSS_TWO,DEV_OPENING,DEV_GUARDIAN,
-        DEV_SEAL,DEV_HEAL,DEV_CLEAR_STAGE,DEV_MENU,DEV_CLOSE};
+        DEV_SEAL,DEV_HEAL,DEV_CLEAR_STAGE,DEV_LIBERATION,DEV_PASSAGE,DEV_MENU,DEV_CLOSE};
     return actions[tools->selected-6];
 }
 
@@ -102,8 +102,9 @@ void DrawDevTools(const DevTools *tools, bool inPractice) {
     }
     static const char *labels[]={"Iniciar onda selecionada","Boss · fase 1","Boss · fase 2",
         "Abertura em HQ","Cutscene do Guardião","Testar selo do boss",
-        "Curar e recarregar","Encerrar onda atual","Menu principal","Fechar · F1 / Esc"};
-    for (int i=6; i<16; i++) {
+        "Curar e recarregar","Encerrar onda atual","Libertação do Guardião","Altar e passagem",
+        "Menu principal","Fechar · F1 / Esc"};
+    for (int i=6; i<18; i++) {
         Rectangle button=Control(i);
         bool enabled=inPractice || (i!=12 && i!=13);
         bool focused=tools->selected==i;
@@ -123,11 +124,12 @@ void DrawDevTools(const DevTools *tools, bool inPractice) {
 bool StartDevEncounter(const DevTools *tools, DevAction action, Encounter *e,
                        EnemyGroup *enemies, Clearing *map, Vector2 *player, int *health) {
     if (action!=DEV_STAGE && action!=DEV_BOSS_ONE && action!=DEV_BOSS_TWO &&
-        action!=DEV_GUARDIAN && action!=DEV_SEAL) return false;
+        action!=DEV_GUARDIAN && action!=DEV_SEAL && action!=DEV_LIBERATION && action!=DEV_PASSAGE) return false;
     if (tools->map<0 || tools->map>1 || tools->wave<1 || tools->wave>5 ||
         tools->weapon<0 || tools->weapon>2 || tools->weaponLevel<0 || tools->weaponLevel>3) return false;
-    bool cemetery=action==DEV_GUARDIAN ? false : tools->map==1;
-    if (map->cemetery!=cemetery) {
+    bool aftermath=action==DEV_LIBERATION || action==DEV_PASSAGE;
+    bool cemetery=action==DEV_GUARDIAN || aftermath ? false : tools->map==1;
+    if (map->cemetery!=cemetery || map->village || map->chapel) {
         Clearing next={0};
         if (!(cemetery ? InitCemetery(&next) : InitClearing(&next))) return false;
         UnloadClearing(map);
@@ -137,6 +139,10 @@ bool StartDevEncounter(const DevTools *tools, DevAction action, Encounter *e,
     progress.stage=action==DEV_STAGE ? tools->wave : CLEARING_BOSS_STAGE;
     progress.weaponLevel[tools->weapon]=tools->weaponLevel;
     progress.guardianIntroSeen=action!=DEV_GUARDIAN;
+    if (aftermath) {
+        progress.stage=CLEARING_COMPLETE_STAGE;
+        progress.guardianAftermath=action==DEV_LIBERATION ? GUARDIAN_LIBERATION_PENDING : GUARDIAN_PASSAGE_PENDING;
+    }
     *player=map->spawn;
     *health=progress.maxHealth;
     BeginEncounter(e,enemies,map,progress,*player);

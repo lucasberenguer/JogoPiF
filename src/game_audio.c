@@ -79,6 +79,14 @@ void PlayAudioFeedback(const GameAudio *audio) {
     PlaySound(audio->feedback);
 }
 
+void StopGameMusic(GameAudio *audio) {
+    for (int i=0; i<TRACK_COUNT; i++) {
+        if (audio->tracks[i].stream.buffer) StopMusicStream(audio->tracks[i]);
+        audio->playing[i]=false;
+        audio->gain[i]=0;
+    }
+}
+
 void SaveAudioSettings(const GameAudio *audio) {
     char data[32];
     snprintf(data, sizeof(data), "%d %d\n", audio->volume[AUDIO_MUSIC], audio->volume[AUDIO_EFFECTS]);

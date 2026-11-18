@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <math.h>
 #include "rlgl.h"
+#include <string.h>
 
 enum { PAUSE_SCENE = 0, PAUSE_PLATE = 2, PAUSE_ICON = 3, PAUSE_FRAME = 4, MENU_BUTTON = 5 };
 
@@ -97,9 +98,10 @@ bool SaveMenuCheckpoint(int weapon) {
 
 bool SaveClearingCheckpoint(const RunProgress *p) {
     char data[256];
-    snprintf(data,sizeof(data),"PIF-RUN-6 %d %d %d %d %.6f %.6f %.6f %d %d %d %d %d %d\n",
+    snprintf(data,sizeof(data),"PIF-RUN-7 %d %d %d %d %.6f %.6f %.6f %d %d %d %d %d %d %d\n",
         p->weapon,p->stage,p->health,p->maxHealth,p->damage,p->speed,p->bossPower,
-        p->weaponLevel[0],p->weaponLevel[1],p->weaponLevel[2],p->strongWeapon,p->map,p->guardianIntroSeen);
+        p->weaponLevel[0],p->weaponLevel[1],p->weaponLevel[2],p->strongWeapon,p->map,p->guardianIntroSeen,
+        p->guardianAftermath);
     return SaveFileText(SavePath(), data);
 }
 
@@ -108,8 +110,15 @@ bool LoadClearingCheckpoint(RunProgress *p) {
     char *data = LoadFileText(SavePath());
     if (!data) return false;
     RunProgress loaded={0};
-    int seen=0;
-    int fields=sscanf(data,"PIF-RUN-6 %d %d %d %d %f %f %f %d %d %d %d %d %d",
+    int seen=0, aftermath=0;
+    bool aftermathFormat=!strncmp(data,"PIF-RUN-7 ",10);
+    int fields=sscanf(data,"PIF-RUN-7 %d %d %d %d %f %f %f %d %d %d %d %d %d %d",
+        &loaded.weapon,&loaded.stage,&loaded.health,&loaded.maxHealth,&loaded.damage,
+        &loaded.speed,&loaded.bossPower,&loaded.weaponLevel[0],&loaded.weaponLevel[1],
+        &loaded.weaponLevel[2],&loaded.strongWeapon,&loaded.map,&seen,&aftermath);
+    if (aftermathFormat && fields!=14) { UnloadFileText(data); return false; }
+    if (aftermathFormat) fields=13;
+    else fields=sscanf(data,"PIF-RUN-6 %d %d %d %d %f %f %f %d %d %d %d %d %d",
         &loaded.weapon,&loaded.stage,&loaded.health,&loaded.maxHealth,&loaded.damage,
         &loaded.speed,&loaded.bossPower,&loaded.weaponLevel[0],&loaded.weaponLevel[1],
         &loaded.weaponLevel[2],&loaded.strongWeapon,&loaded.map,&seen);
@@ -142,6 +151,9 @@ bool LoadClearingCheckpoint(RunProgress *p) {
         loaded=NewRunProgress(weapon);
     else if (fields!=11) loaded.weapon=-1;
     loaded.guardianIntroSeen=currentFormat ? seen==1 : loaded.map==1 || loaded.stage>=CLEARING_COMPLETE_STAGE;
+    loaded.guardianAftermath=aftermathFormat ? (GuardianAftermathState)aftermath :
+        loaded.map>0 ? GUARDIAN_PASSAGE_COMPLETE :
+        loaded.stage==CLEARING_COMPLETE_STAGE ? GUARDIAN_ALTAR_READY : GUARDIAN_UNPURIFIED;
     UnloadFileText(data);
     bool valid=(!currentFormat || seen==0 || seen==1) && loaded.map>=0 && loaded.map<=3 && loaded.weapon>=0 && loaded.weapon<3 && loaded.stage>=1 && loaded.stage<=CLEARING_COMPLETE_STAGE &&
         loaded.health>0 && loaded.health<=loaded.maxHealth && loaded.maxHealth<=10000 &&
@@ -150,6 +162,10 @@ bool LoadClearingCheckpoint(RunProgress *p) {
         isfinite(loaded.bossPower) && loaded.bossPower>=1 && loaded.bossPower<=100 &&
         loaded.strongWeapon>=-1 && loaded.strongWeapon<3;
     for (int i=0;i<3;i++) if (loaded.weaponLevel[i]<0 || loaded.weaponLevel[i]>4) valid=false;
+    if (loaded.guardianAftermath<GUARDIAN_UNPURIFIED || loaded.guardianAftermath>GUARDIAN_PASSAGE_COMPLETE ||
+        (loaded.guardianAftermath>=GUARDIAN_LIBERATION_PENDING &&
+         loaded.guardianAftermath<=GUARDIAN_PASSAGE_PENDING &&
+         (loaded.map!=0 || loaded.stage!=CLEARING_COMPLETE_STAGE))) valid=false;
     if (valid) *p=loaded;
     return valid;
 }

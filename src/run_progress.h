@@ -7,6 +7,11 @@
 #define CLEARING_BOSS_STAGE 5
 #define CLEARING_COMPLETE_STAGE 6
 
+typedef enum GuardianAftermathState {
+    GUARDIAN_UNPURIFIED, GUARDIAN_LIBERATION_PENDING, GUARDIAN_ALTAR_READY,
+    GUARDIAN_PASSAGE_PENDING, GUARDIAN_PASSAGE_COMPLETE
+} GuardianAftermathState;
+
 typedef struct RunProgress {
     int map; /* 0: clareira, 1: cemiterio */
     int weapon;
@@ -16,6 +21,7 @@ typedef struct RunProgress {
     int weaponLevel[3];
     int strongWeapon;
     bool guardianIntroSeen;
+    GuardianAftermathState guardianAftermath;
 } RunProgress;
 
 static inline RunProgress NewRunProgress(int weapon) {
