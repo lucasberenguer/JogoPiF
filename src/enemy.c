@@ -92,7 +92,7 @@ static int GuardianDefeatFrame(const Enemy *enemy) {
 }
 
 static bool IsGuardianSpawn(const EnemyGroup *group, const Enemy *enemy) {
-    return !group->cemetery && enemy->type == ENEMY_BOSS && enemy->state == ENEMY_SPAWNING;
+    return !group->cemetery && !group->village && enemy->type == ENEMY_BOSS && enemy->state == ENEMY_SPAWNING;
 }
 
 static int GuardianSpawnFrame(const Enemy *enemy) {
@@ -410,6 +410,10 @@ static Vector2 SpawnPosition(const Clearing *clearing, Vector2 player) {
 void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
                     Vector2 player, float playerPower) {
     group->cemetery=clearing->cemetery;
+    group->village=clearing->village;
+    group->villageSpawnRemaining = 0;
+    group->villageSpawnTimer = 0.0f;
+    group->villageBossDeathWeapon = -1;
     ClearEnemyAttacks(group);
     group->playerHitCooldown = 0;
     int total = 7 + (wave - 1) * 4;
@@ -442,6 +446,7 @@ void StartArenaBoss(EnemyGroup *group, const Clearing *clearing, Vector2 player,
     group->village=clearing->village;
     group->villageSpawnRemaining = 0;
     group->villageSpawnTimer = 0.0f;
+    group->villageBossDeathWeapon = -1;
     ClearEnemyAttacks(group);
     group->playerHitCooldown = 0;
     for (int i=0; i<ENEMY_COUNT; i++) group->list[i] = (Enemy){.state = ENEMY_GONE};
@@ -452,7 +457,7 @@ void StartArenaBoss(EnemyGroup *group, const Clearing *clearing, Vector2 player,
         : SpawnPosition(clearing, player);
     *boss = (Enemy){.type = ENEMY_BOSS, .state = ENEMY_SPAWNING,
         .position = bossPos, .maxHealth = (int)(baseHealth*fmaxf(1, power)),
-        .speed = clearing->village ? 145 : (clearing->cemetery ? 160 : 100),
+        .speed = clearing->village ? 185 : (clearing->cemetery ? 160 : 100),
         .power = power, .attackCooldown = 1.25f, .lastKatanaSwing = -1,
         .bossAttack = (clearing->cemetery ? COVEIRO_ATTACK_COUNT : GUARDIAN_ATTACK_COUNT) - 1};
     boss->health = boss->maxHealth;
@@ -650,7 +655,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         enemy->bibleHitCooldown = fmaxf(0.0f, enemy->bibleHitCooldown-dt);
         if (enemy->state == ENEMY_DIE) {
             if (enemy->type == ENEMY_BOSS) ClearEnemyAttacks(group);
-            float dieDuration = (group->village && enemy->type == ENEMY_BOSS) ? 1.1f : ENEMY_DEFEAT_DURATION;
+            float dieDuration = (group->village && enemy->type == ENEMY_BOSS) ? 1.35f : ENEMY_DEFEAT_DURATION;
             if (enemy->stateTime >= dieDuration) {
                 enemy->state = enemy->type == ENEMY_SPECIAL || enemy->type == ENEMY_BOSS ?
                                ENEMY_FALLEN : ENEMY_GONE;

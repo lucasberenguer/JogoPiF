@@ -87,6 +87,7 @@ typedef struct EnemyGroup {
     int villageSpawnRemaining;
     float villageSpawnTimer;
     float villageHordePower;
+    int villageBossDeathWeapon;
     Texture2D villageBossWalk, villageBossAttack, villageBossCharge, villageVillager;
     Texture2D skeleton,mage,boss[3],effects[3];
     Texture2D skeletonFront,skeletonBack,coveiroWalk,greenFire;

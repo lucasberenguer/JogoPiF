@@ -406,6 +406,7 @@ int main(void) {
                     .speed = 235.0f,
                     .damage = 28.0f,
                     .bossPower = 1.0f,
+                    .guardianIntroSeen = true,
                     .weaponLevel = {2, 0, 0}
                 };
                 BeginEncounter(&encounter, &enemies, &clearing, progress, clearing.spawn);
@@ -594,6 +595,9 @@ int main(void) {
             katanaAttackCooldown=0;
             dodgeRemaining=0;
         }
+        if (encounter.guardianIntroPending && (clearing.cemetery || clearing.village)) {
+            encounter.guardianIntroPending = false;
+        }
         if (encounter.guardianIntroPending) {
             ResetGun(&gun);
             ResetBible(&bible);
@@ -638,6 +642,7 @@ int main(void) {
                 RunProgress nextProgress=encounter.progress;
                 nextProgress.map = toVillage ? 2 : 1;
                 nextProgress.stage = toVillage ? CLEARING_BOSS_STAGE : 1;
+                if (toVillage) nextProgress.guardianIntroSeen = true;
                 nextProgress.bossPower=1;
                 nextProgress.health=playerHealth;
                 bool practice=encounter.practice;
@@ -815,6 +820,7 @@ int main(void) {
             for (int i=0; i<ENEMY_COUNT; i++) {
                 Enemy *enemy = &enemies.list[i];
                 if (!EnemyCanBeHit(enemy)) continue;
+                int healthBefore = enemy->health;
                 Vector2 center = EnemyCenter(enemy);
                 if (currentWeapon == WEAPON_GUN) {
                     int damage = GunHitCircle(&gun, center, EnemyHurtRadius(enemy));
@@ -859,6 +865,10 @@ int main(void) {
                             wave->hitEnemies[i] = true;
                         }
                     }
+                }
+                if (enemies.village && enemy->type == ENEMY_BOSS &&
+                    healthBefore > 0 && enemy->health <= 0) {
+                    enemies.villageBossDeathWeapon = currentWeapon;
                 }
             }
             UpdateEnemies(&enemies, &clearing, player, deltaTime,

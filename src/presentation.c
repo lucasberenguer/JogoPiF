@@ -19,6 +19,10 @@ void UpdateStagePresentation(StagePresentation *p,float dt) {
     float excess=dt-p->remaining;
     p->remaining=fmaxf(0,p->remaining-dt);
     if(p->remaining==0 && p->areaEntry) {
+        if (p->wave <= 0 && !p->bossName) {
+            p->areaEntry = false;
+            return;
+        }
         float portraitCenter=p->portraitCenterX;
         BeginStagePresentation(p,p->wave,p->mapName,p->bossName);
         p->portraitCenterX=portraitCenter;

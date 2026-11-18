@@ -28,10 +28,11 @@ static void StartStage(Encounter *e, EnemyGroup *enemies, const Clearing *cleari
         e->phase = ENCOUNTER_FIGHT;
         const char *areaTitle = clearing->village ? "Vila Lascada"
             : (clearing->cemetery ? "Cemitério das Raízes" : "Clareira do Selo");
-        const char *bossTitle = clearing->village ? "Líder da Vila"
+        const char *bossTitle = clearing->village ? NULL
             : (clearing->cemetery ? "Coveiro das Raízes" : "Guardião da Clareira");
-        BeginStagePresentation(&e->presentation,e->progress.stage,areaTitle,
-            e->progress.stage==CLEARING_BOSS_STAGE?bossTitle:NULL);
+        BeginStagePresentation(&e->presentation,
+            clearing->village ? 0 : e->progress.stage, areaTitle,
+            e->progress.stage==CLEARING_BOSS_STAGE ? bossTitle : NULL);
         if (clearing->cemetery || clearing->village) e->presentation.portraitCenterX=.73f;
         e->guardianIntroPending=!clearing->cemetery && !clearing->village &&
                                 e->progress.stage==CLEARING_BOSS_STAGE &&
@@ -304,7 +305,11 @@ static const char *RewardText(const Encounter *e, Reward reward) {
 
 void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
     if (e->presentation.remaining>0) {
-        DrawStagePresentation(&e->presentation,e->progress.map==1?enemies->cemeteryPortrait:enemies->bossPortrait,1,1);
+        Texture2D bossSprite = e->progress.map == 2 ? enemies->villageBossWalk
+            : (e->progress.map == 1 ? enemies->cemeteryPortrait : enemies->bossPortrait);
+        int cols = e->progress.map == 2 ? 6 : 1;
+        int rows = e->progress.map == 2 ? 4 : 1;
+        DrawStagePresentation(&e->presentation, bossSprite, cols, rows);
         return;
     }
     bool bossVisible = EncounterBossVisible(e, enemies);
