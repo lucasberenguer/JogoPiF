@@ -23,16 +23,17 @@ static Vector2 VillageHordeSpot(const Clearing *clearing, Vector2 player) {
 }
 
 static void SpawnNecroticVillager(Enemy *enemy, const Clearing *clearing,
-                                  Vector2 player, float power) {
-    int hp = (int)ceilf(48.0f * fmaxf(1.0f, power));
+                                  Vector2 player, float playerPower) {
+    float adjustment = 1.0f + fminf(0.15f, fmaxf(0.0f, playerPower - 1.0f) * 0.05f);
+    int hp = (int)ceilf(45.0f * 1.36f * adjustment);
     *enemy = (Enemy){
         .type = ENEMY_COMMON_MELEE,
         .state = ENEMY_SPAWNING,
         .position = VillageHordeSpot(clearing, player),
         .health = hp,
         .maxHealth = hp,
-        .speed = 118.0f,
-        .power = power,
+        .speed = 112.0f,
+        .power = 1.05f,
         .attackCooldown = 0.45f,
         .lastKatanaSwing = -1
     };
