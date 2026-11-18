@@ -12,7 +12,7 @@ enum { CINEMATIC_LEAVES = 1, CINEMATIC_FOG = 2, CINEMATIC_SHAKE = 4,
 typedef struct GuardianScene {
     char id[64], image[96], speaker[48], dialogue[512];
     char audioEvent[64], music[160], title[128], subtitle[160];
-    float duration, fadeIn, fadeOut;
+    float duration, fadeIn, fadeOut, cueAt, cueGain;
     Vector2 focusStart, focusEnd, sealPosition;
     float zoomStart, zoomEnd;
     CinematicTransition transitionIn, transitionOut;
@@ -29,7 +29,7 @@ typedef struct GuardianCutscene {
     float elapsed, letters, musicVolume, effectsVolume, musicGain;
     Music music;
     char musicPath[160];
-    bool paused, finished;
+    bool paused, finished, cueStarted, cuePaused;
 } GuardianCutscene;
 
 typedef struct GuardianCutsceneInput { bool advance, skip, pause; } GuardianCutsceneInput;

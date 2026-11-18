@@ -83,6 +83,22 @@ static void CheckSceneProgress(GuardianCutscene *scene) {
             if (dialogues==4) Capture(scene,800,"protagonist");
             UpdateGuardianCutscene(scene,0,(GuardianCutsceneInput){.advance=true});
         } else {
+            if (current==6 && IsAudioDeviceReady()) {
+                assert(shot->cue.stream.buffer && !scene->cueStarted);
+                UpdateGuardianCutscene(scene,.01f,(GuardianCutsceneInput){0});
+                assert(!scene->cueStarted && !IsSoundPlaying(shot->cue));
+                SetGuardianCutscenePaused(scene,true);
+                float frozen=scene->elapsed;
+                UpdateGuardianCutscene(scene,.1f,(GuardianCutsceneInput){0});
+                assert(scene->elapsed==frozen && !scene->cueStarted);
+                SetGuardianCutscenePaused(scene,false);
+                UpdateGuardianCutscene(scene,.05f,(GuardianCutsceneInput){0});
+                assert(scene->cueStarted && IsSoundPlaying(shot->cue));
+                SetGuardianCutscenePaused(scene,true);
+                assert(scene->cuePaused && !IsSoundPlaying(shot->cue));
+                SetGuardianCutscenePaused(scene,false);
+                assert(!scene->cuePaused && IsSoundPlaying(shot->cue));
+            }
             bool capture= current==0 || current==6 || current==9 || shot->title[0];
             UpdateGuardianCutscene(scene,0,(GuardianCutsceneInput){.pause=true});
             float elapsed=scene->elapsed;
@@ -101,6 +117,8 @@ static void CheckSceneProgress(GuardianCutscene *scene) {
     }
     assert(dialogues==9 && scene->current==scene->count-1);
     assert(!scene->music.stream.buffer || !IsMusicStreamPlaying(scene->music));
+    for (int i=0; i<scene->count; i++)
+        if (scene->scenes[i].cue.stream.buffer) assert(!IsSoundPlaying(scene->scenes[i].cue));
 }
 
 int main(void) {
@@ -120,6 +138,9 @@ int main(void) {
         assert(!strcmp(scene.scenes[i].music,"assets/cutscenes/boss_clareira/audio/trilha.ogg"));
     }
     if (IsAudioDeviceReady()) {
+        int effects=0;
+        for (int i=0; i<scene.count; i++) if (scene.scenes[i].cue.stream.buffer) effects++;
+        assert(effects==4);
         assert(scene.music.stream.buffer && scene.music.looping);
         assert(GetMusicTimeLength(scene.music)>57 && GetMusicTimeLength(scene.music)<59);
         SetGuardianCutscenePaused(&scene,true);
@@ -145,6 +166,8 @@ int main(void) {
     UpdateGuardianCutscene(&scene,0,(GuardianCutsceneInput){.skip=true});
     assert(scene.finished && !scene.paused);
     assert(!scene.music.stream.buffer || !IsMusicStreamPlaying(scene.music));
+    for (int i=0; i<scene.count; i++)
+        if (scene.scenes[i].cue.stream.buffer) assert(!IsSoundPlaying(scene.scenes[i].cue));
     UpdateGuardianCutscene(&scene,1,(GuardianCutsceneInput){.advance=true});
     assert(scene.finished && scene.current==12);
     UnloadGuardianCutscene(&scene);

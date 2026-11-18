@@ -41,6 +41,7 @@ static bool LoadSequence(GuardianCutscene *scene) {
             if (scene->count == GUARDIAN_SCENE_LIMIT) { valid = false; break; }
             shot = &scene->scenes[scene->count++];
             *shot = (GuardianScene){.duration=4, .fadeIn=.55f, .fadeOut=.55f,
+                .cueGain=.55f,
                 .zoomStart=1, .zoomEnd=1.04f, .focusStart={.5f,.5f}, .focusEnd={.5f,.5f},
                 .sealPosition={.65f,.72f}, .transitionIn=CINEMATIC_CROSSFADE,
                 .transitionOut=CINEMATIC_CROSSFADE, .artIndex=-1};
@@ -55,6 +56,8 @@ static bool LoadSequence(GuardianCutscene *scene) {
         else if (!strcmp(key,"duration")) shot->duration = strtof(value,NULL);
         else if (!strcmp(key,"fade_in")) shot->fadeIn = strtof(value,NULL);
         else if (!strcmp(key,"fade_out")) shot->fadeOut = strtof(value,NULL);
+        else if (!strcmp(key,"audio_at")) shot->cueAt = strtof(value,NULL);
+        else if (!strcmp(key,"audio_gain")) shot->cueGain = strtof(value,NULL);
         else if (!strcmp(key,"transition_in")) shot->transitionIn = Transition(value);
         else if (!strcmp(key,"transition_out")) shot->transitionOut = Transition(value);
         else if (!strcmp(key,"camera")) {
@@ -83,11 +86,12 @@ static bool LoadSequence(GuardianCutscene *scene) {
     UnloadFileText(data);
     for (int i=0; i<scene->count; i++) {
         GuardianScene *s = &scene->scenes[i];
-        const float numbers[] = {s->duration,s->fadeIn,s->fadeOut,s->zoomStart,s->zoomEnd,
+        const float numbers[] = {s->duration,s->fadeIn,s->fadeOut,s->cueAt,s->cueGain,s->zoomStart,s->zoomEnd,
             s->focusStart.x,s->focusStart.y,s->focusEnd.x,s->focusEnd.y,s->sealPosition.x,s->sealPosition.y};
         for (int n=0; n<(int)(sizeof(numbers)/sizeof(*numbers)); n++)
             if (!isfinite(numbers[n])) valid=false;
         if (s->duration < .5f || s->duration > 60 || s->fadeIn < 0 || s->fadeOut < 0 ||
+            s->cueAt < 0 || s->cueAt >= s->duration || s->cueGain < 0 || s->cueGain > 1 ||
             s->fadeIn > s->duration || s->fadeOut > s->duration ||
             s->zoomStart < 1 || s->zoomStart > 1.2f || s->zoomEnd < 1 || s->zoomEnd > 1.2f ||
             s->focusStart.x < 0 || s->focusStart.x > 1 || s->focusStart.y < 0 || s->focusStart.y > 1 ||
@@ -102,16 +106,24 @@ static void StopCinematicAudio(GuardianCutscene *scene) {
     if (scene->music.stream.buffer) StopMusicStream(scene->music);
     for (int i=0; i<scene->count; i++)
         if (scene->scenes[i].cue.stream.buffer) StopSound(scene->scenes[i].cue);
+    scene->cuePaused=false;
+}
+
+static void PlaySceneCue(GuardianCutscene *scene) {
+    GuardianScene *shot=&scene->scenes[scene->current];
+    if (!scene->cueStarted && shot->cue.stream.buffer && scene->elapsed >= shot->cueAt) {
+        SetSoundVolume(shot->cue,shot->cueGain*scene->effectsVolume);
+        PlaySound(shot->cue);
+        scene->cueStarted=true;
+    }
 }
 
 static void EnterScene(GuardianCutscene *scene) {
     GuardianScene *shot = &scene->scenes[scene->current];
     for (int i=0; i<scene->count; i++)
         if (scene->scenes[i].cue.stream.buffer) StopSound(scene->scenes[i].cue);
-    if (shot->cue.stream.buffer) {
-        SetSoundVolume(shot->cue, .55f*scene->effectsVolume);
-        PlaySound(shot->cue);
-    }
+    scene->cueStarted=scene->cuePaused=false;
+    PlaySceneCue(scene);
     if (strcmp(shot->music,scene->musicPath)) {
         if (scene->music.stream.buffer) UnloadMusicStream(scene->music);
         scene->music = (Music){0};
@@ -189,8 +201,13 @@ void SetGuardianCutscenePaused(GuardianCutscene *scene, bool paused) {
     }
     Sound cue=scene->scenes[scene->current].cue;
     if (cue.stream.buffer) {
-        if (paused) PauseSound(cue);
-        else ResumeSound(cue);
+        if (paused && scene->cueStarted && IsSoundPlaying(cue)) {
+            PauseSound(cue);
+            scene->cuePaused=true;
+        } else if (!paused && scene->cuePaused) {
+            ResumeSound(cue);
+            scene->cuePaused=false;
+        }
     }
 }
 
@@ -228,6 +245,7 @@ void UpdateGuardianCutscene(GuardianCutscene *scene, float dt, GuardianCutsceneI
         EnterScene(scene);
         shot=&scene->scenes[scene->current];
     }
+    PlaySceneCue(scene);
     if (scene->music.stream.buffer) {
         float gain=shot->dialogue[0] ? .78f : 1.0f;
         bool changesMusic=scene->current==scene->count-1 ||

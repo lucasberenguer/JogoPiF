@@ -22,6 +22,7 @@ Cada bloco `[scene identificador]` representa um enquadramento. A ordem dos bloc
 - `title` e `subtitle` identificam o chefe no último enquadramento.
 - `music` aponta para uma trilha existente no projeto. Omitir o campo deixa a cena sem trilha. Cenas consecutivas com o mesmo caminho mantêm a reprodução.
 - `audio_event` procura `audio/<evento>.wav`, usando o volume de efeitos. O carregamento só ocorre se o arquivo existir.
+- `audio_at` define o instante de disparo do efeito em segundos após a entrada da cena. `audio_gain` ajusta sua intensidade de 0 a 1 antes do volume de efeitos das configurações. Pausar congela também o disparo de um efeito que ainda não começou.
 
 As imagens completas recebem pan e zoom discretos. O flashback usa transições claras. As camadas de poeira, folhas, névoa e luz são desenhadas separadamente. Os personagens e os cenários permanecem nas ilustrações originais.
 
@@ -39,7 +40,9 @@ A trilha fornecida em `synthwave-nostalgic-take-3.mp3` foi convertida para `audi
 
 F1 abre o painel de desenvolvimento durante a cena e pausa sua imagem, digitação e áudio. Ao fechar o painel, a cena retoma o estado de pausa anterior.
 
-Os seguintes efeitos ainda precisam de arquivos em `audio/`.
+Os quatro efeitos de ruptura, raízes, selo em fúria e impacto final já estão integrados. São combinações de explosões e impactos de madeira/pedra dos pacotes CC0 de Kenney. Fontes, alterações e licenças ficam em `audio/CREDITOS-SFX.md`.
+
+Os demais eventos continuam preparados para receber arquivos em `audio/`.
 
 | Evento | Conteúdo esperado |
 | --- | --- |
@@ -47,14 +50,10 @@ Os seguintes efeitos ainda precisam de arquivos em `audio/`.
 | `vento_campo.wav` | Vento pelo campo de batalha |
 | `floresta.wav` | Ambiente da floresta |
 | `selo.wav` | Ressonância do selo examinado |
-| `ruptura_solo.wav` | Tremor e ruptura da terra |
-| `raizes.wav` | Raízes e madeira em movimento |
 | `corrupcao.wav` | Presença sobrenatural |
 | `memoria_floresta.wav` | Pássaros e ambiente da memória |
 | `ritual.wav` | Atmosfera do ritual |
 | `resistencia.wav` | Esforço do Guardião |
-| `selo_furia.wav` | Pulsação violenta do selo |
-| `impacto_raizes.wav` | Impacto antes do combate |
 
 Não há dublagem fornecida. As falas são apresentadas como texto. Os efeitos podem ser adicionados nos caminhos indicados e entram na sequência pelo evento já configurado.
 
