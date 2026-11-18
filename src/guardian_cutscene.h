@@ -6,13 +6,18 @@
 enum { GUARDIAN_SCENE_LIMIT = 32, GUARDIAN_ART_LIMIT = 16 };
 typedef enum CinematicTransition { CINEMATIC_CUT, CINEMATIC_FADE, CINEMATIC_CROSSFADE,
                                    CINEMATIC_WHITE } CinematicTransition;
+typedef enum GuardianEventType { GUARDIAN_CINEMATIC, GUARDIAN_NARRATION, GUARDIAN_DIALOGUE,
+                                 GUARDIAN_EFFECT, GUARDIAN_TRANSITION } GuardianEventType;
 enum { CINEMATIC_LEAVES = 1, CINEMATIC_FOG = 2, CINEMATIC_SHAKE = 4,
        CINEMATIC_SEAL = 8, CINEMATIC_CORRUPTION = 16, CINEMATIC_DUST = 32 };
 
 typedef struct GuardianScene {
     char id[64], image[96], speaker[48], dialogue[512];
+    char narration[512];
+    GuardianEventType type;
+    float narrationAt, narrationDuration, narrationFade;
     char audioEvent[64], music[160], title[128], subtitle[160];
-    float duration, fadeIn, fadeOut;
+    float duration, fadeIn, fadeOut, cueAt, cueGain;
     Vector2 focusStart, focusEnd, sealPosition;
     float zoomStart, zoomEnd;
     CinematicTransition transitionIn, transitionOut;
@@ -29,10 +34,15 @@ typedef struct GuardianCutscene {
     float elapsed, letters, musicVolume, effectsVolume, musicGain;
     Music music;
     char musicPath[160];
-    bool paused, finished;
+    bool paused, finished, cueStarted, cuePaused;
 } GuardianCutscene;
 
 typedef struct GuardianCutsceneInput { bool advance, skip, pause; } GuardianCutsceneInput;
+
+/* Shared by rendering and the layout audit. Text is never truncated to two lines. */
+int LayoutGuardianNarration(const char *text, float scale, float width,
+                           char lines[8][512], float *fontSize);
+float GuardianNarrationOpacity(const GuardianScene *shot, float elapsed);
 
 bool InitGuardianCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume);
 void UpdateGuardianCutscene(GuardianCutscene *scene, float dt, GuardianCutsceneInput input);

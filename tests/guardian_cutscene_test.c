@@ -46,7 +46,26 @@ static void Capture(const GuardianCutscene *scene, int width, const char *label)
 }
 
 static void CheckSceneProgress(GuardianCutscene *scene) {
-    int dialogues=0;
+    int dialogues=0, narrations=0;
+    const char *narrator[]={
+        "Nem mesmo a morte lhes concedera descanso.",
+        "E àquele que sobreviveu... restou o fardo de erguer a espada contra seus próprios irmãos.",
+        "Além dos corpos, estendia-se uma floresta que já não conhecia a luz.",
+        "Ali, até o silêncio parecia guardar um lamento.",
+        "Sob raízes antigas, um símbolo profano ainda pulsava.",
+        "Não era uma bênção. Era uma sentença.",
+        "Então, a terra gemeu.",
+        "E das profundezas ergueu-se aquele que outrora fora o escudo da floresta.",
+        "Houve um tempo em que suas raízes não conheciam a violência.",
+        "Sob sua sombra, a vida florescia sem temor.",
+        "Mas até os mais antigos juramentos podem ser profanados.",
+        "E o protetor tornou-se prisioneiro daquilo que jurara combater.",
+        "Por trás da madeira retorcida, uma vontade ainda resistia.",
+        "E diante dela, uma última promessa seria feita.",
+        "Mas a maldição não permitiria que seu cativo partisse em paz.",
+        "Naquela noite, não se ergueram dois inimigos.",
+        "Mas duas vontades... contra uma única maldição."
+    };
     const char *expected[] = {
         "Minhas raízes... já não obedecem à minha vontade.",
         "A floresta que jurei proteger... agora sofre pelas minhas próprias mãos.",
@@ -61,6 +80,29 @@ static void CheckSceneProgress(GuardianCutscene *scene) {
     while (!scene->finished) {
         int current=scene->current;
         GuardianScene *shot=&scene->scenes[current];
+        assert(!(shot->narration[0] && shot->dialogue[0]));
+        if (shot->type==GUARDIAN_NARRATION) {
+            assert(narrations<17 && !strcmp(shot->narration,narrator[narrations++]));
+            assert(!shot->waitsForInput && !shot->speaker[0]);
+            float start=shot->narrationAt, end=start+shot->narrationDuration;
+            assert(GuardianNarrationOpacity(shot,start)==0);
+            assert(GuardianNarrationOpacity(shot,end)==0);
+            assert(GuardianNarrationOpacity(shot,start+.25f)>.4f);
+            assert(GuardianNarrationOpacity(shot,start+.5f)==1);
+            assert(end<=shot->duration);
+            for (int width=800; width<=1280; width+=480) {
+                float scale=width/1280.0f, size;
+                char lines[8][512], rebuilt[512]={0};
+                int count=LayoutGuardianNarration(shot->narration,scale,width-240*scale,lines,&size);
+                assert(count>0 && count<=2 && size>=20);
+                for (int i=0; i<count; i++) {
+                    assert(MeasureGameTextEx(lines[i],size,false).x<=width-240*scale);
+                    if (i) strcat(rebuilt," ");
+                    strcat(rebuilt,lines[i]);
+                }
+                assert(!strcmp(rebuilt,shot->narration));
+            }
+        }
         if (shot->waitsForInput) {
             assert(dialogues<9 && !strcmp(shot->dialogue,expected[dialogues++]));
             UpdateGuardianCutscene(scene,.02f,(GuardianCutsceneInput){0});
@@ -83,7 +125,23 @@ static void CheckSceneProgress(GuardianCutscene *scene) {
             if (dialogues==4) Capture(scene,800,"protagonist");
             UpdateGuardianCutscene(scene,0,(GuardianCutsceneInput){.advance=true});
         } else {
-            bool capture= current==0 || current==6 || current==9 || shot->title[0];
+            if (!strcmp(shot->id,"raizes_rompem_o_solo") && IsAudioDeviceReady()) {
+                assert(shot->cue.stream.buffer && !scene->cueStarted);
+                UpdateGuardianCutscene(scene,.01f,(GuardianCutsceneInput){0});
+                assert(!scene->cueStarted && !IsSoundPlaying(shot->cue));
+                SetGuardianCutscenePaused(scene,true);
+                float frozen=scene->elapsed;
+                UpdateGuardianCutscene(scene,.1f,(GuardianCutsceneInput){0});
+                assert(scene->elapsed==frozen && !scene->cueStarted);
+                SetGuardianCutscenePaused(scene,false);
+                UpdateGuardianCutscene(scene,.05f,(GuardianCutsceneInput){0});
+                assert(scene->cueStarted && IsSoundPlaying(shot->cue));
+                SetGuardianCutscenePaused(scene,true);
+                assert(scene->cuePaused && !IsSoundPlaying(shot->cue));
+                SetGuardianCutscenePaused(scene,false);
+                assert(!scene->cuePaused && IsSoundPlaying(shot->cue));
+            }
+            bool capture=shot->narration[0] || shot->title[0];
             UpdateGuardianCutscene(scene,0,(GuardianCutsceneInput){.pause=true});
             float elapsed=scene->elapsed;
             UpdateGuardianCutscene(scene,1,(GuardianCutsceneInput){0});
@@ -91,7 +149,7 @@ static void CheckSceneProgress(GuardianCutscene *scene) {
             UpdateGuardianCutscene(scene,0,(GuardianCutsceneInput){.pause=true});
             while (scene->current==current && !scene->finished) {
                 UpdateGuardianCutscene(scene,.016f,(GuardianCutsceneInput){0});
-                if (capture && scene->elapsed>=1.0f) {
+                if (capture && scene->elapsed>=1.7f) {
                     Capture(scene,1280,shot->id);
                     Capture(scene,800,shot->id);
                     capture=false;
@@ -99,8 +157,10 @@ static void CheckSceneProgress(GuardianCutscene *scene) {
             }
         }
     }
-    assert(dialogues==9 && scene->current==scene->count-1);
+    assert(dialogues==9 && narrations==17 && scene->current==scene->count-1);
     assert(!scene->music.stream.buffer || !IsMusicStreamPlaying(scene->music));
+    for (int i=0; i<scene->count; i++)
+        if (scene->scenes[i].cue.stream.buffer) assert(!IsSoundPlaying(scene->scenes[i].cue));
 }
 
 int main(void) {
@@ -112,7 +172,7 @@ int main(void) {
     LoadGameFonts();
     GuardianCutscene scene={0};
     assert(InitGuardianCutscene(&scene,.12f,0));
-    assert(scene.count==24 && scene.artCount==16);
+    assert(scene.count==30 && scene.artCount==16);
     for (int i=0; i<scene.count; i++) {
         assert(scene.scenes[i].artIndex>=0);
         assert(scene.scenes[i].artIndex<scene.artCount);
@@ -120,6 +180,9 @@ int main(void) {
         assert(!strcmp(scene.scenes[i].music,"assets/cutscenes/boss_clareira/audio/trilha.ogg"));
     }
     if (IsAudioDeviceReady()) {
+        int effects=0;
+        for (int i=0; i<scene.count; i++) if (scene.scenes[i].cue.stream.buffer) effects++;
+        assert(effects==4);
         assert(scene.music.stream.buffer && scene.music.looping);
         assert(GetMusicTimeLength(scene.music)>57 && GetMusicTimeLength(scene.music)<59);
         SetGuardianCutscenePaused(&scene,true);
@@ -136,18 +199,27 @@ int main(void) {
     assert(scene.artCount==0 && !scene.music.stream.buffer);
 
     assert(InitGuardianCutscene(&scene,0,0));
-    for (int i=0; i<12; i++)
+    while (!scene.scenes[scene.current].waitsForInput)
         UpdateGuardianCutscene(&scene,0,(GuardianCutsceneInput){.advance=true});
-    assert(scene.current==12 && scene.scenes[scene.current].waitsForInput);
+    int dialogueIndex=scene.current;
     UpdateGuardianCutscene(&scene,.1f,(GuardianCutsceneInput){0});
     assert(scene.letters>0 && scene.letters<GetCodepointCount(scene.scenes[scene.current].dialogue));
     UpdateGuardianCutscene(&scene,.1f,(GuardianCutsceneInput){.pause=true});
     UpdateGuardianCutscene(&scene,0,(GuardianCutsceneInput){.skip=true});
     assert(scene.finished && !scene.paused);
     assert(!scene.music.stream.buffer || !IsMusicStreamPlaying(scene.music));
+    for (int i=0; i<scene.count; i++)
+        if (scene.scenes[i].cue.stream.buffer) assert(!IsSoundPlaying(scene.scenes[i].cue));
     UpdateGuardianCutscene(&scene,1,(GuardianCutsceneInput){.advance=true});
-    assert(scene.finished && scene.current==12);
+    assert(scene.finished && scene.current==dialogueIndex);
     UnloadGuardianCutscene(&scene);
+    UnloadGuardianCutscene(&scene);
+
+    assert(InitGuardianCutscene(&scene,0,0));
+    UpdateGuardianCutscene(&scene,.1f,(GuardianCutsceneInput){.pause=true});
+    UpdateGuardianCutscene(&scene,0,(GuardianCutsceneInput){.skip=true});
+    assert(scene.finished && !scene.paused);
+    assert(!scene.music.stream.buffer || !IsMusicStreamPlaying(scene.music));
     UnloadGuardianCutscene(&scene);
     UnloadGameFonts();
     if (IsAudioDeviceReady()) CloseAudioDevice();
