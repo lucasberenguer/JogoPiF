@@ -4,7 +4,7 @@
 #include "run_progress.h"
 #include "menu_video.h"
 #include "game_audio.h"
-typedef enum MenuAction { MENU_NONE, MENU_START, MENU_CONTINUE, MENU_TEST_VILLA, MENU_QUIT } MenuAction;
+typedef enum MenuAction { MENU_NONE, MENU_START, MENU_CONTINUE, MENU_TEST_VILLA, MENU_TEST_CHAPEL, MENU_QUIT } MenuAction;
 typedef enum PauseAction { PAUSE_NONE, PAUSE_RESUME, PAUSE_MAIN_MENU } PauseAction;
 typedef enum PausePage { PAUSE_OPTIONS, PAUSE_SETTINGS, PAUSE_CONTROLS } PausePage;
 typedef struct PauseMenu {

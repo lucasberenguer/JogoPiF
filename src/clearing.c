@@ -185,12 +185,12 @@ void ConfigureVillageBoundary(Clearing *map) {
     }
 }
 
-bool InitVillage(Clearing *map) {
+static bool LoadMapWithCollision(Clearing *map, const char *bgPath, const char *colPath) {
     *map = (Clearing){0};
-    map->background = LoadTexture("assets/vila.png");
+    map->background = LoadTexture(bgPath);
     if (!map->background.id) return false;
     SetTextureFilter(map->background, TEXTURE_FILTER_POINT);
-    Image colImg = LoadImage("assets/vila_collision.png");
+    Image colImg = LoadImage(colPath);
     if (colImg.data == NULL || colImg.width != map->background.width ||
         colImg.height != map->background.height) {
         if (colImg.data != NULL) UnloadImage(colImg);
@@ -205,12 +205,27 @@ bool InitVillage(Clearing *map) {
         return false;
     }
     SetTextureFilter(map->collisionGuide, TEXTURE_FILTER_POINT);
+    map->playableBounds = (Rectangle){0.0f, 0.0f, (float)map->background.width, (float)map->background.height};
+    return true;
+}
+
+bool InitVillage(Clearing *map) {
+    if (!LoadMapWithCollision(map, "assets/vila.png", "assets/vila_collision.png")) return false;
     map->village = true;
     float w = (float)map->background.width, h = (float)map->background.height;
-    map->playableBounds = (Rectangle){0.0f, 0.0f, w, h};
     map->spawn = (Vector2){w * 0.08f, h * 0.465f};
     map->pedestal = (Vector2){-1000.0f, -1000.0f};
     map->exit = (Rectangle){w * 0.43f, h * 0.21f, w * 0.14f, h * 0.06f};
+    return true;
+}
+
+bool InitChapel(Clearing *map) {
+    if (!LoadMapWithCollision(map, "assets/capela.png", "assets/capela_collision.png")) return false;
+    map->chapel = true;
+    float w = (float)map->background.width, h = (float)map->background.height;
+    map->spawn = (Vector2){w * 0.50f, h * 0.90f};
+    map->pedestal = (Vector2){w * 0.50f, h * 0.44f};
+    map->exit = (Rectangle){w * 0.17f, h * 0.28f, w * 0.11f, h * 0.14f};
     return true;
 }
 

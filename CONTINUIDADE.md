@@ -77,7 +77,9 @@ O Pátio dos Guardiões foi retirado da sequência. Cutscene de descoberta do pa
   - **Bíblia Sagrada:** Nv. 1 5 livros e raio 102; Nv. 2 aceleração 1,65 s e cooldown 2,8 s; Nv. 3 6 livros e destruição de projéteis inimigos durante aceleração; Nv. 4 poça de água benta no chão (cooldown 3,5 s) causando dano contínuo.
   - **Arma de Fogo:** Nv. 1 cadência 0,14 s e projétil mais rápido; Nv. 2 disparo duplo; Nv. 3 disparo triplo; Nv. 4 duas pistolas simultâneas herdando todos os upgrades anteriores.
 - Validação em `out/review` após merge com `a474bb4` (tipografia própria em `src/game_text.c`), upgrades de arma, arte final da Vila Lascada, sprites do Líder da Vila, horda de aldeões necróticos e botão **Teste** no menu: build concluído e 4/4 testes aprovados (`enemy_audit`, `map_connectivity`, `player_collision`, `clearing_encounter`).
-- **Botão "Teste" no menu (`src/menu.c`, `src/menu.h`, `src/game.c`):** botão no canto inferior direito do menu principal (`MENU_TEST_VILLA`) que entra direto na Vila Lascada (`map == 2`, `encounter.practice = true`) preservando a animação de apresentação do mapa na entrada.
+- **Capela do Anjo integrada como mapa jogável (`map == 3`):**
+  - Assets `assets/capela.png` e `assets/capela_collision.png` (`1672×941`) em `src/clearing.c` (`InitChapel`), conectada pelo arco superior da Vila Lascada (`CanEnterChapel`) e acessível pelo botão **Capela** no menu (`MENU_TEST_CHAPEL`).
+  - Exploração sem combate com interações (**E**) no Altar Central (*Voz do Anjo Guardião*), Estátua do Guardião, Estátua do Irmão Caído, Trono Partido e Selo Secundário; saída/colapso/portal para o Inferno Inicial deixados para a próxima etapa.
 - **Vila Lascada integrada como mapa funcional (`map == 2`):**
   - Assets `assets/vila.png` (paleta avermelhada/ferrugem mais quente diferenciada do cemitério) e `assets/vila_collision.png` (`1672×941`) + polígono caminhável em `src/clearing.c` (`InitVillage`, `ConfigureVillageBoundary`), com spawn na estrada esquerda e saída no arco superior.
   - Transição conectada pela saída à direita do Cemitério (`CanEnterVillage` em `src/encounter.c` e `src/game.c`) e suporte em checkpoints (`src/menu.c`).

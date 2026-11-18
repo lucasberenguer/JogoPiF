@@ -376,12 +376,13 @@ int main(void) {
             } else if (action == MENU_CONTINUE) {
                 RunProgress progress;
                 if (LoadClearingCheckpoint(&progress)) {
-                    int currentMap = clearing.village ? 2 : (clearing.cemetery ? 1 : 0);
+                    int currentMap = clearing.chapel ? 3 : (clearing.village ? 2 : (clearing.cemetery ? 1 : 0));
                     if (currentMap != progress.map) {
                         UnloadClearing(&clearing);
                         clearing=(Clearing){0};
-                        bool loadedMap = progress.map == 2 ? InitVillage(&clearing)
-                            : (progress.map == 1 ? InitCemetery(&clearing) : InitClearing(&clearing));
+                        bool loadedMap = progress.map == 3 ? InitChapel(&clearing)
+                            : (progress.map == 2 ? InitVillage(&clearing)
+                            : (progress.map == 1 ? InitCemetery(&clearing) : InitClearing(&clearing)));
                         if (!loadedMap) break;
                     }
                     BeginEncounter(&encounter,&enemies,&clearing,progress,clearing.spawn);
@@ -399,6 +400,31 @@ int main(void) {
                 }
                 RunProgress progress = {
                     .map = 2,
+                    .stage = CLEARING_BOSS_STAGE,
+                    .weapon = WEAPON_KATANA,
+                    .health = 140,
+                    .maxHealth = 140,
+                    .speed = 235.0f,
+                    .damage = 28.0f,
+                    .bossPower = 1.0f,
+                    .guardianIntroSeen = true,
+                    .weaponLevel = {2, 0, 0}
+                };
+                BeginEncounter(&encounter, &enemies, &clearing, progress, clearing.spawn);
+                encounter.practice = true;
+                currentWeapon = progress.weapon;
+                playerMaxHealth = progress.maxHealth;
+                playerHealth = progress.health;
+                playerSpeed = progress.speed;
+                screen = 2;
+            } else if (action == MENU_TEST_CHAPEL) {
+                if (!clearing.chapel) {
+                    UnloadClearing(&clearing);
+                    clearing = (Clearing){0};
+                    if (!InitChapel(&clearing)) break;
+                }
+                RunProgress progress = {
+                    .map = 3,
                     .stage = CLEARING_BOSS_STAGE,
                     .weapon = WEAPON_KATANA,
                     .health = 140,
@@ -595,7 +621,7 @@ int main(void) {
             katanaAttackCooldown=0;
             dodgeRemaining=0;
         }
-        if (encounter.guardianIntroPending && (clearing.cemetery || clearing.village)) {
+        if (encounter.guardianIntroPending && (clearing.cemetery || clearing.village || clearing.chapel)) {
             encounter.guardianIntroPending = false;
         }
         if (encounter.guardianIntroPending) {
@@ -626,23 +652,25 @@ int main(void) {
         if (!entering && IsKeyPressed(KEY_F6)) showSpriteDebug = !showSpriteDebug;
         bool nearExit = (clearing.cemetery || clearing.village) &&
             CheckCollisionPointRec(player, clearing.exit);
-        bool nearPedestal = !clearing.cemetery && !clearing.village &&
+        bool nearPedestal = !clearing.cemetery && !clearing.village && !clearing.chapel &&
             CheckCollisionPointCircle(player, clearing.pedestal, CLEARING_ALTAR_RADIUS);
         bool altarOpen = ClearingAltarOpen(&encounter, &clearing);
         bool interactPressed = IsKeyPressed(KEY_E);
         if (!entering && playerHealth > 0 &&
             (CanEnterCemetery(&encounter, &clearing, player, interactPressed) ||
-             CanEnterVillage(&encounter, &clearing, player, interactPressed))) {
+             CanEnterVillage(&encounter, &clearing, player, interactPressed) ||
+             CanEnterChapel(&encounter, &clearing, player, interactPressed))) {
+            bool toChapel = clearing.village;
             bool toVillage = clearing.cemetery;
             Clearing next = {0};
-            if (toVillage ? InitVillage(&next) : InitCemetery(&next)) {
+            if (toChapel ? InitChapel(&next) : (toVillage ? InitVillage(&next) : InitCemetery(&next))) {
                 UnloadClearing(&clearing);
                 clearing = next;
                 player = clearing.spawn;
                 RunProgress nextProgress=encounter.progress;
-                nextProgress.map = toVillage ? 2 : 1;
-                nextProgress.stage = toVillage ? CLEARING_BOSS_STAGE : 1;
-                if (toVillage) nextProgress.guardianIntroSeen = true;
+                nextProgress.map = toChapel ? 3 : (toVillage ? 2 : 1);
+                nextProgress.stage = (toChapel || toVillage) ? CLEARING_BOSS_STAGE : 1;
+                if (toChapel || toVillage) nextProgress.guardianIntroSeen = true;
                 nextProgress.bossPower=1;
                 nextProgress.health=playerHealth;
                 bool practice=encounter.practice;
@@ -1006,10 +1034,10 @@ int main(void) {
                 DrawGameText("O altar está selado", 24, 53 + hudOffset, 18, GOLD);
             } else {
                 DrawGameText(nearExit
-                    ? (clearing.village ? "Capela do Anjo: próxima etapa do desenvolvimento"
-                                        : "Saída para a Vila Lascada")
-                    : (clearing.village ? "Vila Lascada"
-                        : (clearing.cemetery ? "Cemitério das Raízes" : "Explore a clareira")),
+                    ? (clearing.village ? "Entrar na Capela do Anjo" : "Saída para a Vila Lascada")
+                    : (clearing.chapel ? "Capela do Anjo (E perto do altar / estátuas / trono)"
+                        : (clearing.village ? "Vila Lascada"
+                        : (clearing.cemetery ? "Cemitério das Raízes" : "Explore a clareira"))),
                     24, 53 + hudOffset, 18, RAYWHITE);
             }
             DrawHud(&hud, playerHealth, playerMaxHealth,

@@ -416,6 +416,10 @@ void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
     group->villageBossDeathWeapon = -1;
     ClearEnemyAttacks(group);
     group->playerHitCooldown = 0;
+    if (clearing->chapel) {
+        for (int i = 0; i < ENEMY_COUNT; i++) group->list[i] = (Enemy){.state = ENEMY_GONE};
+        return;
+    }
     int total = 7 + (wave - 1) * 4;
     if (total > ENEMY_COUNT) total = ENEMY_COUNT;
     int minimumSpecials = 1 + (wave - 1) / 2;
@@ -449,6 +453,10 @@ void StartArenaBoss(EnemyGroup *group, const Clearing *clearing, Vector2 player,
     group->villageBossDeathWeapon = -1;
     ClearEnemyAttacks(group);
     group->playerHitCooldown = 0;
+    if (clearing->chapel) {
+        for (int i = 0; i < ENEMY_COUNT; i++) group->list[i] = (Enemy){.state = ENEMY_GONE};
+        return;
+    }
     for (int i=0; i<ENEMY_COUNT; i++) group->list[i] = (Enemy){.state = ENEMY_GONE};
     Enemy *boss = &group->list[0];
     int baseHealth = clearing->village ? 500 : (clearing->cemetery ? CEMETERY_BOSS_BASE_HEALTH : ARENA_BOSS_BASE_HEALTH);
