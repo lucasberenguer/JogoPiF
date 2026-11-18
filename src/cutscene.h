@@ -12,11 +12,13 @@ typedef struct OpeningCutscene {
     float elapsed, finalBeatAtAdvance;
     float musicVolume, effectsVolume, musicFade;
     int beat;
-    bool finished;
+    unsigned int pausedCues;
+    bool finished, paused;
 } OpeningCutscene;
 
 bool InitOpeningCutscene(OpeningCutscene *scene, float musicVolume, float effectsVolume);
 void UpdateOpeningCutscene(OpeningCutscene *scene, float dt);
+void SetOpeningCutscenePaused(OpeningCutscene *scene, bool paused);
 void DrawOpeningCutscene(const OpeningCutscene *scene);
 void UnloadOpeningCutscene(OpeningCutscene *scene);
 

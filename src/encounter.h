@@ -17,6 +17,7 @@ typedef struct Encounter {
     int rewardCount, sealEnemy, question, answer;
     bool rerolled;
     bool practice; /* Temporary test entry must not overwrite the normal run. */
+    bool guardianIntroPending;
     char notice[120];
 } Encounter;
 
@@ -25,6 +26,7 @@ void BeginEncounter(Encounter *encounter, EnemyGroup *enemies, const Clearing *c
 bool UpdateEncounter(Encounter *encounter, EnemyGroup *enemies, const Clearing *clearing,
                      Vector2 player, int *health);
 bool EncounterPaused(const Encounter *encounter);
+void CompleteGuardianIntro(Encounter *encounter, bool cinematicPlayed);
 bool ClearingAltarOpen(const Encounter *encounter, const Clearing *clearing);
 bool CanEnterCemetery(const Encounter *encounter, const Clearing *clearing,
                       Vector2 player, bool interactPressed);

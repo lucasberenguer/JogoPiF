@@ -29,6 +29,8 @@ static void StartStage(Encounter *e, EnemyGroup *enemies, const Clearing *cleari
         BeginStagePresentation(&e->presentation,e->progress.stage,clearing->cemetery?"Cemitério das Raízes":"Clareira do Selo",
             e->progress.stage==CLEARING_BOSS_STAGE?(clearing->cemetery?"Coveiro das Raízes":"Guardião da Clareira"):NULL);
         if (clearing->cemetery) e->presentation.portraitCenterX=.73f;
+        e->guardianIntroPending=!clearing->cemetery && e->progress.stage==CLEARING_BOSS_STAGE &&
+                                !e->progress.guardianIntroSeen;
         if (e->progress.stage == CLEARING_BOSS_STAGE) StartArenaBoss(enemies, clearing, player, e->progress.bossPower);
         else StartEnemyWave(enemies, clearing, e->progress.stage, player, e->progress.damage);
     }
@@ -43,7 +45,16 @@ void BeginEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing,
 }
 
 bool EncounterPaused(const Encounter *e) {
-    return e->presentation.remaining>0 || e->phase == ENCOUNTER_REWARD || e->phase == ENCOUNTER_SEAL || e->phase == ENCOUNTER_DEFEAT;
+    return e->guardianIntroPending || e->presentation.remaining>0 || e->phase == ENCOUNTER_REWARD || e->phase == ENCOUNTER_SEAL || e->phase == ENCOUNTER_DEFEAT;
+}
+
+void CompleteGuardianIntro(Encounter *e, bool cinematicPlayed) {
+    if (!e->guardianIntroPending) return;
+    e->guardianIntroPending=false;
+    e->progress.guardianIntroSeen=true;
+    if (cinematicPlayed) e->presentation=(StagePresentation){0};
+    if (!e->practice && !SaveClearingCheckpoint(&e->progress))
+        TraceLog(LOG_WARNING,"Nao foi possivel salvar a conclusao da cutscene do Guardiao.");
 }
 
 bool ClearingAltarOpen(const Encounter *e, const Clearing *clearing) {
@@ -64,7 +75,7 @@ float EncounterDamage(const Encounter *e) {
 }
 
 bool EncounterBossVisible(const Encounter *e, const EnemyGroup *enemies) {
-    return e->presentation.remaining <= 0 && e->progress.stage == CLEARING_BOSS_STAGE &&
+    return !e->guardianIntroPending && e->presentation.remaining <= 0 && e->progress.stage == CLEARING_BOSS_STAGE &&
            enemies->list[0].type == ENEMY_BOSS && enemies->list[0].health > 0;
 }
 
@@ -186,7 +197,7 @@ bool AnswerEncounterSeal(Encounter *e, EnemyGroup *enemies, int *health, int cho
 bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing,
                      Vector2 player, int *health) {
     if (*health<=0) { e->phase=ENCOUNTER_DEFEAT; return false; }
-    if (e->presentation.remaining>0) return false;
+    if (e->guardianIntroPending || e->presentation.remaining>0) return false;
     if (e->phase==ENCOUNTER_FIGHT) {
         if (EnemiesRemaining(enemies)==0) {
             ClearEnemyAttacks(enemies);

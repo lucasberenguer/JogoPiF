@@ -89,9 +89,9 @@ bool SaveMenuCheckpoint(int weapon) {
 
 bool SaveClearingCheckpoint(const RunProgress *p) {
     char data[256];
-    snprintf(data,sizeof(data),"PIF-RUN-5 %d %d %d %d %.6f %.6f %.6f %d %d %d %d %d\n",
+    snprintf(data,sizeof(data),"PIF-RUN-6 %d %d %d %d %.6f %.6f %.6f %d %d %d %d %d %d\n",
         p->weapon,p->stage,p->health,p->maxHealth,p->damage,p->speed,p->bossPower,
-        p->weaponLevel[0],p->weaponLevel[1],p->weaponLevel[2],p->strongWeapon,p->map);
+        p->weaponLevel[0],p->weaponLevel[1],p->weaponLevel[2],p->strongWeapon,p->map,p->guardianIntroSeen);
     return SaveFileText(SavePath(), data);
 }
 
@@ -100,12 +100,19 @@ bool LoadClearingCheckpoint(RunProgress *p) {
     char *data = LoadFileText(SavePath());
     if (!data) return false;
     RunProgress loaded={0};
-    int fields=sscanf(data,"PIF-RUN-5 %d %d %d %d %f %f %f %d %d %d %d %d",
+    int seen=0;
+    int fields=sscanf(data,"PIF-RUN-6 %d %d %d %d %f %f %f %d %d %d %d %d %d",
+        &loaded.weapon,&loaded.stage,&loaded.health,&loaded.maxHealth,&loaded.damage,
+        &loaded.speed,&loaded.bossPower,&loaded.weaponLevel[0],&loaded.weaponLevel[1],
+        &loaded.weaponLevel[2],&loaded.strongWeapon,&loaded.map,&seen);
+    bool currentFormat=fields==13;
+    if (currentFormat) fields=11;
+    else fields=sscanf(data,"PIF-RUN-5 %d %d %d %d %f %f %f %d %d %d %d %d",
         &loaded.weapon,&loaded.stage,&loaded.health,&loaded.maxHealth,&loaded.damage,
         &loaded.speed,&loaded.bossPower,&loaded.weaponLevel[0],&loaded.weaponLevel[1],
         &loaded.weaponLevel[2],&loaded.strongWeapon,&loaded.map);
-    if (fields==12) fields=11;
-    else fields=sscanf(data,"PIF-CLEARING-4 %d %d %d %d %f %f %f %d %d %d %d",
+    if (!currentFormat && fields==12) fields=11;
+    else if (!currentFormat) fields=sscanf(data,"PIF-CLEARING-4 %d %d %d %d %f %f %f %d %d %d %d",
         &loaded.weapon,&loaded.stage,&loaded.health,&loaded.maxHealth,&loaded.damage,
         &loaded.speed,&loaded.bossPower,&loaded.weaponLevel[0],&loaded.weaponLevel[1],
         &loaded.weaponLevel[2],&loaded.strongWeapon);
@@ -126,8 +133,9 @@ bool LoadClearingCheckpoint(RunProgress *p) {
     if (fields!=11 && sscanf(data,"PIF-CLEARING-2 %d",&weapon)==1 && weapon>=0 && weapon<3)
         loaded=NewRunProgress(weapon);
     else if (fields!=11) loaded.weapon=-1;
+    loaded.guardianIntroSeen=currentFormat ? seen==1 : loaded.map==1 || loaded.stage>=CLEARING_COMPLETE_STAGE;
     UnloadFileText(data);
-    bool valid=loaded.map>=0 && loaded.map<=1 && loaded.weapon>=0 && loaded.weapon<3 && loaded.stage>=1 && loaded.stage<=CLEARING_COMPLETE_STAGE &&
+    bool valid=(!currentFormat || seen==0 || seen==1) && loaded.map>=0 && loaded.map<=1 && loaded.weapon>=0 && loaded.weapon<3 && loaded.stage>=1 && loaded.stage<=CLEARING_COMPLETE_STAGE &&
         loaded.health>0 && loaded.health<=loaded.maxHealth && loaded.maxHealth<=10000 &&
         isfinite(loaded.damage) && loaded.damage>=1 && loaded.damage<=100 &&
         isfinite(loaded.speed) && loaded.speed>=100 && loaded.speed<=1000 &&
@@ -601,6 +609,7 @@ static void DrawMenuBackground(const Menu *m) {
 void DrawMenu(const Menu *m) {
     DrawMenuBackground(m);
     DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,0.25f));
+    DrawGameText("F1 · Ferramentas",18,16,18,(Color){255,226,181,255});
     if (m->page == 0) {
         static const char *labels[] = {"Iniciar Jogo", "Continuar", "Configurações", "Créditos"};
         for (int i=0; i<4; i++) {

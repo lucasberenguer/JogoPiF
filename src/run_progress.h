@@ -1,6 +1,8 @@
 #ifndef RUN_PROGRESS_H
 #define RUN_PROGRESS_H
 
+#include <stdbool.h>
+
 #define CLEARING_WAVES 4
 #define CLEARING_BOSS_STAGE 5
 #define CLEARING_COMPLETE_STAGE 6
@@ -13,6 +15,7 @@ typedef struct RunProgress {
     float damage, speed, bossPower;
     int weaponLevel[3];
     int strongWeapon;
+    bool guardianIntroSeen;
 } RunProgress;
 
 static inline RunProgress NewRunProgress(int weapon) {

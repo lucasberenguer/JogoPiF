@@ -89,8 +89,25 @@ void UnloadOpeningCutscene(OpeningCutscene *scene) {
     *scene = (OpeningCutscene){0};
 }
 
+void SetOpeningCutscenePaused(OpeningCutscene *scene, bool paused) {
+    if (scene->paused==paused) return;
+    scene->paused=paused;
+    if (scene->music.stream.buffer) {
+        if (paused) PauseMusicStream(scene->music);
+        else ResumeMusicStream(scene->music);
+    }
+    for (int i=0; i<INTRO_BEAT_COUNT; i++) {
+        if (!scene->cues[i].stream.buffer) continue;
+        if (paused && IsSoundPlaying(scene->cues[i])) {
+            scene->pausedCues |= 1u<<i;
+            PauseSound(scene->cues[i]);
+        } else if (!paused && (scene->pausedCues & (1u<<i))) ResumeSound(scene->cues[i]);
+    }
+    if (!paused) scene->pausedCues=0;
+}
+
 void UpdateOpeningCutscene(OpeningCutscene *scene, float dt) {
-    if (scene->finished) return;
+    if (scene->finished || scene->paused) return;
     if (IsKeyPressed(KEY_ESCAPE)) {
         scene->finished = true;
         return;

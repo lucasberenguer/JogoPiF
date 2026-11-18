@@ -1,6 +1,6 @@
 # Jogo PIF — continuidade entre computadores e chats
 
-Atualizado em 16/11/2026. Leia junto do código e de `git status` antes de retomar.
+Atualizado em 18/11/2026. Leia junto do código e de `git status` antes de retomar.
 
 ## Retomada rápida
 
@@ -61,6 +61,12 @@ O Pátio dos Guardiões foi retirado da sequência. Cutscene de descoberta do pa
 - Depois da apresentação do Guardião da Clareira, ele emerge do chão em 23 quadros, ao longo de 3 s. A sequência pula uma pose em que ele afundava durante a subida. Durante a entrada, fica parado e invulnerável. O combate começa após a animação.
 - Ao perder toda a vida na segunda fase, o Guardião cai em oito quadros na direção em que estava voltado. A queda dura 0,85 s e a última pose fica no chão até o selamento. O teste de encontro cobre a queda, a abertura do selo e a revanche.
 - A abertura em HQ toca uma vez por sessão, após a confirmação da arma em uma nova partida. Usa oito ilustrações em seis momentos narrativos e dura cerca de 41 s. O quarto momento, Juramento, inclui uma ilustração vertical no painel lateral. **Espaço** ou **Enter** avança e reposiciona a trilha, e **Esc** segue para a Clareira. A transição reutiliza a apresentação de área com o subtítulo **A Terra dos que Não Descansam**. Checkpoints e novas tentativas após Game Over seguem direto ao jogo. A trilha foi integrada. Os WAVs de efeitos narrativos continuam opcionais.
+- O Guardião da Clareira tem uma cutscene própria antes do combate, após a recompensa da quarta onda. São 16 ilustrações fornecidas pelo usuário, organizadas em 24 enquadramentos e seis atos, incluindo o flashback do protetor da floresta e as nove falas do roteiro. `assets/cutscenes/boss_clareira/data/sequencia.ini` controla ordem, duração, câmera, transições, efeitos, falas e áudio. As imagens completas recebem pan/zoom discretos, tremor amortecido, folhas, poeira, névoa e pulsação do selo.
+- Na cutscene do Guardião, Espaço/Enter completa a fala e um novo toque avança. Esc pula, P pausa. Controle usa A, B e Start nas posições equivalentes do raylib. Cenas exclusivamente visuais avançam por tempo. A identificação final é **GUARDIÃO DAS RAÍZES — O PROTETOR APRISIONADO**. Ao concluir ou pular, a arena faz fade e o chefe mantém sua entrada de três segundos antes de atacar. O Cemitério mantém seu fluxo anterior.
+- Checkpoint `PIF-RUN-6` acrescenta `guardianIntroSeen`, salvo quando a cutscene termina ou é pulada. Continuar e as revanches da mesma partida preservam a flag. Reiniciar uma tentativa completa reinicia a narrativa. Saves antigos no chefe da Clareira recebem a nova cena uma vez; mapas já concluídos e o Cemitério são migrados como vistos. Versões antigas de checkpoint continuam legíveis.
+- A cutscene do Guardião usa a faixa enviada `synthwave-nostalgic-take-3.mp3`, convertida em `assets/cutscenes/boss_clareira/audio/trilha.ogg`. O loop de 58 segundos tem sobreposição de dois segundos entre fim e começo. As 24 cenas mantêm a mesma reprodução, com redução suave do volume nas falas e fade final. Faltam os efeitos específicos e a dublagem. Os eventos opcionais, caminhos e conteúdo esperado estão documentados em `assets/cutscenes/boss_clareira/data/LEIA-ME.md`. O trecho final do anexo estava cortado no exemplo JSON; a configuração INI implementa todos os atos e falas completos recebidos.
+- F1 abre as ferramentas de desenvolvimento no menu, na partida, na pausa e nas cutscenes. O painel permite escolher Clareira/Cemitério, ondas 1–4 ou boss, arma e upgrade 0–3, invulnerabilidade e colisões. Há acesso direto às duas fases dos bosses, à abertura, à cutscene do Guardião, ao selo do boss, à cura e ao encerramento de uma onda. Mouse ou setas/Enter operam o painel; F1/Esc fecha.
+- Os cenários do painel usam `Encounter.practice`. Recompensas, revanches, morte e passagem pelo altar preservam esse modo e o checkpoint da campanha. A repetição de um teste após morrer mantém o mapa, a onda e os atributos do teste, incluindo a fase 2 quando selecionada. A abertura funciona como prévia e retorna ao painel. O botão Menu principal permite voltar e usar Continuar para retomar o checkpoint. Abrir o painel em cutscenes pausa os temporizadores e o áudio e preserva uma pausa que já estivesse ativa.
 - Menu, ondas normais e minibosses têm faixas próprias em loop com sobreposição entre fim e começo. A troca de faixa tem fade e a música de combate baixa de volume nas pausas e apresentações. Configurações no menu inicial e na pausa oferecem volumes independentes de música e efeitos, salvos em `audio_pif.cfg` ao lado do executável.
 - Ao concluir: mensagem de área limpa e depois **NOVA AREA DESBLOQUEADA + próximo nome**, 3,2 s. Atualmente o anúncio após o cemitério ainda diz "Vila Abandonada"; trocar para **Vila Lascada** ao integrar a vila. O anúncio não significa que a vila já seja acessível.
 
@@ -72,7 +78,9 @@ O Pátio dos Guardiões foi retirado da sequência. Cutscene de descoberta do pa
 - `src/clearing.c`: mapas e colisões.
 - `src/encounter.c`, `src/presentation.c`: progressão, selos, recompensas e apresentações.
 - `src/cutscene.c` e `assets/cutscenes/intro/`: duração, legendas, composição, ilustrações e caminhos de áudio da abertura.
+- `src/guardian_cutscene.c`, `src/guardian_cutscene.h` e `assets/cutscenes/boss_clareira/`: cutscene configurável do Guardião, ilustrações originais, diálogos e eventos de áudio.
 - `src/game_audio.c` e `assets/audio/`: reprodução das faixas do jogo, volumes e persistência.
+- `src/dev_tools.c` e `src/dev_tools.h`: painel F1, seletores e preparação dos encontros de prática. `src/game.c` integra ações, prévias, pausa e proteção do checkpoint.
 - `assets/coveiro_walk_v4.png`, `coveiro_throw_v4.png`, `coveiro_slam_v3.png`, `coveiro_charge_v3.png`, `coveiro_pa_vento_v4.png`: assets atuais do chefe.
 - `design/coveiro_v4_notas.md`: especificações e notas das artes geradas com imagegen.
 - `README.md` contém partes históricas do protótipo, inclusive informações antigas sobre inimigos/checkpoints; conferir implementação e este documento.
@@ -119,6 +127,12 @@ Tipografia validada com os quatro testes de `out/review`, verificação de acent
 O ajuste de legibilidade passou pelos mesmos quatro testes. A revisão comparou o menu, a pausa, as configurações, as cartas, a abertura e o HUD em capturas de 1280×720 e 800×450. As capturas atualizadas ficam em `out/review/audit/legibility_*.png`.
 
 Os anúncios de onda normal e miniboss foram renderizados durante a entrada e após a faixa se estabilizar, em 1280×720 e 800×450. Capturas em `out/review/audit/wave_text_*.png`.
+
+Na cutscene do Guardião, `guardian_cutscene_test` confere as 16 imagens, os 24 enquadramentos, a ordem e o conteúdo das nove falas, completar/avançar, pausa, pular e liberação de recursos. Também compara pixels entre instantes diferentes para verificar movimento real. Capturas em `out/review/audit/guardian_cinematic_*.png`, em 1280×720 e 800×450. O teste de encontro verifica o bloqueio do combate, a persistência da flag, os checkpoints antigos e a ausência de uma segunda apresentação após a cena.
+
+Build de 17/11 concluído em `out/review` e os cinco testes passaram. Uma auditoria local adicional executou o loop real de `game.c` com ações simuladas de Continuar, concluir e pular a cutscene, chegando ao Guardião ativo nos dois casos. A câmera e os diálogos foram inspecionados nas capturas. Os comandos de controle estão mapeados; não houve teste com controle físico.
+
+Na entrega da soundtrack e do painel F1, os cinco testes passaram em `out/review`. O teste de encontro verifica as quatro ondas nos dois mapas, as duas fases dos bosses, o selo e a preservação do checkpoint na prática. O teste da cutscene confere a faixa de 58 segundos, a continuidade entre todas as cenas e a pausa/reprodução do stream. O painel foi inspecionado em 1280×720 e 800×450, em `out/review/audit/dev_tools_*.png`. Uma auditoria local do loop real testou F1, onda no Cemitério, boss na fase 2, repetição após morte, cura, encerramento da onda, pausa/pulo da cutscene do Guardião e prévia da abertura. O checkpoint isolado da auditoria permaneceu idêntico.
 
 ## O que é salvo e o que precisa de backup
 

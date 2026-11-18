@@ -1,6 +1,7 @@
 #include "encounter.h"
 #include "game_text.h"
 #include "menu.h"
+#include "dev_tools.h"
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -46,6 +47,72 @@ static void CheckLegacyCheckpoints(void) {
         assert(LoadClearingCheckpoint(&progress));
         assert(progress.stage == stages[i] && progress.map == maps[i]);
         assert(progress.weapon == 2 && progress.health == 90 && progress.weaponLevel[2] == 2);
+        assert(progress.guardianIntroSeen == (maps[i]==1 || stages[i]==CLEARING_COMPLETE_STAGE));
+    }
+    assert(SaveFileText(path,"PIF-RUN-5 2 5 100 100 1 240 1 0 0 0 -1 0\n"));
+    RunProgress bossCheckpoint={0};
+    assert(LoadClearingCheckpoint(&bossCheckpoint));
+    assert(bossCheckpoint.stage==CLEARING_BOSS_STAGE && !bossCheckpoint.guardianIntroSeen);
+    assert(SaveClearingCheckpoint(&bossCheckpoint));
+    RunProgress currentCheckpoint={0};
+    assert(LoadClearingCheckpoint(&currentCheckpoint) && !currentCheckpoint.guardianIntroSeen);
+}
+
+static void CheckDevTools(Encounter *e, EnemyGroup *enemies, Clearing *map) {
+    RunProgress campaign=NewRunProgress(1);
+    campaign.stage=3;
+    campaign.health=75;
+    assert(SaveClearingCheckpoint(&campaign));
+    DevTools tools={.wave=1,.weapon=2,.weaponLevel=3,.selected=7};
+    Vector2 player;
+    int health;
+    for (int area=0; area<2; area++) {
+        tools.map=area;
+        for (int wave=1; wave<=4; wave++) {
+            tools.wave=wave;
+            assert(StartDevEncounter(&tools,DEV_STAGE,e,enemies,map,&player,&health));
+            assert(e->practice && e->progress.map==area && e->progress.stage==wave);
+            assert(e->progress.weapon==2 && e->progress.weaponLevel[2]==3);
+            assert(health==100 && EnemiesRemaining(enemies)==7+(wave-1)*4);
+            assert(!IsMapActorBlocked(map,player));
+        }
+        assert(StartDevEncounter(&tools,DEV_BOSS_ONE,e,enemies,map,&player,&health));
+        assert(e->practice && !e->guardianIntroPending && EnemiesRemaining(enemies)==1);
+        assert(enemies->list[0].guardianPhase==GUARDIAN_PHASE_ONE);
+        assert(StartDevEncounter(&tools,DEV_BOSS_TWO,e,enemies,map,&player,&health));
+        assert(enemies->list[0].guardianPhase==GUARDIAN_PHASE_TWO);
+        assert(enemies->list[0].health==enemies->list[0].maxHealth/2);
+        assert(StartDevEncounter(&tools,DEV_SEAL,e,enemies,map,&player,&health));
+        assert(e->phase==ENCOUNTER_SEAL && e->practice);
+        assert(StartDevEncounter(&tools,DEV_STAGE,e,enemies,map,&player,&health));
+        for (int i=0; i<ENEMY_COUNT; i++) enemies->list[i]=(Enemy){.state=ENEMY_GONE};
+        UpdateEncounter(e,enemies,map,player,&health);
+        assert(e->phase==ENCOUNTER_REWARD);
+        assert(ChooseEncounterReward(e,enemies,map,player,&health,0));
+    }
+    assert(StartDevEncounter(&tools,DEV_GUARDIAN,e,enemies,map,&player,&health));
+    assert(e->practice && e->guardianIntroPending && !map->cemetery);
+    CompleteGuardianIntro(e,true);
+    RunProgress unchanged={0};
+    assert(LoadClearingCheckpoint(&unchanged));
+    assert(unchanged.stage==3 && unchanged.weapon==1 && unchanged.health==75 &&
+           !unchanged.guardianIntroSeen);
+    tools.weapon=99;
+    assert(!StartDevEncounter(&tools,DEV_STAGE,e,enemies,map,&player,&health));
+    tools.weapon=2;
+    const int widths[]={1280,800};
+    for (int i=0; i<2; i++) {
+        SetWindowSize(widths[i],widths[i]*9/16);
+        RenderTexture2D target=LoadRenderTexture(widths[i],widths[i]*9/16);
+        BeginTextureMode(target);
+        ClearBackground(BLACK);
+        DrawDevTools(&tools,true);
+        EndTextureMode();
+        Image shot=LoadImageFromTexture(target.texture);
+        ImageFlipVertical(&shot);
+        assert(ExportImage(shot,TextFormat("audit/dev_tools_%d.png",widths[i])));
+        UnloadImage(shot);
+        UnloadRenderTexture(target);
     }
 }
 
@@ -147,6 +214,23 @@ int main(void) {
     }
     assert(encounter.progress.stage==CLEARING_BOSS_STAGE && EnemiesRemaining(&enemies)==1);
     assert(encounter.presentation.boss && EncounterPaused(&encounter));
+    assert(encounter.guardianIntroPending && !encounter.progress.guardianIntroSeen);
+    encounter.presentation.remaining=0;
+    assert(EncounterPaused(&encounter));
+    assert(!EncounterBossVisible(&encounter,&enemies));
+    assert(!UpdateEncounter(&encounter,&enemies,&clearing,player,&health));
+    CompleteGuardianIntro(&encounter,false);
+    assert(!encounter.guardianIntroPending && encounter.progress.guardianIntroSeen);
+    RunProgress afterIntro={0};
+    assert(LoadClearingCheckpoint(&afterIntro) && afterIntro.guardianIntroSeen);
+    Encounter cinematicResume={.progress=afterIntro,.guardianIntroPending=true,
+        .presentation={.areaEntry=true,.duration=2.8f,.remaining=2.8f},.practice=true};
+    CompleteGuardianIntro(&cinematicResume,true);
+    UpdateStagePresentation(&cinematicResume.presentation,.05f);
+    assert(!EncounterPaused(&cinematicResume) && !cinematicResume.presentation.areaEntry);
+    BeginEncounter(&encounter,&enemies,&clearing,afterIntro,player);
+    assert(!encounter.guardianIntroPending);
+    UpdateStagePresentation(&encounter.presentation,2.8f);
     UpdateStagePresentation(&encounter.presentation,.7f);
     Capture("audit/boss_intro.png",&encounter,&enemies,&clearing,player);
     UpdateStagePresentation(&encounter.presentation,10);
@@ -355,7 +439,9 @@ int main(void) {
         "PIF-RUN-5 0 1 100 100 1 inf 1 0 0 0 -1 0",
         "PIF-RUN-5 0 1 101 100 1 240 1 0 0 0 -1 0",
         "PIF-RUN-5 0 1 100 100 1 240 1 0 0 0 -1 2",
-        "PIF-RUN-5 0 1 100 100 1 240 1 4 0 0 -1 0"
+        "PIF-RUN-5 0 1 100 100 1 240 1 4 0 0 -1 0",
+        "PIF-RUN-6 0 5 100 100 1 240 1 0 0 0 -1 0 2",
+        "PIF-RUN-6 0 5 100 100 1 240 1 0 0 0 -1 0"
     };
     for (unsigned i=0;i<sizeof(invalidSaves)/sizeof(invalidSaves[0]);i++) {
         assert(SaveFileText(saveFile,(char *)invalidSaves[i]));
@@ -374,6 +460,7 @@ int main(void) {
     assert(SaveFileText(saveFile,"PIF-CLEARING-2 2"));
     assert(LoadClearingCheckpoint(&migrated) && migrated.weapon==2 && migrated.stage==1);
     assert(SaveClearingCheckpoint(&encounter.progress));
+    CheckDevTools(&encounter,&enemies,&clearing);
     UnloadEnemies(&enemies);
     UnloadClearing(&clearing);
     UnloadGameFonts();

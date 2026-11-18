@@ -10,7 +10,10 @@
 #include "enemy.h"
 #include "encounter.h"
 #include "cutscene.h"
+#include "guardian_cutscene.h"
+#include "dev_tools.h"
 #include <math.h>
+#include <stdio.h>
 
 static Camera2D FitClearing(const Clearing *clearing) {
     const float mapWidth = (float) clearing->background.width;
@@ -215,9 +218,15 @@ int main(void) {
     int gunAttackFacing = 0;
     int bibleAttackFacing = 0;
     int katanaAttackId = 0;
-    enum { OPENING_SCREEN = 4 };
+    enum { OPENING_SCREEN = 4, GUARDIAN_SCREEN = 5 };
     int screen = 0; /* 0: menu, 1: escolha da arma, 2: partida, 3: pausa */
     OpeningCutscene opening = {0};
+    GuardianCutscene guardianIntro = {0};
+    DevTools devTools={.wave=1,.selected=6};
+    bool devOpeningWasPaused=false,devGuardianWasPaused=false;
+    bool openingPreview=false;
+    int previewReturnScreen=0;
+    DevAction practiceScenario=DEV_STAGE;
     bool openingSeen = false;
     int currentWeapon = -1;
     Encounter encounter = {.progress = {.weapon=0}};
@@ -225,15 +234,123 @@ int main(void) {
     float entryFadeRemaining = 0.0f;
 
     while (!WindowShouldClose()) {
+        bool devToggle=IsKeyPressed(KEY_F1);
+        bool devWasOpen=devTools.open;
+        if (devToggle && !devWasOpen) {
+            devTools.open=true;
+            devTools.status[0]=0;
+            devTools.collision=showCollisionGuide;
+            if ((screen==2 || screen==3 || screen==GUARDIAN_SCREEN) && encounter.progress.stage>0) {
+                devTools.map=encounter.progress.map;
+                devTools.wave=encounter.progress.stage>CLEARING_BOSS_STAGE ? CLEARING_BOSS_STAGE : encounter.progress.stage;
+                devTools.weapon=encounter.progress.weapon;
+                devTools.weaponLevel=encounter.progress.weaponLevel[devTools.weapon];
+            }
+            devOpeningWasPaused=opening.paused;
+            devGuardianWasPaused=guardianIntro.paused;
+            if (screen==OPENING_SCREEN) SetOpeningCutscenePaused(&opening,true);
+            if (screen==GUARDIAN_SCREEN) SetGuardianCutscenePaused(&guardianIntro,true);
+        }
         GameTrack track = TRACK_SILENT;
         float musicStrength = 1.0f;
         if (screen == 0) track = TRACK_MENU;
         else if ((screen == 2 || screen == 3) && playerHealth > 0 &&
                  encounter.progress.stage <= CLEARING_BOSS_STAGE) {
-            track = encounter.progress.stage == CLEARING_BOSS_STAGE ? TRACK_MINIBOSS : TRACK_COMBAT;
+            track = encounter.guardianIntroPending ? TRACK_SILENT :
+                encounter.progress.stage == CLEARING_BOSS_STAGE ? TRACK_MINIBOSS : TRACK_COMBAT;
             if (screen == 3 || EncounterPaused(&encounter)) musicStrength = 0.42f;
         }
+        if (devTools.open) musicStrength*=.15f;
         UpdateGameMusic(&menu.audio, track, musicStrength, GetFrameTime());
+        if (devTools.open) {
+            bool inPractice=encounter.practice && (screen==2 || screen==3);
+            DevAction action=devToggle && devWasOpen ? DEV_CLOSE : UpdateDevTools(&devTools,inPractice);
+            if (action==DEV_CLOSE) {
+                devTools.open=false;
+                showCollisionGuide=devTools.collision;
+                if (screen==OPENING_SCREEN) SetOpeningCutscenePaused(&opening,devOpeningWasPaused);
+                if (screen==GUARDIAN_SCREEN) SetGuardianCutscenePaused(&guardianIntro,devGuardianWasPaused);
+            } else if (action==DEV_OPENING) {
+                OpeningCutscene preview={0};
+                if (InitOpeningCutscene(&preview,menu.audio.volume[AUDIO_MUSIC]/100.0f,
+                                         menu.audio.volume[AUDIO_EFFECTS]/100.0f)) {
+                    previewReturnScreen=screen==OPENING_SCREEN || screen==GUARDIAN_SCREEN ? 0 : screen;
+                    UnloadOpeningCutscene(&opening);
+                    UnloadGuardianCutscene(&guardianIntro);
+                    opening=preview;
+                    openingPreview=true;
+                    devOpeningWasPaused=devGuardianWasPaused=false;
+                    screen=OPENING_SCREEN;
+                    devTools.open=false;
+                } else snprintf(devTools.status,sizeof(devTools.status),"Não foi possível carregar a abertura.");
+            } else if (action==DEV_MENU) {
+                UnloadOpeningCutscene(&opening);
+                UnloadGuardianCutscene(&guardianIntro);
+                openingPreview=false;
+                devTools.open=false;
+                screen=0;
+            } else if (action==DEV_HEAL && inPractice) {
+                playerHealth=encounter.progress.maxHealth;
+                encounter.progress.health=playerHealth;
+                if (encounter.phase==ENCOUNTER_DEFEAT) encounter.phase=ENCOUNTER_FIGHT;
+                ResetGun(&gun);
+                ResetBible(&bible);
+                dodgeRemaining=dodgeCooldown=katanaAttackRemaining=katanaAttackCooldown=0;
+                screen=2;
+                devTools.open=false;
+            } else if (action==DEV_CLEAR_STAGE && inPractice) {
+                if (encounter.phase==ENCOUNTER_FIGHT && !encounter.guardianIntroPending) {
+                    ClearEnemyAttacks(&enemies);
+                    for (int i=0; i<ENEMY_COUNT; i++) enemies.list[i]=(Enemy){.state=ENEMY_GONE};
+                    encounter.presentation=(StagePresentation){0};
+                    UpdateEncounter(&encounter,&enemies,&clearing,player,&playerHealth);
+                    screen=2;
+                    devTools.open=false;
+                } else snprintf(devTools.status,sizeof(devTools.status),"Conclua a recompensa ou o selamento antes de encerrar outra onda.");
+            } else if (action==DEV_STAGE || action==DEV_BOSS_ONE || action==DEV_BOSS_TWO ||
+                       action==DEV_GUARDIAN || action==DEV_SEAL) {
+                if (StartDevEncounter(&devTools,action,&encounter,&enemies,&clearing,&player,&playerHealth)) {
+                    UnloadOpeningCutscene(&opening);
+                    UnloadGuardianCutscene(&guardianIntro);
+                    openingPreview=false;
+                    practiceScenario=action;
+                    currentWeapon=encounter.progress.weapon;
+                    playerMaxHealth=encounter.progress.maxHealth;
+                    playerSpeed=encounter.progress.speed;
+                    ResetGun(&gun);
+                    ResetBible(&bible);
+                    dodgeRemaining=dodgeCooldown=katanaAttackRemaining=katanaAttackCooldown=0;
+                    katanaAttackId=0;
+                    walkTime=0;
+                    facing=0;
+                    pedestalMessageTime=0;
+                    entryFadeRemaining=0;
+                    showCollisionGuide=devTools.collision;
+                    screen=2;
+                    devTools.open=false;
+                } else snprintf(devTools.status,sizeof(devTools.status),"Não foi possível carregar o cenário de teste.");
+            }
+            BeginDrawing();
+                ClearBackground(BLACK);
+                if (devTools.open) DrawDevTools(&devTools,inPractice);
+            EndDrawing();
+            continue;
+        }
+        if (screen == GUARDIAN_SCREEN) {
+            UpdateGuardianCutscene(&guardianIntro,GetFrameTime(),ReadGuardianCutsceneInput());
+            if (guardianIntro.finished) {
+                UnloadGuardianCutscene(&guardianIntro);
+                encounter.progress.health=playerHealth;
+                CompleteGuardianIntro(&encounter,true);
+                screen=2;
+                entryFadeRemaining=entryFadeDuration;
+            }
+            BeginDrawing();
+                ClearBackground(BLACK);
+                if (screen==GUARDIAN_SCREEN) DrawGuardianCutscene(&guardianIntro);
+            EndDrawing();
+            continue;
+        }
         if (screen == 0) {
             MenuAction action = UpdateMenu(&menu);
             if (action == MENU_QUIT) break;
@@ -287,6 +404,13 @@ int main(void) {
                 EndDrawing();
                 if (!opening.finished) continue;
                 UnloadOpeningCutscene(&opening);
+                if (openingPreview) {
+                    openingPreview=false;
+                    screen=previewReturnScreen;
+                    devTools.open=true;
+                    snprintf(devTools.status,sizeof(devTools.status),"Prévia da abertura concluída. Escolha outro teste ou feche o painel.");
+                    continue;
+                }
                 choice = currentWeapon;
             } else {
                 choice = UpdateWeaponSelect(&weaponSelect);
@@ -348,14 +472,26 @@ int main(void) {
             bool hover=CheckCollisionPointRec(GetMousePosition(),retry);
             if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_R) ||
                 (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))) {
-                if (clearing.cemetery) {
+                bool practice=encounter.practice;
+                if (!practice && clearing.cemetery) {
                     UnloadClearing(&clearing);
                     clearing=(Clearing){0};
                     if (!InitClearing(&clearing)) break;
                 }
-                RunProgress progress=NewRunProgress(currentWeapon);
+                RunProgress progress=practice ? encounter.progress : NewRunProgress(currentWeapon);
+                progress.health=progress.maxHealth;
+                if (practice) progress.guardianIntroSeen=true;
                 BeginEncounter(&encounter,&enemies,&clearing,progress,clearing.spawn);
-                SaveClearingCheckpoint(&progress);
+                encounter.practice=practice;
+                if (practice) {
+                    encounter.presentation=(StagePresentation){0};
+                    if (progress.stage==CLEARING_BOSS_STAGE && practiceScenario==DEV_BOSS_TWO) {
+                        enemies.list[0].guardianPhase=GUARDIAN_PHASE_TWO;
+                        enemies.list[0].health=enemies.list[0].maxHealth/2;
+                        enemies.list[0].state=ENEMY_IDLE;
+                        enemies.list[0].stateTime=0;
+                    }
+                } else SaveClearingCheckpoint(&progress);
                 player=clearing.spawn;
                 playerHealth=playerMaxHealth=progress.maxHealth;
                 playerSpeed=progress.speed;
@@ -398,7 +534,7 @@ int main(void) {
             EndDrawing();
             continue;
         }
-        if (entryFadeRemaining<=0)
+        if (entryFadeRemaining<=0 && !encounter.guardianIntroPending)
             UpdateStagePresentation(&encounter.presentation,fminf(GetFrameTime(),.05f));
         bool encounterChanged=entryFadeRemaining<=0 &&
             UpdateEncounter(&encounter,&enemies,&clearing,player,&playerHealth);
@@ -408,6 +544,23 @@ int main(void) {
             katanaAttackRemaining=0;
             katanaAttackCooldown=0;
             dodgeRemaining=0;
+        }
+        if (encounter.guardianIntroPending) {
+            ResetGun(&gun);
+            ResetBible(&bible);
+            ClearEnemyAttacks(&enemies);
+            katanaAttackRemaining=katanaAttackCooldown=dodgeRemaining=dodgeCooldown=0;
+            if (InitGuardianCutscene(&guardianIntro,menu.audio.volume[AUDIO_MUSIC]/100.0f,
+                                     menu.audio.volume[AUDIO_EFFECTS]/100.0f)) {
+                screen=GUARDIAN_SCREEN;
+                BeginDrawing();
+                    ClearBackground(BLACK);
+                    DrawGuardianCutscene(&guardianIntro);
+                EndDrawing();
+                continue;
+            }
+            TraceLog(LOG_WARNING,"Cutscene do Guardiao indisponivel. Usando a apresentacao do chefe.");
+            CompleteGuardianIntro(&encounter,false);
         }
         currentWeapon=encounter.progress.weapon;
         playerMaxHealth=encounter.progress.maxHealth;
@@ -433,8 +586,10 @@ int main(void) {
                 RunProgress nextProgress=encounter.progress;
                 nextProgress.map=1; nextProgress.stage=1; nextProgress.bossPower=1;
                 nextProgress.health=playerHealth;
+                bool practice=encounter.practice;
                 BeginEncounter(&encounter,&enemies,&clearing,nextProgress,player);
-                SaveClearingCheckpoint(&nextProgress);
+                encounter.practice=practice;
+                if (!practice) SaveClearingCheckpoint(&nextProgress);
                 ResetGun(&gun);
                 ResetBible(&bible);
                 dodgeRemaining = katanaAttackRemaining = 0;
@@ -585,7 +740,8 @@ int main(void) {
                     }
                 }
             }
-            UpdateEnemies(&enemies, &clearing, player, deltaTime, dodging,
+            UpdateEnemies(&enemies, &clearing, player, deltaTime,
+                          dodging || (encounter.practice && devTools.invincible),
                           &playerHealth, playerMaxHealth);
         }
         int frame = walking ? 1 + (int) (walkTime * 7.0f) % 4 : 0;
@@ -696,7 +852,7 @@ int main(void) {
             DrawRectangle(12, 12 + hudOffset, 490, 130, Fade(BLACK, 0.72f));
             DrawGameText(currentWeapon == WEAPON_BIBLE ? "WASD: mover  |  Espaço: esquiva" :
                      "WASD: mover  |  Espaço/botão direito: esquiva", 24, 23 + hudOffset, 17, RAYWHITE);
-            DrawGameText("F3: colisão | ESC: pausar", 24, 76 + hudOffset, 17, RAYWHITE);
+            DrawGameText("F1: ferramentas | F3: colisão | Esc: pausa", 24, 76 + hudOffset, 17, RAYWHITE);
             DrawGameText("F4/F5: testar dano e cura", 24, 104 + hudOffset, 17, RAYWHITE);
             if (altarOpen) {
                 DrawGameText(nearPedestal ? "E: usar o altar e entrar no cemitério"
@@ -725,6 +881,12 @@ int main(void) {
             if (currentWeapon == WEAPON_GUN)
                 DrawGameText("Clique esquerdo: disparar (um tiro por clique)", 24, 176 + hudOffset, 18, RAYWHITE);
             DrawEncounter(&encounter,&enemies);
+            if (encounter.practice) {
+                DrawRectangle(0,GetScreenHeight()-28,GetScreenWidth(),28,Fade(BLACK,.8f));
+                DrawGameTextIn(devTools.invincible ? "PRÁTICA · Invulnerável · F1 ferramentas" :
+                    "PRÁTICA · F1 ferramentas",(Rectangle){8,GetScreenHeight()-28,GetScreenWidth()-16,28},
+                    20,GOLD,false);
+            }
             if (entering) {
                 float t = entryFadeRemaining / entryFadeDuration;
                 float opacity = t*t*(3.0f - 2.0f*t);
@@ -735,6 +897,7 @@ int main(void) {
     }
 
     UnloadOpeningCutscene(&opening);
+    UnloadGuardianCutscene(&guardianIntro);
     UnloadEnemies(&enemies);
     UnloadGun(&gun);
     UnloadBible(&bible);
