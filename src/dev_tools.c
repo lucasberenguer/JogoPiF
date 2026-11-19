@@ -129,7 +129,8 @@ bool StartDevEncounter(const DevTools *tools, DevAction action, Encounter *e,
         tools->weapon<0 || tools->weapon>2 || tools->weaponLevel<0 || tools->weaponLevel>3) return false;
     bool aftermath=action==DEV_LIBERATION || action==DEV_PASSAGE;
     bool cemetery=action==DEV_GUARDIAN || aftermath ? false : tools->map==1;
-    if (map->cemetery!=cemetery || map->village || map->chapel) {
+    if (map->cemetery!=cemetery || map->village || map->chapel ||
+        map->basement || map->invertedChapel) {
         Clearing next={0};
         if (!(cemetery ? InitCemetery(&next) : InitClearing(&next))) return false;
         UnloadClearing(map);

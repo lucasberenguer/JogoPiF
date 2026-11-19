@@ -524,7 +524,8 @@ int main(void) {
                     }
                     TraceLog(LOG_WARNING, "Abertura indisponivel. Iniciando a partida.");
                 }
-                if (clearing.cemetery || clearing.village) {
+                if (clearing.cemetery || clearing.village || clearing.chapel ||
+                    clearing.basement || clearing.invertedChapel) {
                     Clearing next={0};
                     if (!InitClearing(&next)) break;
                     UnloadClearing(&clearing);
@@ -568,7 +569,8 @@ int main(void) {
             if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_R) ||
                 (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))) {
                 bool practice=encounter.practice;
-                if (!practice && (clearing.cemetery || clearing.village)) {
+                if (!practice && (clearing.cemetery || clearing.village || clearing.chapel ||
+                    clearing.basement || clearing.invertedChapel)) {
                     UnloadClearing(&clearing);
                     clearing=(Clearing){0};
                     if (!InitClearing(&clearing)) break;
