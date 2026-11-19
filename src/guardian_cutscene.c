@@ -505,7 +505,7 @@ void DrawGuardianCutscene(const GuardianCutscene *scene) {
         DrawRectangleRec(canvas,Fade(shot->transitionIn==CINEMATIC_WHITE?WHITE:BLACK,1-enter));
     DrawNarration(shot,canvas,scale,scene->elapsed);
     if (shot->type==GUARDIAN_DIALOGUE) {
-        Rectangle box={canvas.x+52*scale,canvas.y+508*scale,1176*scale,155*scale};
+        Rectangle box={canvas.x+52*scale,canvas.y+508*scale,1176*scale,172*scale};
         float textSize=fmaxf(21,30*scale);
         float speakerSize=fmaxf(22,31*scale);
         DrawRectangleRec(box,(Color){24,11,21,241});
@@ -522,6 +522,14 @@ void DrawGuardianCutscene(const GuardianCutscene *scene) {
                            (Color){255,240,219,255},false);
             remaining-=letters+1;
         }
+        const char *controls=IsGamepadAvailable(0)
+            ? "A  Completar / avançar    ·    B  Pular    ·    Start  Pausar"
+            : "Espaço / Enter  Completar / avançar    ·    Esc  Pular    ·    P  Pausar";
+        float hintSize=fmaxf(15,18*scale);
+        float hintWidth=MeasureGameTextEx(controls,hintSize,false).x;
+        DrawGameTextEx(controls,
+            (Vector2){box.x+box.width-24*scale-hintWidth,box.y+box.height-hintSize-12*scale},
+            hintSize,(Color){244,226,202,255},false);
     }
     if (shot->chapterCard) {
         DrawGameTextIn(shot->chapter,(Rectangle){canvas.x+80*scale,canvas.y+160*scale,1120*scale,50*scale},
@@ -540,15 +548,14 @@ void DrawGuardianCutscene(const GuardianCutscene *scene) {
         DrawGameTextIn(shot->subtitle,(Rectangle){band.x+40*scale,band.y+85*scale,band.width-80*scale,36*scale},
                        27*scale,Fade(RAYWHITE,enter),false);
     }
-    Rectangle hint={canvas.x+24*scale,canvas.y+680*scale,canvas.width-48*scale,28*scale};
-    DrawRectangleRec(hint,Fade(BLACK,.78f));
-    const char *controls;
-    if (shot->type==GUARDIAN_DIALOGUE)
-        controls=IsGamepadAvailable(0)?"A  Completar / avançar    ·    B  Pular    ·    Start  Pausar":
-            "Espaço / Enter  Completar / avançar    ·    Esc  Pular    ·    P  Pausar";
-    else controls=IsGamepadAvailable(0)?"A  Avançar    ·    B  Pular    ·    Start  Pausar":
-            "Espaço / Enter  Avançar    ·    Esc  Pular    ·    P  Pausar";
-    DrawGameTextIn(controls,hint,fmaxf(16,18*scale),(Color){244,226,202,255},false);
+    if (shot->type!=GUARDIAN_DIALOGUE) {
+        Rectangle hint={canvas.x+24*scale,canvas.y+680*scale,canvas.width-48*scale,28*scale};
+        DrawRectangleRec(hint,Fade(BLACK,.78f));
+        const char *controls=IsGamepadAvailable(0)
+            ? "A  Avançar    ·    B  Pular    ·    Start  Pausar"
+            : "Espaço / Enter  Avançar    ·    Esc  Pular    ·    P  Pausar";
+        DrawGameTextIn(controls,hint,fmaxf(16,18*scale),(Color){244,226,202,255},false);
+    }
     if ((!shot->dialogue[0] || scene->exiting) && shot->fadeOut>0) {
         float exit=scene->exiting ? Ease(scene->exitElapsed/shot->fadeOut) :
             Ease((scene->elapsed-shot->duration+shot->fadeOut)/shot->fadeOut);
