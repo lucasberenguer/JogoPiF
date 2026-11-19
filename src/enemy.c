@@ -1050,13 +1050,21 @@ static void DrawClearingEnemy(const EnemyGroup *group, const Enemy *enemy) {
                    (enemy->facing == 2 ? -1 : 1) * 75.0f * fall, tint);
 }
 
+void DrawBossGroundSeal(Texture2D sealMarker, Vector2 position) {
+    float width = 186.0f;
+    float height = 148.0f;
+    Vector2 center = {position.x, position.y - 16.0f};
+    DrawTexturePro(sealMarker, (Rectangle){128, 36, 1056, 1064},
+        (Rectangle){center.x - width * 0.5f, center.y - height * 0.5f, width, height},
+        (Vector2){0}, 0, Fade(WHITE, 0.52f));
+}
+
 static void DrawSealMarkers(const EnemyGroup *group) {
     for (int i=0; i<ENEMY_COUNT; i++) {
         const Enemy *enemy = &group->list[i];
-        if (enemy->state != ENEMY_FALLEN) continue;
-        bool boss = enemy->type == ENEMY_BOSS;
-        float size = boss ? 50.0f : 42.0f;
-        float height = group->cemetery && boss ? 195.0f : 55.0f;
+        if (enemy->state != ENEMY_FALLEN || enemy->type == ENEMY_BOSS) continue;
+        float size = 42.0f;
+        float height = 55.0f;
         DrawTexturePro(group->sealMarker, (Rectangle){128,36,1056,1064},
             (Rectangle){enemy->position.x-size*.5f, enemy->position.y-height-size*.5f, size, size},
             (Vector2){0},0,WHITE);
@@ -1131,6 +1139,7 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
         }
         if (enemy->type == ENEMY_BOSS) {
             if (enemy->state == ENEMY_DIE || enemy->state == ENEMY_FALLEN) {
+                if (enemy->state == ENEMY_FALLEN) DrawBossGroundSeal(group->sealMarker, enemy->position);
                 DrawGuardianDefeat(group->guardianDefeat, enemy);
                 continue;
             }

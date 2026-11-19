@@ -95,6 +95,7 @@ O Pátio dos Guardiões foi retirado da sequência. Cutscene de descoberta do pa
 
 - **Item de cura (drop de vida dos inimigos):** substituído o desenho de círculos (`DrawCircleV`) por um coração procedural (`DrawHealthPickup` em `src/enemy.c`, compartilhado por Clareira, Cemitério e Vila Lascada em `src/cemetery_enemy.c` e `src/village_enemy.c`), mantendo as mesmas cores (`Fade(GOLD, 0.65f)` na borda externa e `RED` no interior) e a mesma proporção/tamanho em tela.
 - **Caixa de diálogo nas cutscenes (`src/guardian_cutscene.c`):** as instruções de avançar/pular/pausar nos momentos de fala (`GUARDIAN_DIALOGUE` — introdução do Guardião, Libertação e Passagem) foram movidas da barra inferior externa para dentro da própria caixa de fala (alinhadas no canto inferior direito do quadro de diálogo).
+- **Selo no chão para bosses derrotados (`src/enemy.c`, `src/cemetery_enemy.c`):** ao derrotar um boss que exige selamento (`ENEMY_FALLEN` na Clareira e no Cemitério), o marcador `assets/inimigo_selo.png` não fica mais pequeno flutuando acima da cabeça; em vez disso, é desenhado grande e semitransparente (`DrawBossGroundSeal`, `186×148`, opacidade `0.52`) diretamente no chão ao redor e sob o corpo derrotado no centro. Inimigos especiais comuns continuam com o ícone menor acima deles.
 
 ## Decisões confirmadas para o futuro (ainda não implementadas)
 
