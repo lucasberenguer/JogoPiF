@@ -109,6 +109,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                    Vector2 player, float deltaTime, bool playerDodging,
                    int *playerHealth, int playerMaxHealth);
 void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground);
+void DrawHealthPickup(Vector2 position);
 void DamageEnemy(Enemy *enemy, int damage);
 void KnockbackEnemy(Enemy *enemy, const Clearing *clearing,
                     Vector2 source, float distance);

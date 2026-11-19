@@ -181,11 +181,7 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
         const Enemy *enemy = &group->list[i];
         if ((enemy->position.y >= player.y) != foreground) continue;
         if (enemy->state == ENEMY_GONE) {
-            if (enemy->pickupAvailable) {
-                Vector2 drop = {enemy->position.x, enemy->position.y - 9};
-                DrawCircleV(drop, 9, Fade(GOLD, .65f));
-                DrawCircleV(drop, 6, RED);
-            }
+            if (enemy->pickupAvailable) DrawHealthPickup(enemy->position);
             continue;
         }
         if (enemy->state == ENEMY_SPAWNING) {

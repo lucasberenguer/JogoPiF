@@ -1063,6 +1063,27 @@ static void DrawSealMarkers(const EnemyGroup *group) {
     }
 }
 
+static void DrawHeartShape(Vector2 center, float scale, Color color) {
+    float r = 4.6f * scale;
+    Vector2 leftLobe = {center.x - 3.6f * scale, center.y - 2.2f * scale};
+    Vector2 rightLobe = {center.x + 3.6f * scale, center.y - 2.2f * scale};
+    Vector2 bottomTip = {center.x, center.y + 7.2f * scale};
+    Vector2 leftSide = {center.x - 7.8f * scale, center.y - 0.5f * scale};
+    Vector2 rightSide = {center.x + 7.8f * scale, center.y - 0.5f * scale};
+    Vector2 mid = {center.x, center.y - 2.2f * scale};
+    DrawCircleV(leftLobe, r, color);
+    DrawCircleV(rightLobe, r, color);
+    /* Em raylib (sentido anti-horário com Y para baixo): */
+    DrawTriangle(leftSide, bottomTip, rightSide, color);
+    DrawTriangle(leftSide, rightSide, mid, color);
+}
+
+void DrawHealthPickup(Vector2 position) {
+    Vector2 drop = {position.x, position.y - 9.0f};
+    DrawHeartShape(drop, 1.25f, Fade(GOLD, 0.65f));
+    DrawHeartShape(drop, 0.90f, RED);
+}
+
 void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
     if (group->village) {
         VillageDrawEnemies(group, player, foreground);
@@ -1099,9 +1120,7 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
         const Enemy *enemy = &group->list[i];
         if ((enemy->position.y >= player.y) != foreground) continue;
         if (enemy->state == ENEMY_GONE && enemy->pickupAvailable) {
-            DrawCircleV((Vector2){enemy->position.x, enemy->position.y-9}, 9.0f,
-                        Fade(GOLD, 0.65f));
-            DrawCircleV((Vector2){enemy->position.x, enemy->position.y-9}, 6.0f, RED);
+            DrawHealthPickup(enemy->position);
         }
         if (enemy->state == ENEMY_GONE) continue;
         if (enemy->state == ENEMY_SPAWNING) {

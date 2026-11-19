@@ -93,6 +93,8 @@ O Pátio dos Guardiões foi retirado da sequência. Cutscene de descoberta do pa
   - **Líder da Vila (`500 HP`, 100% humano):** duelo direto ao entrar na Vila usando os spritesheets dedicados `assets/lider_vila_walk.png`, `assets/lider_vila_ataque.png` e `assets/lider_vila_investida.png` (`src/village_enemy.c`), com golpe de machado, investida e pulso de selo pálido na fase 2 (`< 50% HP`), caindo como humano ao ser derrotado.
   - **Carta de morte (`ENCOUNTER_LETTER`) e horda necrótica:** ao derrotar o Líder, exibe o modal com seu Último Registro; ao fechar, inicia `StartVillageHorde` com `assets/aldeoes_necroticos.png` (cabelo castanho escuro, 19 iniciais + 12 emergindo da terra ao longo do tempo). Ao eliminar toda a horda, libera `VILA LASCADA LIMPA` / `Capela do Anjo` e a saída pelo arco ao topo.
 
+- **Item de cura (drop de vida dos inimigos):** substituído o desenho de círculos (`DrawCircleV`) por um coração procedural (`DrawHealthPickup` em `src/enemy.c`, compartilhado por Clareira, Cemitério e Vila Lascada em `src/cemetery_enemy.c` e `src/village_enemy.c`), mantendo as mesmas cores (`Fade(GOLD, 0.65f)` na borda externa e `RED` no interior) e a mesma proporção/tamanho em tela.
+
 ## Decisões confirmadas para o futuro (ainda não implementadas)
 
 - **Roguelike puro:** se morrer, perde tudo e reinicia a run.
