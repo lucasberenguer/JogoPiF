@@ -143,7 +143,7 @@ bool LoadClearingCheckpoint(RunProgress *p) {
     else if (fields!=11) loaded.weapon=-1;
     loaded.guardianIntroSeen=currentFormat ? seen==1 : loaded.map==1 || loaded.stage>=CLEARING_COMPLETE_STAGE;
     UnloadFileText(data);
-    bool valid=(!currentFormat || seen==0 || seen==1) && loaded.map>=0 && loaded.map<=3 && loaded.weapon>=0 && loaded.weapon<3 && loaded.stage>=1 && loaded.stage<=CLEARING_COMPLETE_STAGE &&
+    bool valid=(!currentFormat || seen==0 || seen==1) && loaded.map>=0 && loaded.map<=5 && loaded.weapon>=0 && loaded.weapon<3 && loaded.stage>=1 && loaded.stage<=CLEARING_COMPLETE_STAGE &&
         loaded.health>0 && loaded.health<=loaded.maxHealth && loaded.maxHealth<=10000 &&
         isfinite(loaded.damage) && loaded.damage>=1 && loaded.damage<=100 &&
         isfinite(loaded.speed) && loaded.speed>=100 && loaded.speed<=1000 &&

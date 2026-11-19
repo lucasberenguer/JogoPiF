@@ -416,7 +416,7 @@ void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
     group->villageBossDeathWeapon = -1;
     ClearEnemyAttacks(group);
     group->playerHitCooldown = 0;
-    if (clearing->chapel) {
+    if (clearing->chapel || clearing->basement || clearing->invertedChapel) {
         for (int i = 0; i < ENEMY_COUNT; i++) group->list[i] = (Enemy){.state = ENEMY_GONE};
         return;
     }
@@ -453,7 +453,7 @@ void StartArenaBoss(EnemyGroup *group, const Clearing *clearing, Vector2 player,
     group->villageBossDeathWeapon = -1;
     ClearEnemyAttacks(group);
     group->playerHitCooldown = 0;
-    if (clearing->chapel) {
+    if (clearing->chapel || clearing->basement || clearing->invertedChapel) {
         for (int i = 0; i < ENEMY_COUNT; i++) group->list[i] = (Enemy){.state = ENEMY_GONE};
         return;
     }

@@ -7,7 +7,8 @@
 enum { ENCOUNTER_BOSS_HUD_HEIGHT = 58 };
 
 typedef enum EncounterPhase { ENCOUNTER_FIGHT, ENCOUNTER_REWARD, ENCOUNTER_SEAL,
-                             ENCOUNTER_LETTER, ENCOUNTER_CHAPEL_TEXT, ENCOUNTER_CLEAR, ENCOUNTER_DEFEAT } EncounterPhase;
+                             ENCOUNTER_LETTER, ENCOUNTER_CHAPEL_TEXT, ENCOUNTER_BASEMENT_PILLAR,
+                             ENCOUNTER_CLEAR, ENCOUNTER_DEFEAT } EncounterPhase;
 typedef struct Reward { int kind; int weapon; int amount; } Reward;
 typedef struct Encounter {
     RunProgress progress;
@@ -18,6 +19,10 @@ typedef struct Encounter {
     bool rerolled;
     bool villageHordeStarted;
     bool chapelPortalOpen;
+    bool chapelAltarDone;
+    bool basementSolved[4];
+    int basementTarget;
+    bool basementComplete;
     int chapelTextId;
     bool practice; /* Temporary test entry must not overwrite the normal run. */
     bool guardianIntroPending;
@@ -37,6 +42,10 @@ bool CanEnterVillage(const Encounter *encounter, const Clearing *clearing,
                      Vector2 player, bool interactPressed);
 bool CanEnterChapel(const Encounter *encounter, const Clearing *clearing,
                     Vector2 player, bool interactPressed);
+bool CanEnterBasement(const Encounter *encounter, const Clearing *clearing,
+                      Vector2 player, bool interactPressed);
+bool CanEnterInvertedChapel(const Encounter *encounter, const Clearing *clearing,
+                            Vector2 player);
 bool EncounterBossVisible(const Encounter *encounter, const EnemyGroup *enemies);
 float EncounterDamage(const Encounter *encounter);
 bool ChooseEncounterReward(Encounter *encounter, EnemyGroup *enemies, const Clearing *clearing,

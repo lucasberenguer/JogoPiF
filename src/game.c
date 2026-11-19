@@ -376,13 +376,17 @@ int main(void) {
             } else if (action == MENU_CONTINUE) {
                 RunProgress progress;
                 if (LoadClearingCheckpoint(&progress)) {
-                    int currentMap = clearing.chapel ? 3 : (clearing.village ? 2 : (clearing.cemetery ? 1 : 0));
+                    int currentMap = clearing.invertedChapel ? 5
+                        : (clearing.basement ? 4
+                        : (clearing.chapel ? 3 : (clearing.village ? 2 : (clearing.cemetery ? 1 : 0))));
                     if (currentMap != progress.map) {
                         UnloadClearing(&clearing);
                         clearing=(Clearing){0};
-                        bool loadedMap = progress.map == 3 ? InitChapel(&clearing)
+                        bool loadedMap = progress.map == 5 ? InitInvertedChapel(&clearing)
+                            : (progress.map == 4 ? InitChapelBasement(&clearing)
+                            : (progress.map == 3 ? InitChapel(&clearing)
                             : (progress.map == 2 ? InitVillage(&clearing)
-                            : (progress.map == 1 ? InitCemetery(&clearing) : InitClearing(&clearing)));
+                            : (progress.map == 1 ? InitCemetery(&clearing) : InitClearing(&clearing)))));
                         if (!loadedMap) break;
                     }
                     BeginEncounter(&encounter,&enemies,&clearing,progress,clearing.spawn);
@@ -621,7 +625,8 @@ int main(void) {
             katanaAttackCooldown=0;
             dodgeRemaining=0;
         }
-        if (encounter.guardianIntroPending && (clearing.cemetery || clearing.village || clearing.chapel)) {
+        if (encounter.guardianIntroPending && (clearing.cemetery || clearing.village ||
+            clearing.chapel || clearing.basement || clearing.invertedChapel)) {
             encounter.guardianIntroPending = false;
         }
         if (encounter.guardianIntroPending) {
@@ -653,24 +658,32 @@ int main(void) {
         bool nearExit = (clearing.cemetery || clearing.village) &&
             CheckCollisionPointRec(player, clearing.exit);
         bool nearPedestal = !clearing.cemetery && !clearing.village && !clearing.chapel &&
+            !clearing.basement && !clearing.invertedChapel &&
             CheckCollisionPointCircle(player, clearing.pedestal, CLEARING_ALTAR_RADIUS);
         bool altarOpen = ClearingAltarOpen(&encounter, &clearing);
         bool interactPressed = IsKeyPressed(KEY_E);
         if (!entering && playerHealth > 0 &&
             (CanEnterCemetery(&encounter, &clearing, player, interactPressed) ||
              CanEnterVillage(&encounter, &clearing, player, interactPressed) ||
-             CanEnterChapel(&encounter, &clearing, player, interactPressed))) {
+             CanEnterChapel(&encounter, &clearing, player, interactPressed) ||
+             CanEnterBasement(&encounter, &clearing, player, interactPressed) ||
+             CanEnterInvertedChapel(&encounter, &clearing, player))) {
+            bool toInverted = clearing.basement;
+            bool toBasement = clearing.chapel;
             bool toChapel = clearing.village;
             bool toVillage = clearing.cemetery;
             Clearing next = {0};
-            if (toChapel ? InitChapel(&next) : (toVillage ? InitVillage(&next) : InitCemetery(&next))) {
+            if (toInverted ? InitInvertedChapel(&next)
+                : (toBasement ? InitChapelBasement(&next)
+                : (toChapel ? InitChapel(&next)
+                : (toVillage ? InitVillage(&next) : InitCemetery(&next))))) {
                 UnloadClearing(&clearing);
                 clearing = next;
                 player = clearing.spawn;
                 RunProgress nextProgress=encounter.progress;
-                nextProgress.map = toChapel ? 3 : (toVillage ? 2 : 1);
-                nextProgress.stage = (toChapel || toVillage) ? CLEARING_BOSS_STAGE : 1;
-                if (toChapel || toVillage) nextProgress.guardianIntroSeen = true;
+                nextProgress.map = toInverted ? 5 : (toBasement ? 4 : (toChapel ? 3 : (toVillage ? 2 : 1)));
+                nextProgress.stage = (toInverted || toBasement || toChapel || toVillage) ? CLEARING_BOSS_STAGE : 1;
+                if (toInverted || toBasement || toChapel || toVillage) nextProgress.guardianIntroSeen = true;
                 nextProgress.bossPower=1;
                 nextProgress.health=playerHealth;
                 bool practice=encounter.practice;
@@ -912,6 +925,46 @@ int main(void) {
             BeginMode2D(camera);
                 DrawClearing(&clearing);
                 if (altarOpen) DrawClearingAltarGlow(&clearing, (float)GetTime());
+                if (clearing.chapel && encounter.chapelAltarDone) {
+                    float w = (float)clearing.background.width, h = (float)clearing.background.height;
+                    Vector2 door = {w * 0.225f, h * 0.27f};
+                    float pulse = 0.78f + 0.22f * sinf((float)GetTime() * 4.0f);
+                    DrawCircleV(door, 34.0f * pulse, Fade(GOLD, 0.22f));
+                    DrawCircleLines((int)door.x, (int)door.y, 32.0f * pulse, Fade(GOLD, 0.80f));
+                }
+                if (clearing.basement) {
+                    float w = (float)clearing.background.width, h = (float)clearing.background.height;
+                    Vector2 sealCenter = {w * 0.50f, h * 0.56f};
+                    float pulse = 0.75f + 0.25f * sinf((float)GetTime() * 3.5f);
+                    static const float pPos[4][2] = {
+                        {0.218f, 0.395f}, {0.782f, 0.395f}, {0.218f, 0.795f}, {0.782f, 0.795f}
+                    };
+                    static const float angles[4][2] = {
+                        {180.0f, 270.0f}, {270.0f, 360.0f}, {90.0f, 180.0f}, {0.0f, 90.0f}
+                    };
+                    for (int i = 0; i < 4; i++) {
+                        if (!encounter.basementSolved[i]) continue;
+                        Vector2 p = {w * pPos[i][0], h * pPos[i][1]};
+                        DrawCircleV((Vector2){p.x, p.y - 36.0f}, 18.0f * pulse, Fade(GOLD, 0.40f));
+                        DrawLineEx(p, sealCenter, 5.0f, Fade(GOLD, 0.45f * pulse));
+                        DrawCircleSector(sealCenter, 195.0f, angles[i][0], angles[i][1], 18, Fade(GOLD, 0.24f * pulse));
+                        DrawCircleSectorLines(sealCenter, 195.0f, angles[i][0], angles[i][1], 18, Fade(GOLD, 0.80f));
+                    }
+                    if (encounter.basementComplete) {
+                        Vector2 stairs = {w * 0.50f, h * 0.225f};
+                        DrawCircleV(stairs, 36.0f * pulse, Fade((Color){175, 45, 75, 255}, 0.28f));
+                        DrawCircleLines((int)stairs.x, (int)stairs.y, 34.0f * pulse, Fade(GOLD, 0.85f));
+                    }
+                }
+                if (clearing.invertedChapel) {
+                    float t = (float)GetTime();
+                    float w = (float)clearing.background.width, h = (float)clearing.background.height;
+                    for (int i = 0; i < 18; i++) {
+                        float x = fmodf((float)(i * 97 + 43) + sinf(t * 0.6f + i) * 28.0f, w);
+                        float y = fmodf((float)(i * 67 + 29) + t * (10.0f + (i % 5) * 3.0f), h);
+                        DrawCircleV((Vector2){x, y}, 2.2f + (i % 2), Fade((Color){220, 45, 55, 255}, 0.45f));
+                    }
+                }
                 if (currentWeapon == WEAPON_BIBLE) DrawBiblePools(&bible);
                 DrawEnemies(&enemies, player, false);
                 if (currentWeapon == WEAPON_BIBLE) DrawBible(&bible, player, false);
@@ -1035,9 +1088,13 @@ int main(void) {
             } else {
                 DrawGameText(nearExit
                     ? (clearing.village ? "Entrar na Capela do Anjo" : "Saída para a Vila Lascada")
-                    : (clearing.chapel ? "Capela do Anjo (E perto do altar / estátuas / trono)"
+                    : (clearing.invertedChapel ? "Capela Invertida (E perto do altar e estátuas)"
+                        : (clearing.basement ? "Porão da Capela (E nas placas da parede e nos 4 pilares)"
+                        : (clearing.chapel ? (encounter.chapelAltarDone
+                            ? "Capela do Anjo - porta superior esquerda aberta para o Porão"
+                            : "Capela do Anjo (E perto do altar / estátuas / trono)")
                         : (clearing.village ? "Vila Lascada"
-                        : (clearing.cemetery ? "Cemitério das Raízes" : "Explore a clareira"))),
+                        : (clearing.cemetery ? "Cemitério das Raízes" : "Explore a clareira"))))),
                     24, 53 + hudOffset, 18, RAYWHITE);
             }
             DrawHud(&hud, playerHealth, playerMaxHealth,

@@ -225,7 +225,27 @@ bool InitChapel(Clearing *map) {
     float w = (float)map->background.width, h = (float)map->background.height;
     map->spawn = (Vector2){w * 0.50f, h * 0.90f};
     map->pedestal = (Vector2){w * 0.50f, h * 0.44f};
-    map->exit = (Rectangle){w * 0.17f, h * 0.28f, w * 0.11f, h * 0.14f};
+    map->exit = (Rectangle){w * 0.18f, h * 0.22f, w * 0.09f, h * 0.09f};
+    return true;
+}
+
+bool InitChapelBasement(Clearing *map) {
+    if (!LoadMapWithCollision(map, "assets/capela_porao.png", "assets/capela_porao_collision.png")) return false;
+    map->basement = true;
+    float w = (float)map->background.width, h = (float)map->background.height;
+    map->spawn = (Vector2){w * 0.50f, h * 0.28f};
+    map->pedestal = (Vector2){w * 0.50f, h * 0.56f};
+    map->exit = (Rectangle){w * 0.455f, h * 0.195f, w * 0.090f, h * 0.065f};
+    return true;
+}
+
+bool InitInvertedChapel(Clearing *map) {
+    if (!LoadMapWithCollision(map, "assets/capela_invertida.png", "assets/capela_collision.png")) return false;
+    map->invertedChapel = true;
+    float w = (float)map->background.width, h = (float)map->background.height;
+    map->spawn = (Vector2){w * 0.50f, h * 0.62f};
+    map->pedestal = (Vector2){w * 0.50f, h * 0.44f};
+    map->exit = (Rectangle){w * 0.44f, h * 0.88f, w * 0.12f, h * 0.10f};
     return true;
 }
 

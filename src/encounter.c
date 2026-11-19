@@ -26,16 +26,19 @@ static void StartStage(Encounter *e, EnemyGroup *enemies, const Clearing *cleari
         e->phase = ENCOUNTER_CLEAR;
     } else {
         e->phase = ENCOUNTER_FIGHT;
-        const char *areaTitle = clearing->chapel ? "Capela do Anjo"
+        const char *areaTitle = clearing->invertedChapel ? "Capela Invertida"
+            : (clearing->basement ? "Porão da Capela"
+            : (clearing->chapel ? "Capela do Anjo"
             : (clearing->village ? "Vila Lascada"
-            : (clearing->cemetery ? "Cemitério das Raízes" : "Clareira do Selo"));
-        const char *bossTitle = (clearing->village || clearing->chapel) ? NULL
+            : (clearing->cemetery ? "Cemitério das Raízes" : "Clareira do Selo"))));
+        const char *bossTitle = (clearing->village || clearing->chapel || clearing->basement || clearing->invertedChapel) ? NULL
             : (clearing->cemetery ? "Coveiro das Raízes" : "Guardião da Clareira");
         BeginStagePresentation(&e->presentation,
-            (clearing->village || clearing->chapel) ? 0 : e->progress.stage, areaTitle,
+            (clearing->village || clearing->chapel || clearing->basement || clearing->invertedChapel) ? 0 : e->progress.stage, areaTitle,
             e->progress.stage==CLEARING_BOSS_STAGE ? bossTitle : NULL);
         if (clearing->cemetery || clearing->village) e->presentation.portraitCenterX=.73f;
-        e->guardianIntroPending=!clearing->cemetery && !clearing->village && !clearing->chapel &&
+        e->guardianIntroPending=!clearing->cemetery && !clearing->village &&
+                                !clearing->chapel && !clearing->basement && !clearing->invertedChapel &&
                                 e->progress.stage==CLEARING_BOSS_STAGE &&
                                 !e->progress.guardianIntroSeen;
         if (e->progress.stage == CLEARING_BOSS_STAGE) StartArenaBoss(enemies, clearing, player, e->progress.bossPower);
@@ -45,8 +48,8 @@ static void StartStage(Encounter *e, EnemyGroup *enemies, const Clearing *cleari
 
 void BeginEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing,
                     RunProgress progress, Vector2 player) {
-    progress.map = clearing->chapel ? 3 : (clearing->village ? 2 : (clearing->cemetery ? 1 : 0));
-    if ((clearing->village || clearing->chapel) && progress.stage < CLEARING_BOSS_STAGE)
+    progress.map = clearing->invertedChapel ? 5 : (clearing->basement ? 4 : (clearing->chapel ? 3 : (clearing->village ? 2 : (clearing->cemetery ? 1 : 0))));
+    if ((clearing->village || clearing->chapel || clearing->basement || clearing->invertedChapel) && progress.stage < CLEARING_BOSS_STAGE)
         progress.stage = CLEARING_BOSS_STAGE;
     *e = (Encounter){.progress=progress, .sealEnemy=-1};
     StartStage(e, enemies, clearing, player);
@@ -56,7 +59,8 @@ void BeginEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing,
 bool EncounterPaused(const Encounter *e) {
     return e->guardianIntroPending || e->presentation.remaining>0 || e->phase == ENCOUNTER_REWARD ||
            e->phase == ENCOUNTER_SEAL || e->phase == ENCOUNTER_LETTER ||
-           e->phase == ENCOUNTER_CHAPEL_TEXT || e->phase == ENCOUNTER_DEFEAT;
+           e->phase == ENCOUNTER_CHAPEL_TEXT || e->phase == ENCOUNTER_BASEMENT_PILLAR ||
+           e->phase == ENCOUNTER_DEFEAT;
 }
 
 void CompleteGuardianIntro(Encounter *e, bool cinematicPlayed) {
@@ -92,6 +96,19 @@ bool CanEnterChapel(const Encounter *e, const Clearing *clearing,
     (void)interactPressed;
     return clearing->village && e->phase == ENCOUNTER_CLEAR &&
            e->progress.stage == CLEARING_COMPLETE_STAGE && !EncounterPaused(e) &&
+           CheckCollisionPointRec(player, clearing->exit);
+}
+
+bool CanEnterBasement(const Encounter *e, const Clearing *clearing,
+                      Vector2 player, bool interactPressed) {
+    (void)interactPressed;
+    return clearing->chapel && e->chapelAltarDone && !EncounterPaused(e) &&
+           CheckCollisionPointRec(player, clearing->exit);
+}
+
+bool CanEnterInvertedChapel(const Encounter *e, const Clearing *clearing,
+                            Vector2 player) {
+    return clearing->basement && e->basementComplete && !EncounterPaused(e) &&
            CheckCollisionPointRec(player, clearing->exit);
 }
 
@@ -229,6 +246,10 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
         if (e->phase == ENCOUNTER_CHAPEL_TEXT) {
             if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_E) ||
                 IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                if (e->chapelTextId == 0 && !e->chapelAltarDone) {
+                    e->chapelAltarDone = true;
+                    snprintf(e->notice, sizeof(e->notice), "Passagem secreta aberta na porta superior esquerda!");
+                }
                 e->phase = ENCOUNTER_FIGHT;
             }
             return false;
@@ -245,6 +266,90 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
                 e->chapelTextId = 3; e->phase = ENCOUNTER_CHAPEL_TEXT;
             } else if (Vector2Distance(player, (Vector2){w * 0.22f, h * 0.34f}) <= 95.0f) {
                 e->chapelTextId = 4; e->phase = ENCOUNTER_CHAPEL_TEXT;
+            }
+        }
+        return false;
+    }
+    if (e->progress.map == 4) {
+        if (e->phase == ENCOUNTER_CHAPEL_TEXT) {
+            if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_E) ||
+                IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                e->phase = ENCOUNTER_FIGHT;
+            }
+            return false;
+        }
+        if (e->phase == ENCOUNTER_BASEMENT_PILLAR) {
+            if (IsKeyPressed(KEY_ESCAPE)) { e->phase = ENCOUNTER_FIGHT; return false; }
+            int sel = ChoiceInput(2);
+            if (sel >= 0) {
+                static const int solution[4] = {0, 1, 0, 1}; /* NW=V(0), NE=F(1), SW=V(0), SE=F(1) */
+                int t = e->basementTarget;
+                if (sel == solution[t]) {
+                    e->basementSolved[t] = true;
+                    snprintf(e->notice, sizeof(e->notice), "Pilar ativado! Parte do Último Selo acendeu no chão.");
+                    if (e->basementSolved[0] && e->basementSolved[1] &&
+                        e->basementSolved[2] && e->basementSolved[3]) {
+                        e->basementComplete = true;
+                        e->phase = ENCOUNTER_CLEAR;
+                        e->progress.stage = CLEARING_COMPLETE_STAGE;
+                        e->notice[0] = 0;
+                        BeginStagePresentation(&e->presentation, 0,
+                            "Suba pela escadaria ao norte para atravessar ao Mundo Invertido", NULL);
+                        e->presentation.announcement = "ÚLTIMO SELO COMPLETO";
+                        e->presentation.duration = e->presentation.remaining = 2.6f;
+                        return true;
+                    }
+                } else {
+                    snprintf(e->notice, sizeof(e->notice), "As runas rejeitam essa escolha — revise as 4 placas.");
+                }
+                e->phase = ENCOUNTER_FIGHT;
+            }
+            return false;
+        }
+        if (IsKeyPressed(KEY_E) && !e->basementComplete) {
+            float w = (float)clearing->background.width, h = (float)clearing->background.height;
+            static const float tabletX[4] = {0.08f, 0.22f, 0.78f, 0.91f};
+            for (int i = 0; i < 4; i++) {
+                if (Vector2Distance(player, (Vector2){w * tabletX[i], h * 0.28f}) <= 90.0f) {
+                    e->chapelTextId = 5 + i;
+                    e->phase = ENCOUNTER_CHAPEL_TEXT;
+                    return false;
+                }
+            }
+            static const float pillarPos[4][2] = {
+                {0.218f, 0.395f}, {0.782f, 0.395f}, {0.218f, 0.795f}, {0.782f, 0.795f}
+            };
+            for (int i = 0; i < 4; i++) {
+                if (!e->basementSolved[i] &&
+                    Vector2Distance(player, (Vector2){w * pillarPos[i][0], h * pillarPos[i][1]}) <= 115.0f) {
+                    e->basementTarget = i;
+                    e->phase = ENCOUNTER_BASEMENT_PILLAR;
+                    return false;
+                }
+            }
+        }
+        return false;
+    }
+    if (e->progress.map == 5) {
+        if (e->phase == ENCOUNTER_CHAPEL_TEXT) {
+            if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_E) ||
+                IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                e->phase = ENCOUNTER_FIGHT;
+            }
+            return false;
+        }
+        if (IsKeyPressed(KEY_E)) {
+            float w = (float)clearing->background.width, h = (float)clearing->background.height;
+            if (Vector2Distance(player, (Vector2){w * 0.50f, h * 0.44f}) <= 125.0f) {
+                e->chapelTextId = 9; e->phase = ENCOUNTER_CHAPEL_TEXT;
+            } else if (Vector2Distance(player, (Vector2){w * 0.365f, h * 0.26f}) <= 95.0f) {
+                e->chapelTextId = 10; e->phase = ENCOUNTER_CHAPEL_TEXT;
+            } else if (Vector2Distance(player, (Vector2){w * 0.63f, h * 0.26f}) <= 95.0f) {
+                e->chapelTextId = 11; e->phase = ENCOUNTER_CHAPEL_TEXT;
+            } else if (Vector2Distance(player, (Vector2){w * 0.85f, h * 0.35f}) <= 115.0f) {
+                e->chapelTextId = 12; e->phase = ENCOUNTER_CHAPEL_TEXT;
+            } else if (Vector2Distance(player, (Vector2){w * 0.22f, h * 0.34f}) <= 95.0f) {
+                e->chapelTextId = 13; e->phase = ENCOUNTER_CHAPEL_TEXT;
             }
         }
         return false;
@@ -348,16 +453,28 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
     }
     bool bossVisible = EncounterBossVisible(e, enemies);
     int statusY = 205 + (bossVisible ? ENCOUNTER_BOSS_HUD_HEIGHT : 0);
-    const char *mapLabel = e->progress.map == 3 ? "Capela do Anjo"
+    const char *mapLabel = e->progress.map == 5 ? "Capela Invertida"
+        : (e->progress.map == 4 ? "Porão da Capela"
+        : (e->progress.map == 3 ? "Capela do Anjo"
         : (e->progress.map == 2 ? "Vila Lascada"
-        : (e->progress.map == 1 ? "Cemitério" : "Clareira"));
-    const char *clearLabel = e->progress.map == 3 ? "Capela do Anjo - portal para o Inferno Inicial aberto à esquerda"
-        : (e->progress.map == 2 ? "Vila Lascada limpa - siga pelo arco ao topo"
+        : (e->progress.map == 1 ? "Cemitério" : "Clareira"))));
+    const char *clearLabel = e->progress.map == 2 ? "Vila Lascada limpa - siga pelo arco ao topo"
         : (e->progress.map == 1 ? "Cemitério limpo - siga pela saída à direita"
-                                : "Clareira limpa - altar liberado"));
+                                : "Clareira limpa - altar liberado");
     const char *bossLabel = e->progress.map == 2 ? "Líder da Vila"
         : (e->progress.map == 1 ? "Coveiro das Raízes" : "Guardião da Clareira");
-    if (e->progress.map == 3) DrawGameText("Capela do Anjo - explore o santuário e aproxime-se do altar (E)", 24, statusY, 20, GOLD);
+    if (e->progress.map == 3) DrawGameText(e->chapelAltarDone
+        ? "Capela do Anjo - desça pela porta superior esquerda ao Porão"
+        : "Capela do Anjo - aproxime-se do altar central (E)", 24, statusY, 20, GOLD);
+    else if (e->progress.map == 4) {
+        int solved = e->basementSolved[0] + e->basementSolved[1] + e->basementSolved[2] + e->basementSolved[3];
+        DrawGameText(e->basementComplete
+            ? "Último Selo completo - suba pela escadaria ao norte para o Mundo Invertido"
+            : TextFormat("Porão da Capela - Pilares do Último Selo: %d/4 (E nas placas e pilares)", solved),
+                     24, statusY, 20, GOLD);
+    } else if (e->progress.map == 5) {
+        DrawGameText("Capela Invertida (Mundo Invertido) - aproxime-se do altar e estátuas (E)", 24, statusY, 20, GOLD);
+    }
     else if (e->progress.stage<=CLEARING_WAVES) DrawGameText(TextFormat("%s - onda %d/5 | Restantes: %d",
         mapLabel,e->progress.stage,EnemiesRemaining(enemies)),24,statusY,20,GOLD);
     else DrawGameText(e->phase==ENCOUNTER_CLEAR ? clearLabel :
@@ -393,15 +510,25 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
             "Estátua do Guardião",
             "Estátua do Irmão Caído",
             "O Trono Partido",
-            "Selo Secundário"
+            "Selo Secundário",
+            "Placa I — Parede Noroeste",
+            "Placa II — Esquerda da Escadaria",
+            "Placa III — Direita da Escadaria",
+            "Placa IV — Parede Nordeste",
+            "Altar Corrompido",
+            "Estátua Sacrificada (Guardião)",
+            "Estátua Preservada (Necromante)",
+            "Trono do Mundo Invertido",
+            "Selo Adormecido"
         };
         static const char *bodies[][6] = {
             {
                 "\"Mortal... você chegou além das raízes e da vila caída.",
                 "Meu irmão e eu protegíamos os vivos, até ele desafiar a morte",
                 "e tornar-se o Necromante. Sacrifiquei meu poder nos Selos Sagrados.",
-                "Leve minha bênção e siga firme contra a corrupção que se espalhou.\"",
-                "", ""
+                "Desça pela porta superior esquerda até o Porão secreto e restaure",
+                "os 4 pilares do Último Selo para atravessar ao Mundo Invertido.\"",
+                ""
             },
             {
                 "A estátua permanece erguida, iluminada por um fio dourado.",
@@ -424,15 +551,83 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
                 "Um círculo de proteção antigo e adormecido, gravado na pedra.",
                 "Sua energia responde apenas quando o selo central se rompe.",
                 "", "", "", ""
+            },
+            {
+                "\"Os dois pilares superiores — Noroeste (Sup. Esq.) e",
+                "Nordeste (Sup. Dir.) — jamais compartilham o mesmo valor.\"",
+                "", "", "", ""
+            },
+            {
+                "\"Se o Pilar Noroeste (Sup. Esq.) for FALSO, então o",
+                "Pilar Sudoeste (Inf. Esq.) também será FALSO.\"",
+                "", "", "", ""
+            },
+            {
+                "\"Os dois pilares inferiores (Sudoeste e Sudeste) têm valores",
+                "opostos entre si; e o Pilar Sudoeste (Inf. Esq.) é VERDADEIRO.\"",
+                "", "", "", ""
+            },
+            {
+                "\"Combine as três inscrições anteriores para deduzir o valor",
+                "exato de cada pilar e despertar os quatro quadrantes do selo.\"",
+                "", "", "", ""
+            },
+            {
+                "Vestígios dourados quase apagados resistem nas bordas do altar.",
+                "\"Mesmo do outro lado, a última centelha do Guardião ainda",
+                "sustenta esta passagem contra o domínio do Necromante.\"",
+                "", "", ""
+            },
+            {
+                "Aqui no Mundo Invertido, a estátua do Guardião está em ruínas.",
+                "Asas quebradas e vinhas secas mostram o preço de seu sacrifício.",
+                "", "", "", ""
+            },
+            {
+                "Intacta e livre de vinhas, a estátua do Necromante permanece",
+                "imponente — sua influência domina este lado da capela.",
+                "", "", "", ""
+            },
+            {
+                "O trono partido continua vazio, cercado por cinzas e raízes.",
+                "", "", "", "", ""
+            },
+            {
+                "O selo secundário foi drenado pela corrupção carmesim.",
+                "", "", "", "", ""
             }
         };
-        int tid = (e->chapelTextId >= 0 && e->chapelTextId < 5) ? e->chapelTextId : 0;
+        int tid = (e->chapelTextId >= 0 && e->chapelTextId < 14) ? e->chapelTextId : 0;
         DrawGameTextIn(titles[tid], (Rectangle){(float)bx, (float)(by + 18), (float)bw, 34}, 28, GOLD, true);
         for (int i = 0; i < 6; i++) {
             if (bodies[tid][i][0]) DrawGameText(bodies[tid][i], bx + 36, by + 84 + i * 32, 20, RAYWHITE);
         }
         const char *hint = "[Espaço / Enter / Clique] Continuar";
         DrawGameText(hint, (sw - MeasureGameText(hint, 19)) / 2, by + bh - 44, 19, GOLD);
+        return;
+    }
+    if (e->phase == ENCOUNTER_BASEMENT_PILLAR) {
+        int sw = GetScreenWidth();
+        int titleY = (int)(GetScreenHeight() / 2 - 160);
+        static const char *pnames[4] = {
+            "Pilar Noroeste (Sup. Esq.)",
+            "Pilar Nordeste (Sup. Dir.)",
+            "Pilar Sudoeste (Inf. Esq.)",
+            "Pilar Sudeste (Inf. Dir.)"
+        };
+        int t = (e->basementTarget >= 0 && e->basementTarget < 4) ? e->basementTarget : 0;
+        DrawGameTextIn(pnames[t], (Rectangle){0, (float)titleY, (float)sw, 49}, 38, GOLD, true);
+        const char *prompt = "Qual estado lógico deduzido pelas placas ativa este pilar?";
+        DrawGameText(prompt, (sw - MeasureGameText(prompt, 22)) / 2, titleY + 60, 22, RAYWHITE);
+        for (int i = 0; i < 2; i++) {
+            Rectangle box = ChoiceRect(i, 2);
+            DrawRectangleRec(box, CheckCollisionPointRec(GetMousePosition(), box) ? (Color){80,45,50,255} : (Color){40,25,35,255});
+            DrawRectangleLinesEx(box, 2, GOLD);
+            const char *lbl = i == 0 ? "1. Verdadeiro (V)" : "2. Falso (F)";
+            DrawGameText(lbl, (int)box.x + 18, (int)box.y + 20, 20, RAYWHITE);
+        }
+        const char *escHint = "[1 / 2 ou Clique] Escolher  |  [Esc] Voltar";
+        DrawGameText(escHint, (sw - MeasureGameText(escHint, 18)) / 2, GetScreenHeight() / 2 + 145, 18, GOLD);
         return;
     }
     if (e->phase == ENCOUNTER_LETTER) {
