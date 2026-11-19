@@ -56,6 +56,15 @@ static void CheckLegacyCheckpoints(void) {
     assert(SaveClearingCheckpoint(&bossCheckpoint));
     RunProgress currentCheckpoint={0};
     assert(LoadClearingCheckpoint(&currentCheckpoint) && !currentCheckpoint.guardianIntroSeen);
+    assert(SaveFileText(path,"PIF-RUN-6 2 6 100 100 1 240 1 0 0 0 -1 0 1\n"));
+    assert(LoadClearingCheckpoint(&currentCheckpoint));
+    assert(currentCheckpoint.guardianAftermath==GUARDIAN_ALTAR_READY);
+    for (int state=GUARDIAN_LIBERATION_PENDING; state<=GUARDIAN_PASSAGE_PENDING; state++) {
+        currentCheckpoint.guardianAftermath=(GuardianAftermathState)state;
+        assert(SaveClearingCheckpoint(&currentCheckpoint));
+        RunProgress restored={0};
+        assert(LoadClearingCheckpoint(&restored) && restored.guardianAftermath==state);
+    }
 }
 
 static void CheckDevTools(Encounter *e, EnemyGroup *enemies, Clearing *map) {
@@ -93,6 +102,16 @@ static void CheckDevTools(Encounter *e, EnemyGroup *enemies, Clearing *map) {
     assert(StartDevEncounter(&tools,DEV_GUARDIAN,e,enemies,map,&player,&health));
     assert(e->practice && e->guardianIntroPending && !map->cemetery);
     CompleteGuardianIntro(e,true);
+    assert(StartDevEncounter(&tools,DEV_LIBERATION,e,enemies,map,&player,&health));
+    assert(e->practice && GuardianLiberationPending(e) && EncounterPaused(e));
+    CompleteGuardianLiberation(e);
+    assert(ClearingAltarOpen(e,map) && !EncounterPaused(e));
+    assert(StartDevEncounter(&tools,DEV_PASSAGE,e,enemies,map,&player,&health));
+    assert(e->practice && GuardianPassagePending(e) && EncounterPaused(e));
+    assert(CompleteGuardianPassage(e,enemies,map,&player,health));
+    assert(e->practice && map->cemetery && e->progress.map==1);
+    assert(e->progress.guardianAftermath==GUARDIAN_PASSAGE_COMPLETE);
+    assert(!CompleteGuardianPassage(e,enemies,map,&player,health));
     RunProgress unchanged={0};
     assert(LoadClearingCheckpoint(&unchanged));
     assert(unchanged.stage==3 && unchanged.weapon==1 && unchanged.health==75 &&
@@ -292,6 +311,8 @@ int main(void) {
     Capture("audit/boss_seal.png",&encounter,&enemies,&clearing,player);
     float oldPower=encounter.progress.bossPower;
     assert(AnswerEncounterSeal(&encounter,&enemies,&health,(encounter.answer+1)%3));
+    assert(!GuardianLiberationPending(&encounter));
+    assert(encounter.progress.guardianAftermath==GUARDIAN_UNPURIFIED);
     assert(encounter.progress.bossPower>oldPower && boss->health==boss->maxHealth);
     RunProgress revanche;
     assert(LoadClearingCheckpoint(&revanche));
@@ -307,15 +328,16 @@ int main(void) {
     UpdateEncounter(&encounter,&enemies,&clearing,player,&health);
     assert(encounter.phase==ENCOUNTER_CLEAR && encounter.progress.stage==CLEARING_COMPLETE_STAGE);
     assert(!encounter.notice[0]);
-    assert(ClearingAltarOpen(&encounter,&clearing));
+    assert(GuardianLiberationPending(&encounter) && EncounterPaused(&encounter));
+    assert(!ClearingAltarOpen(&encounter,&clearing));
     assert(!CanEnterCemetery(&encounter,&clearing,pedestalApproach,true));
-    assert(encounter.presentation.announcement && EncounterPaused(&encounter));
-    assert(strcmp(encounter.presentation.announcement,"CLAREIRA LIMPA")==0);
-    UpdateStagePresentation(&encounter.presentation,3);
-    assert(encounter.presentation.areaUnlock && EncounterPaused(&encounter));
-    assert(strcmp(encounter.presentation.mapName,"Cemitério das Raízes")==0);
-    Capture("audit/area_unlock.png",&encounter,&enemies,&clearing,player);
-    UpdateStagePresentation(&encounter.presentation,4);
+    RunProgress pending;
+    assert(LoadClearingCheckpoint(&pending) && pending.guardianAftermath==GUARDIAN_LIBERATION_PENDING);
+    BeginEncounter(&encounter,&enemies,&clearing,pending,player);
+    assert(GuardianLiberationPending(&encounter) && EnemiesRemaining(&enemies)==0);
+    CompleteGuardianLiberation(&encounter);
+    CompleteGuardianLiberation(&encounter); /* Repeated completion is harmless. */
+    assert(ClearingAltarOpen(&encounter,&clearing));
     assert(!EncounterPaused(&encounter));
     assert(!CanEnterCemetery(&encounter,&clearing,pedestalApproach,false));
     Vector2 formerExit = {clearing.background.width*.46f, clearing.background.height*.985f};
@@ -324,6 +346,20 @@ int main(void) {
     Capture("audit/clearing_altar_open.png",&encounter,&enemies,&clearing,pedestalApproach);
     RunProgress completed;
     assert(LoadClearingCheckpoint(&completed) && completed.stage==CLEARING_COMPLETE_STAGE);
+    assert(completed.guardianAftermath==GUARDIAN_ALTAR_READY);
+    assert(!BeginGuardianPassage(&encounter,&clearing,formerExit,true));
+    assert(!BeginGuardianPassage(&encounter,&clearing,pedestalApproach,false));
+    assert(BeginGuardianPassage(&encounter,&clearing,pedestalApproach,true));
+    assert(!BeginGuardianPassage(&encounter,&clearing,pedestalApproach,true));
+    assert(EncounterPaused(&encounter));
+    assert(LoadClearingCheckpoint(&completed) && completed.guardianAftermath==GUARDIAN_PASSAGE_PENDING);
+    BeginEncounter(&encounter,&enemies,&clearing,completed,pedestalApproach);
+    assert(GuardianPassagePending(&encounter));
+    assert(CompleteGuardianPassage(&encounter,&enemies,&clearing,&player,health));
+    assert(clearing.cemetery && encounter.progress.map==1 && encounter.progress.stage==1);
+    assert(!GuardianPassagePending(&encounter));
+    assert(LoadClearingCheckpoint(&completed) && completed.map==1 &&
+           completed.guardianAftermath==GUARDIAN_PASSAGE_COMPLETE);
     health=0;
     UpdateEncounter(&encounter,&enemies,&clearing,player,&health);
     assert(encounter.phase==ENCOUNTER_DEFEAT && EncounterPaused(&encounter));
@@ -441,7 +477,11 @@ int main(void) {
         "PIF-RUN-5 0 1 100 100 1 240 1 0 0 0 -1 6",
         "PIF-RUN-5 0 1 100 100 1 240 1 5 0 0 -1 0",
         "PIF-RUN-6 0 5 100 100 1 240 1 0 0 0 -1 0 2",
-        "PIF-RUN-6 0 5 100 100 1 240 1 0 0 0 -1 0"
+        "PIF-RUN-6 0 5 100 100 1 240 1 0 0 0 -1 0",
+        "PIF-RUN-7 0 6 100 100 1 240 1 0 0 0 -1 0 1",
+        "PIF-RUN-7 0 6 100 100 1 240 1 0 0 0 -1 0 1 9",
+        "PIF-RUN-7 0 6 100 100 1 240 1 0 0 0 -1 1 1 1",
+        "PIF-RUN-7 0 5 100 100 1 240 1 0 0 0 -1 0 1 2"
     };
     for (unsigned i=0;i<sizeof(invalidSaves)/sizeof(invalidSaves[0]);i++) {
         assert(SaveFileText(saveFile,(char *)invalidSaves[i]));

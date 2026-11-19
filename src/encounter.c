@@ -49,6 +49,7 @@ static void StartStage(Encounter *e, EnemyGroup *enemies, const Clearing *cleari
 void BeginEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing,
                     RunProgress progress, Vector2 player) {
     progress.map = clearing->invertedChapel ? 5 : (clearing->basement ? 4 : (clearing->chapel ? 3 : (clearing->village ? 2 : (clearing->cemetery ? 1 : 0))));
+    if (progress.map > 0) progress.guardianAftermath = GUARDIAN_PASSAGE_COMPLETE;
     if ((clearing->village || clearing->chapel || clearing->basement || clearing->invertedChapel) && progress.stage < CLEARING_BOSS_STAGE)
         progress.stage = CLEARING_BOSS_STAGE;
     *e = (Encounter){.progress=progress, .sealEnemy=-1};
@@ -57,7 +58,8 @@ void BeginEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing,
 }
 
 bool EncounterPaused(const Encounter *e) {
-    return e->guardianIntroPending || e->presentation.remaining>0 || e->phase == ENCOUNTER_REWARD ||
+    return e->guardianIntroPending || GuardianLiberationPending(e) || GuardianPassagePending(e) ||
+           e->presentation.remaining>0 || e->phase == ENCOUNTER_REWARD ||
            e->phase == ENCOUNTER_SEAL || e->phase == ENCOUNTER_LETTER ||
            e->phase == ENCOUNTER_CHAPEL_TEXT || e->phase == ENCOUNTER_BASEMENT_PILLAR ||
            e->phase == ENCOUNTER_DEFEAT;
@@ -73,8 +75,67 @@ void CompleteGuardianIntro(Encounter *e, bool cinematicPlayed) {
 }
 
 bool ClearingAltarOpen(const Encounter *e, const Clearing *clearing) {
-    return !clearing->cemetery && !clearing->village && e->phase == ENCOUNTER_CLEAR &&
+    return !clearing->cemetery && !clearing->village && !clearing->chapel &&
+           e->progress.guardianAftermath>=GUARDIAN_ALTAR_READY && e->phase == ENCOUNTER_CLEAR &&
            e->progress.stage == CLEARING_COMPLETE_STAGE;
+}
+
+bool GuardianLiberationPending(const Encounter *e) {
+    return e->progress.map==0 && e->progress.stage==CLEARING_COMPLETE_STAGE &&
+           e->progress.guardianAftermath==GUARDIAN_LIBERATION_PENDING;
+}
+
+bool GuardianPassagePending(const Encounter *e) {
+    return e->progress.map==0 && e->progress.stage==CLEARING_COMPLETE_STAGE &&
+           e->progress.guardianAftermath==GUARDIAN_PASSAGE_PENDING;
+}
+
+static void SaveGuardianProgress(const Encounter *e) {
+    if (!e->practice && !SaveClearingCheckpoint(&e->progress))
+        TraceLog(LOG_WARNING,"Nao foi possivel salvar o progresso da purificacao.");
+}
+
+void CompleteGuardianLiberation(Encounter *e) {
+    if (!GuardianLiberationPending(e)) return;
+    e->progress.guardianAftermath=GUARDIAN_ALTAR_READY;
+    e->presentation=(StagePresentation){0};
+    snprintf(e->notice,sizeof(e->notice),"Investigue o altar da clareira");
+    SaveGuardianProgress(e);
+}
+
+bool BeginGuardianPassage(Encounter *e, const Clearing *map, Vector2 player, bool interact) {
+    if (e->progress.guardianAftermath!=GUARDIAN_ALTAR_READY ||
+        !CanEnterCemetery(e,map,player,interact)) return false;
+    e->progress.guardianAftermath=GUARDIAN_PASSAGE_PENDING;
+    SaveGuardianProgress(e);
+    return true;
+}
+
+bool CompleteGuardianPassage(Encounter *e, EnemyGroup *enemies, Clearing *map,
+                             Vector2 *player, int health) {
+    if (!GuardianPassagePending(e)) return false;
+    Clearing next={0};
+    if (!InitCemetery(&next)) {
+        UnloadClearing(&next);
+        e->progress.guardianAftermath=GUARDIAN_ALTAR_READY;
+        snprintf(e->notice,sizeof(e->notice),"Passagem indisponível. Interaja com o altar para tentar novamente.");
+        SaveGuardianProgress(e);
+        return false;
+    }
+    RunProgress progress=e->progress;
+    progress.map=1;
+    progress.stage=1;
+    progress.health=health;
+    progress.bossPower=1;
+    progress.guardianAftermath=GUARDIAN_PASSAGE_COMPLETE;
+    bool practice=e->practice;
+    UnloadClearing(map);
+    *map=next;
+    *player=map->spawn;
+    BeginEncounter(e,enemies,map,progress,*player);
+    e->practice=practice;
+    SaveGuardianProgress(e);
+    return true;
 }
 
 bool CanEnterCemetery(const Encounter *e, const Clearing *clearing,
@@ -217,7 +278,22 @@ bool AnswerEncounterSeal(Encounter *e, EnemyGroup *enemies, int *health, int cho
     if (choice<0 || choice>=count) return false;
     int correct=enemy->type==ENEMY_BOSS?e->answer:(e->question==0 || e->question==3?0:1);
     ClearEnemyAttacks(enemies);
-    if (choice==correct) enemy->state=ENEMY_GONE;
+    if (choice==correct) {
+        enemy->state=ENEMY_GONE;
+        if (enemy->type==ENEMY_BOSS && e->progress.map==0 &&
+            e->progress.stage==CLEARING_BOSS_STAGE) {
+            e->progress.guardianAftermath=GUARDIAN_LIBERATION_PENDING;
+            e->progress.guardianIntroSeen=true;
+            e->guardianIntroPending=false;
+            e->progress.stage=CLEARING_COMPLETE_STAGE;
+            e->progress.health=*health;
+            e->phase=ENCOUNTER_CLEAR;
+            e->presentation=(StagePresentation){0};
+            e->notice[0]=0;
+            SaveGuardianProgress(e);
+            return true;
+        }
+    }
     else {
         enemy->maxHealth=(int)fminf(65000,enemy->maxHealth*1.2f);
         enemy->health=enemy->maxHealth;
@@ -241,7 +317,8 @@ bool AnswerEncounterSeal(Encounter *e, EnemyGroup *enemies, int *health, int cho
 bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing,
                      Vector2 player, int *health) {
     if (*health<=0) { e->phase=ENCOUNTER_DEFEAT; return false; }
-    if (e->guardianIntroPending || e->presentation.remaining>0) return false;
+    if (e->guardianIntroPending || GuardianLiberationPending(e) || GuardianPassagePending(e) ||
+        e->presentation.remaining>0) return false;
     if (e->progress.map == 3) {
         if (e->phase == ENCOUNTER_CHAPEL_TEXT) {
             if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_E) ||

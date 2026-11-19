@@ -238,6 +238,7 @@ int main(void) {
     int screen = 0; /* 0: menu, 1: escolha da arma, 2: partida, 3: pausa */
     OpeningCutscene opening = {0};
     GuardianCutscene guardianIntro = {0};
+    enum { GUARDIAN_STORY_INTRO, GUARDIAN_STORY_LIBERATION, GUARDIAN_STORY_PASSAGE } guardianStory=GUARDIAN_STORY_INTRO;
     DevTools devTools={.wave=1,.selected=6};
     bool devOpeningWasPaused=false,devGuardianWasPaused=false;
     bool openingPreview=false;
@@ -317,14 +318,25 @@ int main(void) {
             } else if (action==DEV_CLEAR_STAGE && inPractice) {
                 if (encounter.phase==ENCOUNTER_FIGHT && !encounter.guardianIntroPending) {
                     ClearEnemyAttacks(&enemies);
-                    for (int i=0; i<ENEMY_COUNT; i++) enemies.list[i]=(Enemy){.state=ENEMY_GONE};
                     encounter.presentation=(StagePresentation){0};
-                    UpdateEncounter(&encounter,&enemies,&clearing,player,&playerHealth);
+                    if (encounter.progress.stage==CLEARING_BOSS_STAGE &&
+                        encounter.progress.map<=1 && enemies.list[0].type==ENEMY_BOSS) {
+                        Enemy *boss=&enemies.list[0];
+                        boss->guardianPhase=GUARDIAN_PHASE_TWO;
+                        boss->health=0;
+                        boss->state=ENEMY_FALLEN;
+                        boss->stateTime=0;
+                        player=boss->position;
+                        OpenEncounterSeal(&encounter,&enemies,player);
+                    } else {
+                        for (int i=0; i<ENEMY_COUNT; i++) enemies.list[i]=(Enemy){.state=ENEMY_GONE};
+                        UpdateEncounter(&encounter,&enemies,&clearing,player,&playerHealth);
+                    }
                     screen=2;
                     devTools.open=false;
                 } else snprintf(devTools.status,sizeof(devTools.status),"Conclua a recompensa ou o selamento antes de encerrar outra onda.");
             } else if (action==DEV_STAGE || action==DEV_BOSS_ONE || action==DEV_BOSS_TWO ||
-                       action==DEV_GUARDIAN || action==DEV_SEAL) {
+                       action==DEV_GUARDIAN || action==DEV_SEAL || action==DEV_LIBERATION || action==DEV_PASSAGE) {
                 if (StartDevEncounter(&devTools,action,&encounter,&enemies,&clearing,&player,&playerHealth)) {
                     UnloadOpeningCutscene(&opening);
                     UnloadGuardianCutscene(&guardianIntro);
@@ -355,9 +367,14 @@ int main(void) {
         if (screen == GUARDIAN_SCREEN) {
             UpdateGuardianCutscene(&guardianIntro,GetFrameTime(),ReadGuardianCutsceneInput());
             if (guardianIntro.finished) {
+                bool skipped=guardianIntro.skipped;
                 UnloadGuardianCutscene(&guardianIntro);
                 encounter.progress.health=playerHealth;
-                CompleteGuardianIntro(&encounter,true);
+                if (guardianStory==GUARDIAN_STORY_INTRO) CompleteGuardianIntro(&encounter,true);
+                else if (guardianStory==GUARDIAN_STORY_LIBERATION) {
+                    CompleteGuardianLiberation(&encounter);
+                    if (skipped) FindFreeMapPosition(&clearing,clearing.pedestal,&player);
+                } else CompleteGuardianPassage(&encounter,&enemies,&clearing,&player,playerHealth);
                 screen=2;
                 entryFadeRemaining=entryFadeDuration;
             }
@@ -625,11 +642,39 @@ int main(void) {
             katanaAttackCooldown=0;
             dodgeRemaining=0;
         }
+        if (GuardianLiberationPending(&encounter) || GuardianPassagePending(&encounter)) {
+            bool passage=GuardianPassagePending(&encounter);
+            guardianStory=passage ? GUARDIAN_STORY_PASSAGE : GUARDIAN_STORY_LIBERATION;
+            ResetGun(&gun);
+            ResetBible(&bible);
+            ClearEnemyAttacks(&enemies);
+            katanaAttackRemaining=katanaAttackCooldown=dodgeRemaining=dodgeCooldown=0;
+            memset(katanaShockwaves,0,sizeof(katanaShockwaves));
+            StopGameMusic(&menu.audio);
+            if (InitGuardianAftermath(&guardianIntro,passage,menu.audio.volume[AUDIO_MUSIC]/100.0f,
+                                      menu.audio.volume[AUDIO_EFFECTS]/100.0f)) {
+                screen=GUARDIAN_SCREEN;
+                BeginDrawing();
+                    ClearBackground(BLACK);
+                    DrawGuardianCutscene(&guardianIntro);
+                EndDrawing();
+                continue;
+            }
+            TraceLog(LOG_WARNING,"Cutscene pos-Guardiao indisponivel. Aplicando o estado final.");
+            if (passage) CompleteGuardianPassage(&encounter,&enemies,&clearing,&player,playerHealth);
+            else {
+                CompleteGuardianLiberation(&encounter);
+                FindFreeMapPosition(&clearing,clearing.pedestal,&player);
+            }
+            entryFadeRemaining=entryFadeDuration;
+            continue;
+        }
         if (encounter.guardianIntroPending && (clearing.cemetery || clearing.village ||
             clearing.chapel || clearing.basement || clearing.invertedChapel)) {
             encounter.guardianIntroPending = false;
         }
         if (encounter.guardianIntroPending) {
+            guardianStory=GUARDIAN_STORY_INTRO;
             ResetGun(&gun);
             ResetBible(&bible);
             ClearEnemyAttacks(&enemies);
@@ -662,9 +707,11 @@ int main(void) {
             CheckCollisionPointCircle(player, clearing.pedestal, CLEARING_ALTAR_RADIUS);
         bool altarOpen = ClearingAltarOpen(&encounter, &clearing);
         bool interactPressed = IsKeyPressed(KEY_E);
+        encounter.progress.health=playerHealth;
+        if (!entering && playerHealth>0 && BeginGuardianPassage(&encounter,&clearing,player,interactPressed))
+            continue;
         if (!entering && playerHealth > 0 &&
-            (CanEnterCemetery(&encounter, &clearing, player, interactPressed) ||
-             CanEnterVillage(&encounter, &clearing, player, interactPressed) ||
+            (CanEnterVillage(&encounter, &clearing, player, interactPressed) ||
              CanEnterChapel(&encounter, &clearing, player, interactPressed) ||
              CanEnterBasement(&encounter, &clearing, player, interactPressed) ||
              CanEnterInvertedChapel(&encounter, &clearing, player))) {
@@ -1078,8 +1125,8 @@ int main(void) {
             DrawGameText("F1: ferramentas | F3: colisão | Esc: pausa", 24, 76 + hudOffset, 17, RAYWHITE);
             DrawGameText("F4/F5: testar dano e cura", 24, 104 + hudOffset, 17, RAYWHITE);
             if (altarOpen) {
-                DrawGameText(nearPedestal ? "E: usar o altar e entrar no cemitério"
-                                      : "Siga o brilho dourado até o altar",
+                DrawGameText(nearPedestal ? "E: Interagir com o Altar Antigo"
+                                      : "Investigue o altar da clareira",
                          24, 53 + hudOffset, 18, GOLD);
             } else if (pedestalMessageTime > 0.0f) {
                 DrawGameText("Conclua as ondas e sele o Guardião", 24, 53 + hudOffset, 18, GOLD);
