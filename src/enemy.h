@@ -3,7 +3,7 @@
 #include "raylib.h"
 #include "clearing.h"
 
-#define ENEMY_COUNT 24
+#define ENEMY_COUNT 30
 #define ENEMY_PROJECTILE_COUNT 48
 #define ENEMY_ROOT_COUNT 8
 #define CEMETERY_PROJECTILE_COUNT 32
@@ -11,6 +11,7 @@ typedef enum GuardianAttack {
     GUARDIAN_ROOTS, GUARDIAN_ROOT_WAVE, GUARDIAN_CURSE, GUARDIAN_ATTACK_COUNT
 } GuardianAttack;
 enum { COVEIRO_ROOTS, COVEIRO_SHOVEL, COVEIRO_CHARGE, COVEIRO_ATTACK_COUNT };
+enum { BONE_CHARGE, BONE_CLAW, BONE_DASH, BONE_ATTACK_COUNT };
 typedef enum GuardianPhase {
     GUARDIAN_PHASE_ONE, GUARDIAN_PHASE_TRANSITION, GUARDIAN_PHASE_TWO
 } GuardianPhase;
@@ -74,6 +75,8 @@ typedef struct EnemyGroup {
     Texture2D backSprites;
     Texture2D frontSprites;
     Texture2D clearingMelee[3], clearingArcher[3], clearingSpecial[3];
+    Texture2D bonelandGhoul, bonelandCultist;
+    Texture2D boneLordWalk, boneLordPounce, boneLordClaw;
     Texture2D sealMarker;
     Texture2D bossSprites, bossWalk, bossAttack, roots, rootWave, curse, guardianMelee;
     Texture2D guardianSpawn, guardianDefeat;
@@ -82,6 +85,8 @@ typedef struct EnemyGroup {
     EnemyProjectile projectiles[ENEMY_PROJECTILE_COUNT];
     EnemyRoot rootAttacks[ENEMY_ROOT_COUNT];
     float playerHitCooldown;
+    bool boneland;
+    bool practiceInvincible;
     bool cemetery;
     bool village;
     int villageSpawnRemaining;

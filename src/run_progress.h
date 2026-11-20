@@ -4,6 +4,8 @@
 #include <stdbool.h>
 
 #define CLEARING_WAVES 4
+#define BONELAND_WAVES 3
+#define BONELAND_MAP 6
 #define CLEARING_BOSS_STAGE 5
 #define CLEARING_COMPLETE_STAGE 6
 
@@ -13,7 +15,7 @@ typedef enum GuardianAftermathState {
 } GuardianAftermathState;
 
 typedef struct RunProgress {
-    int map; /* 0: clareira, 1: cemiterio */
+    int map;
     int weapon;
     int stage; /* 1..4: waves, 5: boss, 6: clearing sealed */
     int health, maxHealth;

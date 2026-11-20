@@ -1,4 +1,5 @@
 #include "clearing.h"
+#include "run_progress.h"
 #include <stddef.h>
 #include "raymath.h"
 #include <math.h>
@@ -247,6 +248,38 @@ bool InitInvertedChapel(Clearing *map) {
     map->pedestal = (Vector2){w * 0.50f, h * 0.44f};
     map->exit = (Rectangle){w * 0.44f, h * 0.88f, w * 0.12f, h * 0.10f};
     return true;
+}
+
+bool InitBoneland(Clearing *map) {
+    if (!LoadMapWithCollision(map, "assets/terra_dos_ossos.png",
+                             "assets/terra_dos_ossos_collision.png")) return false;
+    map->boneland = true;
+    map->spawn = (Vector2){835, 842};
+    map->pedestal = (Vector2){-1000, -1000};
+    map->exit = (Rectangle){765, 32, 140, 75};
+    return true;
+}
+
+bool InitCampaignMap(Clearing *map, int mapId) {
+    switch (mapId) {
+        case 0: return InitClearing(map);
+        case 1: return InitCemetery(map);
+        case 2: return InitVillage(map);
+        case 3: return InitChapel(map);
+        case 4: return InitChapelBasement(map);
+        case 5: return InitInvertedChapel(map);
+        case BONELAND_MAP: return InitBoneland(map);
+        default: return false;
+    }
+}
+
+int ClearingMapId(const Clearing *map) {
+    if (map->boneland) return BONELAND_MAP;
+    if (map->invertedChapel) return 5;
+    if (map->basement) return 4;
+    if (map->chapel) return 3;
+    if (map->village) return 2;
+    return map->cemetery ? 1 : 0;
 }
 
 void ConfigureClearingBoundary(Clearing *map) {

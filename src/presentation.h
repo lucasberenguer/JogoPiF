@@ -5,7 +5,7 @@
 typedef struct StagePresentation {
     float remaining, duration;
     float portraitCenterX;
-    int wave;
+    int wave, waveTotal;
     bool boss;
     const char *mapName, *bossName;
     const char *announcement;

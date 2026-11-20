@@ -155,7 +155,10 @@ bool LoadClearingCheckpoint(RunProgress *p) {
         loaded.map>0 ? GUARDIAN_PASSAGE_COMPLETE :
         loaded.stage==CLEARING_COMPLETE_STAGE ? GUARDIAN_ALTAR_READY : GUARDIAN_UNPURIFIED;
     UnloadFileText(data);
-    bool valid=(!currentFormat || seen==0 || seen==1) && loaded.map>=0 && loaded.map<=5 && loaded.weapon>=0 && loaded.weapon<3 && loaded.stage>=1 && loaded.stage<=CLEARING_COMPLETE_STAGE &&
+    bool valid=(!currentFormat || seen==0 || seen==1) && loaded.map>=0 &&
+        loaded.map<=(aftermathFormat ? BONELAND_MAP : BONELAND_MAP - 1) &&
+        (loaded.map != BONELAND_MAP || loaded.stage <= BONELAND_WAVES || loaded.stage >= CLEARING_BOSS_STAGE) &&
+        loaded.weapon>=0 && loaded.weapon<3 && loaded.stage>=1 && loaded.stage<=CLEARING_COMPLETE_STAGE &&
         loaded.health>0 && loaded.health<=loaded.maxHealth && loaded.maxHealth<=10000 &&
         isfinite(loaded.damage) && loaded.damage>=1 && loaded.damage<=100 &&
         isfinite(loaded.speed) && loaded.speed>=100 && loaded.speed<=1000 &&

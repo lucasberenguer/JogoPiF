@@ -1,6 +1,6 @@
 # Jogo PIF — continuidade entre computadores e chats
 
-Atualizado em 18/11/2026. Leia junto do código e de `git status` antes de retomar.
+Atualizado em 20/11/2026. Leia junto do código e de `git status` antes de retomar.
 
 ## Retomada rápida
 
@@ -176,3 +176,18 @@ Na entrega do pós-boss de 18/11, build em `out/review` concluído e seis testes
 - Há muitos rascunhos antigos não rastreados em `design/`, além de arquivos locais fora do repositório. Não foram incluídos no push de gameplay. Preservar a pasta inteira via backup/OneDrive se forem desejados no novo notebook.
 - Builds, `.vscode` e outros arquivos ignorados não são enviados pelo Git. Checkpoint `partida_pif.sav` fica ao lado do executável e precisa de cópia separada para levar a partida atual.
 - Confirmar manualmente que o OneDrive terminou de sincronizar; este trabalho não verificou nem configurou o serviço.
+
+## Terra dos Ossos (19/11/2026)
+
+- Mapa 6 integrado: arte revisada **Mapa sombrio com ossos, espadas e escudo**, sem o muro e com a carroça ao noroeste, e máscara de colisão revisada. A entrada fica ao sul da Capela Invertida. O checkpoint guarda o mapa e a etapa.
+- Três ondas com 20, 26 e 30 inimigos. As composições são 15 carniçais e 5 cultistas, 19 e 7, e 21 e 9. As entradas são escalonadas com os mesmos intervalos das três primeiras ondas da Clareira. Vida base dos carniçais: 49, 53 e 56 PV. Vida base dos cultistas: 36, 39 e 41 PV.
+- Os carniçais avançam mais rápido e têm mais vida que os cultistas. Os cultistas atacam à distância quando têm linha de visão, anunciam o disparo com um brilho e travam a mira antes de soltar um projétil de brasa mais lento.
+- Carniçais e cultistas usam suas folhas próprias em campanha e no F1. As quatro direções têm pose de espera, dois passos e uma pose de ataque. O fundo magenta é removido no carregamento e cada quadro é ancorado pelos pés.
+- Validação dos sprites em `out/review`: passaram os quatro testes executados. A auditoria do F1 confirmou os 20 inimigos da primeira onda e a transparência das duas folhas. A captura `audit/boneland_attack_poses.png` mostra os ataques nas quatro direções.
+- Completar a terceira onda abre a quarta, o duelo contra o Senhor dos Ossos. O chefe tem 2.800 PV base, acelera na segunda fase e exige selamento para concluir a área.
+- A investida marca uma faixa reta, para em obstáculos e causa 25 de dano base. A garrada marca um arco curto e causa 19. O dash marca um raio de 245 unidades por 0,80 s e trava o acerto na liberação se o jogador ainda está dentro do alcance e a linha está livre. O impacto causa 27 de dano base, inclusive durante a esquiva depois da trava. A invulnerabilidade de treino continua valendo.
+- Validação da integração em `out/review`: build concluído. Passaram a auditoria dos inimigos, incluindo os três golpes e o dash fora de alcance, atrás de obstáculo e com invulnerabilidade de treino, e os testes de conectividade e colisão. As passagens livres, a carroça sólida e a remoção da colisão do muro foram conferidas na máscara do build. A versão anterior do teste de encontro validou a retomada da onda 3 e a transição ao chefe. A reexecução do teste atualizado foi bloqueada pelo Controle de Aplicativo do Windows.
+- Chefe com o nome provisório **Rasga-Ossos**, antigo Senhor dos Ossos. As folhas próprias de marcha, bote e garra foram integradas nas quatro direções. A investida e o dash aproveitam o bote com tempos distintos. A derrota usa uma transição de queda com o próprio sprite.
+- Em campanha e no F1, a entrada apresenta **Terra dos Ossos** e cada encontro mostra a numeração de **1/4** a **4/4**. A quarta cartela apresenta o chefe com a marcha animada. O retrato novo de apresentação está aguardando aprovação antes de substituir essa pose na cartela.
+- Validação do chefe e das cartelas: build e os quatro testes executados passaram. A auditoria do F1 confere a transição do nome do mapa para a onda, a pausa do combate durante a cartela, a quarta onda e a carga das três folhas do chefe.
+- O balanceamento em uma partida completa permanece pendente.

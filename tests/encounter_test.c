@@ -133,6 +133,55 @@ static void CheckDevTools(Encounter *e, EnemyGroup *enemies, Clearing *map) {
         UnloadImage(shot);
         UnloadRenderTexture(target);
     }
+
+    SetWindowSize(1280, 720);
+    tools.map = BONELAND_MAP;
+    tools.wave = 1;
+    assert(StartDevEncounter(&tools, DEV_STAGE, e, enemies, map, &player, &health));
+    assert(e->practice && map->boneland && enemies->boneland && EnemiesRemaining(enemies) == 20);
+    assert(e->presentation.areaEntry && e->presentation.waveTotal == 4 && EncounterPaused(e));
+    assert(strcmp(e->presentation.mapName, "Terra dos Ossos") == 0);
+    UpdateStagePresentation(&e->presentation, .8f);
+    Capture("audit/boneland_area_intro.png", e, enemies, map, player);
+    UpdateStagePresentation(&e->presentation, e->presentation.remaining);
+    assert(!e->presentation.areaEntry && e->presentation.wave == 1 && e->presentation.waveTotal == 4);
+    UpdateStagePresentation(&e->presentation, .6f);
+    Capture("audit/boneland_wave_intro.png", e, enemies, map, player);
+    UpdateStagePresentation(&e->presentation, e->presentation.remaining);
+    assert(!EncounterPaused(e));
+    Image ghoul = LoadImageFromTexture(enemies->bonelandGhoul);
+    Image cultist = LoadImageFromTexture(enemies->bonelandCultist);
+    assert(ghoul.data && cultist.data);
+    assert(GetImageColor(ghoul, 5, 5).a == 0 && GetImageColor(cultist, 5, 5).a == 0);
+    assert(GetImageColor(ghoul, 155, 120).a > 0 && GetImageColor(cultist, 175, 150).a > 0);
+    UnloadImage(ghoul);
+    UnloadImage(cultist);
+    for (int i = 0; i < ENEMY_COUNT; i++) enemies->list[i].state = ENEMY_GONE;
+    for (int i = 0; i < 8; i++) {
+        enemies->list[i] = (Enemy){
+            .type = i < 4 ? ENEMY_COMMON_MELEE : ENEMY_COMMON_RANGED,
+            .state = ENEMY_ATTACK, .stateTime = .5f, .attackConnected = true,
+            .facing = i % 4, .position = {550 + 190 * (i % 4), i < 4 ? 415 : 645}
+        };
+    }
+    Capture("audit/boneland_attack_poses.png", e, enemies, map, player);
+    assert(StartDevEncounter(&tools, DEV_BOSS_ONE, e, enemies, map, &player, &health));
+    assert(e->presentation.areaEntry && e->presentation.wave == 4 && e->presentation.waveTotal == 4);
+    assert(enemies->boneLordWalk.id && enemies->boneLordPounce.id && enemies->boneLordClaw.id);
+    UpdateStagePresentation(&e->presentation, e->presentation.remaining);
+    assert(e->presentation.boss && EncounterPaused(e));
+    assert(strcmp(e->presentation.bossName, "Rasga-Ossos") == 0);
+    UpdateStagePresentation(&e->presentation, .75f);
+    Capture("audit/boneland_boss_intro.png", e, enemies, map, player);
+    UpdateStagePresentation(&e->presentation, e->presentation.remaining);
+    assert(!EncounterPaused(e));
+    Enemy *boss = &enemies->list[0];
+    boss->position = (Vector2){835, 530};
+    boss->state = ENEMY_ATTACK;
+    boss->bossAttack = BONE_CHARGE;
+    boss->stateTime = .95f;
+    boss->facing = 2;
+    Capture("audit/boneland_boss_attack.png", e, enemies, map, player);
 }
 
 int main(void) {
@@ -465,6 +514,50 @@ int main(void) {
     UpdateEncounter(&encounter,&enemies,&clearing,player,&health);
     assert(encounter.phase==ENCOUNTER_CLEAR);
     assert(LoadClearingCheckpoint(&preserved) && preserved.stage==3 && preserved.map==0);
+
+    Clearing bones = {0};
+    assert(InitBoneland(&bones));
+    assert(!IsMapActorBlocked(&bones, bones.spawn));
+    assert(MapHasClearPath(&bones, bones.spawn, (Vector2){835, 460}));
+    assert(IsClearingBlocked(&bones, (Vector2){336, 170}));
+    assert(!IsMapActorBlocked(&bones, (Vector2){1100, 227}));
+    Encounter boneEncounter;
+    RunProgress boneProgress = NewRunProgress(0);
+    int boneHealth = boneProgress.health;
+    BeginEncounter(&boneEncounter, &enemies, &bones, boneProgress, bones.spawn);
+    assert(boneEncounter.progress.map == BONELAND_MAP && EnemiesRemaining(&enemies) == 20);
+    boneEncounter.practice = true;
+    boneEncounter.phase = ENCOUNTER_REWARD;
+    boneEncounter.rewardCount = 1;
+    assert(ChooseEncounterReward(&boneEncounter, &enemies, &bones, bones.spawn, &boneHealth, 0));
+    assert(boneEncounter.progress.stage == 2 && EnemiesRemaining(&enemies) == 26);
+    boneEncounter.phase = ENCOUNTER_REWARD;
+    boneEncounter.rewardCount = 1;
+    assert(ChooseEncounterReward(&boneEncounter, &enemies, &bones, bones.spawn, &boneHealth, 0));
+    assert(boneEncounter.progress.stage == 3 && EnemiesRemaining(&enemies) == 30);
+    RunProgress boneResume;
+    assert(SaveClearingCheckpoint(&boneEncounter.progress));
+    assert(LoadClearingCheckpoint(&boneResume));
+    assert(boneResume.map == BONELAND_MAP && boneResume.stage == 3);
+    boneEncounter.phase = ENCOUNTER_REWARD;
+    boneEncounter.rewardCount = 1;
+    assert(ChooseEncounterReward(&boneEncounter, &enemies, &bones, bones.spawn, &boneHealth, 0));
+    assert(boneEncounter.progress.stage == CLEARING_BOSS_STAGE);
+    assert(boneEncounter.presentation.wave == 4);
+    assert(!boneEncounter.guardianIntroPending && enemies.list[0].type == ENEMY_BOSS);
+    assert(SaveClearingCheckpoint(&boneEncounter.progress));
+    assert(LoadClearingCheckpoint(&boneResume));
+    assert(boneResume.map == BONELAND_MAP && boneResume.stage == CLEARING_BOSS_STAGE);
+    boneEncounter.presentation=(StagePresentation){0};
+    enemies.list[0].state=ENEMY_FALLEN;
+    assert(OpenEncounterSeal(&boneEncounter, &enemies, enemies.list[0].position));
+    assert(AnswerEncounterSeal(&boneEncounter, &enemies, &boneHealth, boneEncounter.answer));
+    UpdateEncounter(&boneEncounter, &enemies, &bones, bones.spawn, &boneHealth);
+    assert(boneEncounter.phase == ENCOUNTER_CLEAR);
+    Vector2 northPass = {835, 80};
+    assert(!IsMapActorBlocked(&bones, northPass));
+    assert(MapHasClearPath(&bones, bones.spawn, northPass));
+    UnloadClearing(&bones);
 
     /* Audit only the test executable's checkpoint, never the player's save. */
     const char *saveFile=TextFormat("%s/partida_pif.sav",GetApplicationDirectory());

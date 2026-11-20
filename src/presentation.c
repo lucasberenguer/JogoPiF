@@ -24,8 +24,12 @@ void UpdateStagePresentation(StagePresentation *p,float dt) {
             return;
         }
         float portraitCenter=p->portraitCenterX;
+        int waveTotal=p->waveTotal;
+        const char *announcement=p->announcement;
         BeginStagePresentation(p,p->wave,p->mapName,p->bossName);
         p->portraitCenterX=portraitCenter;
+        p->waveTotal=waveTotal;
+        p->announcement=announcement;
         p->remaining=fmaxf(0,p->remaining-excess);
         return;
     }
@@ -62,13 +66,15 @@ void DrawStagePresentation(const StagePresentation *p,Texture2D sprite,int colum
         return;
     }
     const Color headline = {255, 232, 190, 255};
+    const char *waveTitle = p->waveTotal > 0
+        ? TextFormat("ONDA %d/%d", p->wave, p->waveTotal) : TextFormat("ONDA %d", p->wave);
     DrawRectangle(0,0,(int)w,(int)h,Fade(BLACK,alpha*(p->boss?.88f:.22f)));
     if (!p->boss) {
         float y=h*.42f;
         DrawRectangle(0,(int)y,(int)w,118,Fade((Color){20,14,27,255},alpha*.94f));
         DrawLine(0,(int)y,(int)w,(int)y,Fade(GOLD,alpha));
         DrawLine(0,(int)y+118,(int)w,(int)y+118,Fade(GOLD,alpha));
-        const char *title=p->announcement?p->announcement:TextFormat("ONDA %d",p->wave);
+        const char *title=p->announcement?p->announcement:waveTitle;
         DrawGameTextIn(title,(Rectangle){w*.06f+slide,y+8,w*.88f,68},58,Fade(headline,alpha),false);
         DrawGameTextIn(p->mapName,(Rectangle){w*.06f,y+77,w*.88f,28},22,Fade(RAYWHITE,alpha),false);
     } else {
@@ -77,7 +83,7 @@ void DrawStagePresentation(const StagePresentation *p,Texture2D sprite,int colum
         float offset=(1-alpha)*w*.8f;
         Vector2 a={-offset,h*.23f},b={w-offset,h*.34f};
         Vector2 c={w-offset,h*.77f},d={-offset,h*.66f};
-        Color band=Fade((Color){48,28,58,255},alpha);
+        Color band=Fade(p->waveTotal > 0 ? (Color){65,25,21,255} : (Color){48,28,58,255},alpha);
         DrawTriangle(a,d,c,band); DrawTriangle(a,c,b,band);
         DrawLineEx(a,b,3,Fade(GOLD,alpha));
         DrawLineEx(d,c,3,Fade(GOLD,alpha));
@@ -93,7 +99,7 @@ void DrawStagePresentation(const StagePresentation *p,Texture2D sprite,int colum
                 (Vector2){0},0,Fade(WHITE,alpha));
         }
         float textX=w*.13f-offset;
-        DrawGameTextEx(TextFormat("ONDA %d - MINI-BOSS",p->wave),(Vector2){textX,h*.37f},
+        DrawGameTextEx(TextFormat("%s - MINI-BOSS",waveTitle),(Vector2){textX,h*.37f},
                        24,Fade(headline,alpha),false);
         float bossSize=fminf(48, w*.42f/MeasureGameTextEx(p->bossName,1,false).x);
         DrawGameTextEx(p->bossName,(Vector2){textX,h*.44f},bossSize,Fade(RAYWHITE,alpha),false);

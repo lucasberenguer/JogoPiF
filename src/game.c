@@ -320,7 +320,8 @@ int main(void) {
                     ClearEnemyAttacks(&enemies);
                     encounter.presentation=(StagePresentation){0};
                     if (encounter.progress.stage==CLEARING_BOSS_STAGE &&
-                        encounter.progress.map<=1 && enemies.list[0].type==ENEMY_BOSS) {
+                        (encounter.progress.map<=1 || encounter.progress.map==BONELAND_MAP) &&
+                        enemies.list[0].type==ENEMY_BOSS) {
                         Enemy *boss=&enemies.list[0];
                         boss->guardianPhase=GUARDIAN_PHASE_TWO;
                         boss->health=0;
@@ -393,18 +394,11 @@ int main(void) {
             } else if (action == MENU_CONTINUE) {
                 RunProgress progress;
                 if (LoadClearingCheckpoint(&progress)) {
-                    int currentMap = clearing.invertedChapel ? 5
-                        : (clearing.basement ? 4
-                        : (clearing.chapel ? 3 : (clearing.village ? 2 : (clearing.cemetery ? 1 : 0))));
-                    if (currentMap != progress.map) {
+                    if (ClearingMapId(&clearing) != progress.map) {
+                        Clearing next = {0};
+                        if (!InitCampaignMap(&next, progress.map)) break;
                         UnloadClearing(&clearing);
-                        clearing=(Clearing){0};
-                        bool loadedMap = progress.map == 5 ? InitInvertedChapel(&clearing)
-                            : (progress.map == 4 ? InitChapelBasement(&clearing)
-                            : (progress.map == 3 ? InitChapel(&clearing)
-                            : (progress.map == 2 ? InitVillage(&clearing)
-                            : (progress.map == 1 ? InitCemetery(&clearing) : InitClearing(&clearing)))));
-                        if (!loadedMap) break;
+                        clearing = next;
                     }
                     BeginEncounter(&encounter,&enemies,&clearing,progress,clearing.spawn);
                     currentWeapon=progress.weapon;
@@ -524,7 +518,7 @@ int main(void) {
                     }
                     TraceLog(LOG_WARNING, "Abertura indisponivel. Iniciando a partida.");
                 }
-                if (clearing.cemetery || clearing.village) {
+                if (ClearingMapId(&clearing) != 0) {
                     Clearing next={0};
                     if (!InitClearing(&next)) break;
                     UnloadClearing(&clearing);
@@ -568,7 +562,7 @@ int main(void) {
             if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_R) ||
                 (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))) {
                 bool practice=encounter.practice;
-                if (!practice && (clearing.cemetery || clearing.village)) {
+                if (!practice && encounter.progress.map > 0) {
                     UnloadClearing(&clearing);
                     clearing=(Clearing){0};
                     if (!InitClearing(&clearing)) break;
@@ -579,7 +573,7 @@ int main(void) {
                 BeginEncounter(&encounter,&enemies,&clearing,progress,clearing.spawn);
                 encounter.practice=practice;
                 if (practice) {
-                    encounter.presentation=(StagePresentation){0};
+                    if (!clearing.boneland) encounter.presentation=(StagePresentation){0};
                     if (progress.stage==CLEARING_BOSS_STAGE && practiceScenario==DEV_BOSS_TWO) {
                         enemies.list[0].guardianPhase=GUARDIAN_PHASE_TWO;
                         enemies.list[0].health=enemies.list[0].maxHealth/2;
@@ -702,16 +696,17 @@ int main(void) {
         if (!entering && IsKeyPressed(KEY_F6)) showSpriteDebug = !showSpriteDebug;
         bool nearExit = (clearing.cemetery || clearing.village) &&
             CheckCollisionPointRec(player, clearing.exit);
-        bool nearPedestal = !clearing.cemetery && !clearing.village && !clearing.chapel &&
-            !clearing.basement && !clearing.invertedChapel &&
+        bool nearPedestal = encounter.progress.map == 0 &&
             CheckCollisionPointCircle(player, clearing.pedestal, CLEARING_ALTAR_RADIUS);
         bool altarOpen = ClearingAltarOpen(&encounter, &clearing);
         bool interactPressed = IsKeyPressed(KEY_E);
         encounter.progress.health=playerHealth;
         if (!entering && playerHealth>0 && BeginGuardianPassage(&encounter,&clearing,player,interactPressed))
             continue;
+        bool toBoneland = clearing.invertedChapel && !EncounterPaused(&encounter) &&
+            CheckCollisionPointRec(player, clearing.exit);
         if (!entering && playerHealth > 0 &&
-            (CanEnterVillage(&encounter, &clearing, player, interactPressed) ||
+            (toBoneland || CanEnterVillage(&encounter, &clearing, player, interactPressed) ||
              CanEnterChapel(&encounter, &clearing, player, interactPressed) ||
              CanEnterBasement(&encounter, &clearing, player, interactPressed) ||
              CanEnterInvertedChapel(&encounter, &clearing, player))) {
@@ -720,15 +715,14 @@ int main(void) {
             bool toChapel = clearing.village;
             bool toVillage = clearing.cemetery;
             Clearing next = {0};
-            if (toInverted ? InitInvertedChapel(&next)
-                : (toBasement ? InitChapelBasement(&next)
-                : (toChapel ? InitChapel(&next)
-                : (toVillage ? InitVillage(&next) : InitCemetery(&next))))) {
+            int nextMap = toBoneland ? BONELAND_MAP
+                : toInverted ? 5 : toBasement ? 4 : toChapel ? 3 : toVillage ? 2 : 1;
+            if (InitCampaignMap(&next, nextMap)) {
                 UnloadClearing(&clearing);
                 clearing = next;
                 player = clearing.spawn;
                 RunProgress nextProgress=encounter.progress;
-                nextProgress.map = toInverted ? 5 : (toBasement ? 4 : (toChapel ? 3 : (toVillage ? 2 : 1)));
+                nextProgress.map = nextMap;
                 nextProgress.stage = (toInverted || toBasement || toChapel || toVillage) ? CLEARING_BOSS_STAGE : 1;
                 if (toInverted || toBasement || toChapel || toVillage) nextProgress.guardianIntroSeen = true;
                 nextProgress.bossPower=1;
@@ -959,8 +953,9 @@ int main(void) {
                     enemies.villageBossDeathWeapon = currentWeapon;
                 }
             }
+            enemies.practiceInvincible = encounter.practice && devTools.invincible;
             UpdateEnemies(&enemies, &clearing, player, deltaTime,
-                          dodging || (encounter.practice && devTools.invincible),
+                          dodging || enemies.practiceInvincible,
                           &playerHealth, playerMaxHealth);
         }
         int frame = walking ? 1 + (int) (walkTime * 7.0f) % 4 : 0;
@@ -1135,7 +1130,8 @@ int main(void) {
             } else {
                 DrawGameText(nearExit
                     ? (clearing.village ? "Entrar na Capela do Anjo" : "Saída para a Vila Lascada")
-                    : (clearing.invertedChapel ? "Capela Invertida (E perto do altar e estátuas)"
+                    : (clearing.boneland ? "Terra dos Ossos"
+                        : clearing.invertedChapel ? "Capela Invertida - saída ao sul"
                         : (clearing.basement ? "Porão da Capela (E nas placas da parede e nos 4 pilares)"
                         : (clearing.chapel ? (encounter.chapelAltarDone
                             ? "Capela do Anjo - porta superior esquerda aberta para o Porão"

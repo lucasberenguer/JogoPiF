@@ -3,6 +3,95 @@
 #include <math.h>
 #include <string.h>
 
+static void CheckBonelandWaves(void) {
+    Clearing map = {.boneland = true, .background = {.width = 1672, .height = 941},
+                    .playableBounds = {0, 0, 1672, 941}, .spawn = {835, 840}};
+    EnemyGroup group = {0};
+    const int totals[] = {20, 26, 30};
+    const int rangedCounts[] = {5, 7, 9};
+    const int ghoulHealth[] = {49, 53, 56};
+    const int cultistHealth[] = {36, 39, 41};
+    for (int wave = 1; wave <= 3; wave++) {
+        StartEnemyWave(&group, &map, wave, map.spawn, 1);
+        int ghouls = 0, cultists = 0;
+        for (int i = 0; i < ENEMY_COUNT; i++) {
+            const Enemy *enemy = &group.list[i];
+            if (enemy->state == ENEMY_GONE) continue;
+            assert(enemy->state == ENEMY_SPAWNING && !IsMapActorBlocked(&map, enemy->position));
+            if (i > 0) assert(enemy->stateTime < group.list[i - 1].stateTime);
+            if (enemy->type == ENEMY_COMMON_MELEE) {
+                ghouls++;
+                assert(enemy->maxHealth == ghoulHealth[wave - 1]);
+            } else {
+                cultists++;
+                assert(enemy->type == ENEMY_COMMON_RANGED && enemy->maxHealth == cultistHealth[wave - 1]);
+            }
+        }
+        assert(EnemiesRemaining(&group) == totals[wave - 1]);
+        assert(ghouls + cultists == totals[wave - 1] && cultists == rangedCounts[wave - 1]);
+    }
+    assert(group.list[29].stateTime == -7.25f);
+    for (int i = 0; i < ENEMY_COUNT; i++) group.list[i].state = ENEMY_GONE;
+    Enemy *cultist = &group.list[0];
+    *cultist = (Enemy){.type = ENEMY_COMMON_RANGED, .state = ENEMY_IDLE,
+                      .position = {340, 400}, .power = 1, .health = 42};
+    Vector2 player = {590, 400};
+    int health = 100;
+    map.obstacles[0] = (Rectangle){445, 370, 30, 60};
+    map.obstacleCount = 1;
+    UpdateEnemies(&group, &map, player, .01f, false, &health, 100);
+    assert(cultist->state != ENEMY_ATTACK);
+    map.obstacleCount = 0;
+    UpdateEnemies(&group, &map, player, .01f, false, &health, 100);
+    assert(cultist->state == ENEMY_ATTACK);
+    player.y += 120;
+    for (int i = 0; i < 11; i++) UpdateEnemies(&group, &map, player, .05f, false, &health, 100);
+    assert(group.projectiles[0].remaining == 0);
+    UpdateEnemies(&group, &map, player, .05f, false, &health, 100);
+    assert(group.projectiles[0].remaining > 0);
+    assert(group.projectiles[0].direction.x > .99f && fabsf(group.projectiles[0].direction.y) < .01f);
+    assert(health == 100);
+}
+
+static void CheckBoneLordAttacks(void) {
+    Clearing map = {.boneland = true, .background = {.width = 1200, .height = 900},
+                    .playableBounds = {0, 0, 1200, 900}, .spawn = {600, 750}};
+    EnemyGroup group = {0};
+    Vector2 origin = {400, 400};
+    for (int scenario = 0; scenario < 7; scenario++) {
+        int expectedAttack = scenario < 2 ? BONE_CHARGE : scenario == 2 ? BONE_CLAW : BONE_DASH;
+        Vector2 player = {scenario < 2 ? 660 : scenario == 2 ? 485 : 580, 400};
+        int health = 100;
+        map.obstacleCount = 0;
+        StartArenaBoss(&group, &map, player, 1);
+        assert(EnemiesRemaining(&group) == 1);
+        Enemy *boss = &group.list[0];
+        boss->position = origin;
+        boss->state = ENEMY_IDLE;
+        boss->attackCooldown = 0;
+        if (expectedAttack != BONE_CHARGE) boss->bossAttack = expectedAttack - 1;
+        group.practiceInvincible = scenario == 6;
+        UpdateEnemies(&group, &map, player, .01f, false, &health, 100);
+        assert(boss->state == ENEMY_ATTACK && boss->bossAttack == expectedAttack);
+        if (scenario == 1) player.y += 125; /* Leave the charge corridor. */
+        if (scenario == 4) player.x += 100; /* Leave the dash range before it locks. */
+        if (scenario == 5) {
+            map.obstacles[0] = (Rectangle){490, 355, 24, 90};
+            map.obstacleCount = 1;
+        }
+        int expectedHealth = scenario == 0 ? 75 : scenario == 2 ? 81 : scenario == 3 ? 73 : 100;
+        int frames = scenario < 2 ? 26 : scenario == 2 ? 9 : 21;
+        for (int i = 0; i < frames; i++) {
+            UpdateEnemies(&group, &map, player, .05f, scenario >= 3, &health, 100);
+            assert(!IsMapActorBlocked(&map, boss->position));
+            if (i < (scenario < 2 ? 12 : scenario == 2 ? 6 : 19)) assert(health == 100);
+        }
+        assert(health == expectedHealth);
+        assert(!group.rootAttacks[0].active);
+        if (scenario == 5) assert(boss->position.x < 490);
+    }
+}
+
 static void CheckGuardianAttacks(Clearing *map, EnemyGroup *group) {
     Vector2 player = {480, 400};
     int health = 100;
@@ -305,5 +394,7 @@ int main(void) {
         assert(group.projectiles[0].remaining==0);
         assert(group.impacts[0].remaining>0);
     }
+    CheckBonelandWaves();
+    CheckBoneLordAttacks();
     return 0;
 }

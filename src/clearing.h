@@ -27,6 +27,7 @@ typedef struct Clearing {
     bool chapel;
     bool basement;
     bool invertedChapel;
+    bool boneland;
     Rectangle obstacles[20];
     int obstacleCount;
     MapObstacle shapes[24];
@@ -43,6 +44,9 @@ bool InitVillage(Clearing *clearing);
 bool InitChapel(Clearing *clearing);
 bool InitChapelBasement(Clearing *clearing);
 bool InitInvertedChapel(Clearing *clearing);
+bool InitBoneland(Clearing *map);
+bool InitCampaignMap(Clearing *map, int mapId);
+int ClearingMapId(const Clearing *map);
 void DrawClearing(const Clearing *clearing);
 void DrawClearingAltarGlow(const Clearing *clearing, float time);
 void DrawClearingForeground(const Clearing *clearing, Vector2 player);
