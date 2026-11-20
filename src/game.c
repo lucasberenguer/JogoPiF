@@ -238,7 +238,7 @@ int main(void) {
     int screen = 0; /* 0: menu, 1: escolha da arma, 2: partida, 3: pausa */
     OpeningCutscene opening = {0};
     GuardianCutscene guardianIntro = {0};
-    enum { GUARDIAN_STORY_INTRO, GUARDIAN_STORY_LIBERATION, GUARDIAN_STORY_PASSAGE } guardianStory=GUARDIAN_STORY_INTRO;
+    enum { GUARDIAN_STORY_INTRO, GUARDIAN_STORY_LIBERATION, GUARDIAN_STORY_PASSAGE, VILLAGE_STORY_AFTERMATH } guardianStory=GUARDIAN_STORY_INTRO;
     DevTools devTools={.wave=1,.selected=6};
     bool devOpeningWasPaused=false,devGuardianWasPaused=false;
     bool openingPreview=false;
@@ -273,7 +273,8 @@ int main(void) {
         if (screen == 0) track = TRACK_MENU;
         else if ((screen == 2 || screen == 3) && playerHealth > 0 &&
                  encounter.progress.stage <= CLEARING_BOSS_STAGE) {
-            track = encounter.guardianIntroPending ? TRACK_SILENT :
+            track = (encounter.guardianIntroPending || encounter.phase==ENCOUNTER_VILLAGE_CINEMATIC ||
+                encounter.phase==ENCOUNTER_LETTER) ? TRACK_SILENT :
                 encounter.progress.stage == CLEARING_BOSS_STAGE ? TRACK_MINIBOSS : TRACK_COMBAT;
             if (screen == 3 || EncounterPaused(&encounter)) musicStrength = 0.42f;
         }
@@ -375,7 +376,8 @@ int main(void) {
                 else if (guardianStory==GUARDIAN_STORY_LIBERATION) {
                     CompleteGuardianLiberation(&encounter);
                     if (skipped) FindFreeMapPosition(&clearing,clearing.pedestal,&player);
-                } else CompleteGuardianPassage(&encounter,&enemies,&clearing,&player,playerHealth);
+                } else if (guardianStory==VILLAGE_STORY_AFTERMATH) CompleteVillageCinematic(&encounter);
+                else CompleteGuardianPassage(&encounter,&enemies,&clearing,&player,playerHealth);
                 screen=2;
                 entryFadeRemaining=entryFadeDuration;
             }
@@ -636,6 +638,24 @@ int main(void) {
             katanaAttackCooldown=0;
             dodgeRemaining=0;
         }
+        if (encounter.phase==ENCOUNTER_VILLAGE_CINEMATIC) {
+            if (!menu.audio.playing[TRACK_MINIBOSS]) {
+                guardianStory=VILLAGE_STORY_AFTERMATH;
+                ResetGun(&gun);
+                ResetBible(&bible);
+                katanaAttackRemaining=katanaAttackCooldown=dodgeRemaining=dodgeCooldown=0;
+                memset(katanaShockwaves,0,sizeof(katanaShockwaves));
+                if (InitVillageCutscene(&guardianIntro,menu.audio.volume[AUDIO_MUSIC]/100.0f,
+                                         menu.audio.volume[AUDIO_EFFECTS]/100.0f))
+                    screen=GUARDIAN_SCREEN;
+                else CompleteVillageCinematic(&encounter);
+            }
+            BeginDrawing();
+            ClearBackground(BLACK);
+            if (screen==GUARDIAN_SCREEN) DrawGuardianCutscene(&guardianIntro);
+            EndDrawing();
+            continue;
+        }
         if (GuardianLiberationPending(&encounter) || GuardianPassagePending(&encounter)) {
             bool passage=GuardianPassagePending(&encounter);
             guardianStory=passage ? GUARDIAN_STORY_PASSAGE : GUARDIAN_STORY_LIBERATION;
@@ -663,7 +683,7 @@ int main(void) {
             entryFadeRemaining=entryFadeDuration;
             continue;
         }
-        if (encounter.guardianIntroPending && (clearing.cemetery || clearing.village ||
+        if (encounter.guardianIntroPending && (clearing.village ||
             clearing.chapel || clearing.basement || clearing.invertedChapel)) {
             encounter.guardianIntroPending = false;
         }
@@ -673,8 +693,18 @@ int main(void) {
             ResetBible(&bible);
             ClearEnemyAttacks(&enemies);
             katanaAttackRemaining=katanaAttackCooldown=dodgeRemaining=dodgeCooldown=0;
-            if (InitGuardianCutscene(&guardianIntro,menu.audio.volume[AUDIO_MUSIC]/100.0f,
-                                     menu.audio.volume[AUDIO_EFFECTS]/100.0f)) {
+            if (clearing.cemetery && menu.audio.playing[TRACK_COMBAT]) {
+                BeginDrawing();
+                ClearBackground(BLACK);
+                EndDrawing();
+                continue;
+            }
+            float musicVolume=menu.audio.volume[AUDIO_MUSIC]/100.0f;
+            float effectsVolume=menu.audio.volume[AUDIO_EFFECTS]/100.0f;
+            bool loaded=clearing.cemetery
+                ? InitCoveiroCutscene(&guardianIntro,musicVolume,effectsVolume)
+                : InitGuardianCutscene(&guardianIntro,musicVolume,effectsVolume);
+            if (loaded) {
                 screen=GUARDIAN_SCREEN;
                 BeginDrawing();
                     ClearBackground(BLACK);
@@ -953,10 +983,16 @@ int main(void) {
                     enemies.villageBossDeathWeapon = currentWeapon;
                 }
             }
+            int remainingVillagers=enemies.villageSpawnRemaining;
+            bool villageHorde=clearing.village && encounter.villageHordeStarted;
+            bool initialEmergence=villageHorde && enemies.list[0].state==ENEMY_SPAWNING &&
+                enemies.list[0].stateTime==0 && remainingVillagers==12;
             enemies.practiceInvincible = encounter.practice && devTools.invincible;
             UpdateEnemies(&enemies, &clearing, player, deltaTime,
                           dodging || enemies.practiceInvincible,
                           &playerHealth, playerMaxHealth);
+            if (villageHorde && (initialEmergence || enemies.villageSpawnRemaining<remainingVillagers))
+                PlayVillageEmergence(&menu.audio,initialEmergence);
         }
         int frame = walking ? 1 + (int) (walkTime * 7.0f) % 4 : 0;
         if (!entering && nearPedestal && interactPressed) pedestalMessageTime = 3.0f;

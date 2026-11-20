@@ -390,6 +390,8 @@ bool InitEnemies(EnemyGroup *group) {
     SetTextureFilter(group->villageBossAttack, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->villageBossCharge, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->villageVillager, TEXTURE_FILTER_POINT);
+    group->villageLetter=LoadTexture("assets/cutscenes/village_aftermath/images/carta.png");
+    if (group->villageLetter.id) SetTextureFilter(group->villageLetter,TEXTURE_FILTER_BILINEAR);
     return true;
 }
 
@@ -432,6 +434,7 @@ void UnloadEnemies(EnemyGroup *group) {
     if (group->villageBossAttack.id) UnloadTexture(group->villageBossAttack);
     if (group->villageBossCharge.id) UnloadTexture(group->villageBossCharge);
     if (group->villageVillager.id) UnloadTexture(group->villageVillager);
+    if (group->villageLetter.id) UnloadTexture(group->villageLetter);
     *group = (EnemyGroup){0};
 }
 
@@ -1332,17 +1335,46 @@ static void DrawClearingEnemy(const EnemyGroup *group, const Enemy *enemy) {
                    (enemy->facing == 2 ? -1 : 1) * 75.0f * fall, tint);
 }
 
+void DrawBossGroundSeal(Texture2D sealMarker, Vector2 position) {
+    float width = 186.0f;
+    float height = 148.0f;
+    Vector2 center = {position.x, position.y - 16.0f};
+    DrawTexturePro(sealMarker, (Rectangle){128, 36, 1056, 1064},
+        (Rectangle){center.x - width * 0.5f, center.y - height * 0.5f, width, height},
+        (Vector2){0}, 0, Fade(WHITE, 0.52f));
+}
+
 static void DrawSealMarkers(const EnemyGroup *group) {
     for (int i=0; i<ENEMY_COUNT; i++) {
         const Enemy *enemy = &group->list[i];
-        if (enemy->state != ENEMY_FALLEN) continue;
-        bool boss = enemy->type == ENEMY_BOSS;
-        float size = boss ? 50.0f : 42.0f;
-        float height = group->cemetery && boss ? 195.0f : 55.0f;
+        if (enemy->state != ENEMY_FALLEN || enemy->type == ENEMY_BOSS) continue;
+        float size = 42.0f;
+        float height = 55.0f;
         DrawTexturePro(group->sealMarker, (Rectangle){128,36,1056,1064},
             (Rectangle){enemy->position.x-size*.5f, enemy->position.y-height-size*.5f, size, size},
             (Vector2){0},0,WHITE);
     }
+}
+
+static void DrawHeartShape(Vector2 center, float scale, Color color) {
+    float r = 4.6f * scale;
+    Vector2 leftLobe = {center.x - 3.6f * scale, center.y - 2.2f * scale};
+    Vector2 rightLobe = {center.x + 3.6f * scale, center.y - 2.2f * scale};
+    Vector2 bottomTip = {center.x, center.y + 7.2f * scale};
+    Vector2 leftSide = {center.x - 7.8f * scale, center.y - 0.5f * scale};
+    Vector2 rightSide = {center.x + 7.8f * scale, center.y - 0.5f * scale};
+    Vector2 mid = {center.x, center.y - 2.2f * scale};
+    DrawCircleV(leftLobe, r, color);
+    DrawCircleV(rightLobe, r, color);
+    /* Em raylib (sentido anti-horário com Y para baixo): */
+    DrawTriangle(leftSide, bottomTip, rightSide, color);
+    DrawTriangle(leftSide, rightSide, mid, color);
+}
+
+void DrawHealthPickup(Vector2 position) {
+    Vector2 drop = {position.x, position.y - 9.0f};
+    DrawHeartShape(drop, 1.25f, Fade(GOLD, 0.65f));
+    DrawHeartShape(drop, 0.90f, RED);
 }
 
 static void DrawBoneLordWarning(const Enemy *boss) {
@@ -1473,9 +1505,7 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
         const Enemy *enemy = &group->list[i];
         if ((enemy->position.y >= player.y) != foreground) continue;
         if (enemy->state == ENEMY_GONE && enemy->pickupAvailable) {
-            DrawCircleV((Vector2){enemy->position.x, enemy->position.y-9}, 9.0f,
-                        Fade(GOLD, 0.65f));
-            DrawCircleV((Vector2){enemy->position.x, enemy->position.y-9}, 6.0f, RED);
+            DrawHealthPickup(enemy->position);
         }
         if (enemy->state == ENEMY_GONE) continue;
         if (group->boneland && enemy->type == ENEMY_BOSS) {
@@ -1490,6 +1520,7 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
         }
         if (enemy->type == ENEMY_BOSS) {
             if (enemy->state == ENEMY_DIE || enemy->state == ENEMY_FALLEN) {
+                if (enemy->state == ENEMY_FALLEN) DrawBossGroundSeal(group->sealMarker, enemy->position);
                 DrawGuardianDefeat(group->guardianDefeat, enemy);
                 continue;
             }

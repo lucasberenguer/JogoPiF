@@ -93,6 +93,11 @@ O Pátio dos Guardiões foi retirado da sequência. Cutscene de descoberta do pa
   - **Líder da Vila (`500 HP`, 100% humano):** duelo direto ao entrar na Vila usando os spritesheets dedicados `assets/lider_vila_walk.png`, `assets/lider_vila_ataque.png` e `assets/lider_vila_investida.png` (`src/village_enemy.c`), com golpe de machado, investida e pulso de selo pálido na fase 2 (`< 50% HP`), caindo como humano ao ser derrotado.
   - **Carta de morte (`ENCOUNTER_LETTER`) e horda necrótica:** ao derrotar o Líder, exibe o modal com seu Último Registro; ao fechar, inicia `StartVillageHorde` com `assets/aldeoes_necroticos.png` (cabelo castanho escuro, 19 iniciais + 12 emergindo da terra ao longo do tempo). Ao eliminar toda a horda, libera `VILA LASCADA LIMPA` / `Capela do Anjo` e a saída pelo arco ao topo.
 
+- **Item de cura (drop de vida dos inimigos):** substituído o desenho de círculos (`DrawCircleV`) por um coração procedural (`DrawHealthPickup` em `src/enemy.c`, compartilhado por Clareira, Cemitério e Vila Lascada em `src/cemetery_enemy.c` e `src/village_enemy.c`), mantendo as mesmas cores (`Fade(GOLD, 0.65f)` na borda externa e `RED` no interior) e a mesma proporção/tamanho em tela.
+- **Caixa de diálogo nas cutscenes (`src/guardian_cutscene.c`):** as instruções de avançar/pular/pausar nos momentos de fala (`GUARDIAN_DIALOGUE` — introdução do Guardião, Libertação e Passagem) foram movidas da barra inferior externa para dentro da própria caixa de fala (alinhadas no canto inferior direito do quadro de diálogo).
+- **Selo no chão para bosses derrotados (`src/enemy.c`, `src/cemetery_enemy.c`):** ao derrotar um boss que exige selamento (`ENEMY_FALLEN` na Clareira e no Cemitério), o marcador `assets/inimigo_selo.png` não fica mais pequeno flutuando acima da cabeça; em vez disso, é desenhado grande e semitransparente (`DrawBossGroundSeal`, `186×148`, opacidade `0.52`) diretamente no chão ao redor e sob o corpo derrotado no centro. Inimigos especiais comuns continuam com o ícone menor acima deles.
+- **Correção de Nova Partida após visitar a Capela (`src/game.c`, `src/dev_tools.c`):** ao iniciar uma nova partida (`MENU_START` → seleção de arma) estando com `clearing.chapel`, `clearing.basement` ou `clearing.invertedChapel` carregado na memória, `game.c` agora descarrega o mapa da Capela e recarrega a Clareira (`InitClearing(&next)`) antes de chamar `BeginEncounter`, impedindo que `BeginEncounter` sobrescreva `progress.map` de volta para a Capela.
+
 ## Decisões confirmadas para o futuro (ainda não implementadas)
 
 - **Roguelike puro:** se morrer, perde tudo e reinicia a run.
@@ -176,6 +181,13 @@ Na entrega do pós-boss de 18/11, build em `out/review` concluído e seis testes
 - Há muitos rascunhos antigos não rastreados em `design/`, além de arquivos locais fora do repositório. Não foram incluídos no push de gameplay. Preservar a pasta inteira via backup/OneDrive se forem desejados no novo notebook.
 - Builds, `.vscode` e outros arquivos ignorados não são enviados pelo Git. Checkpoint `partida_pif.sav` fica ao lado do executável e precisa de cópia separada para levar a partida atual.
 - Confirmar manualmente que o OneDrive terminou de sincronizar; este trabalho não verificou nem configurou o serviço.
+
+- **20/11/2026 — Pré-boss do Coveiro:** 43 s com aparição distante, flashback de Aldric, retorno ao presente, olhos roxos e cartela. Inicia após a recompensa da quarta onda do Cemitério. F1 permite testar pelo cenário Cemitério, onda 5. A sequência, os nove anexos, a trilha enviada e os créditos dos efeitos ficam em `assets/cutscenes/coveiro/`. Os acessos diretos às fases e checkpoints na quinta onda entram no combate. Planos exclusivos e áudio dedicado estão descritos no LEIA-ME da sequência.
+- Validação do Coveiro em `out/review`: build concluído. Os seis testes passaram considerando a bateria inicial e a reexecução de `clearing_encounter` e `guardian_cutscene` com as expectativas do novo fluxo. Foram verificados bloqueio e liberação da barra, carregamento das artes e áudios, duração, conclusão automática e pulo. Sem revisão manual da mixagem.
+
+- **Pós-boss de Chã da Tristeza:** vida zero do Líder dispara a cutscene antes da carta e da horda. Usa quatro artes enviadas e a faixa `take-1-take-1 (1).mp3`, com lembranças da vila, duas falas legendadas, vento, partículas e fade final. As artes de queda e despedida compartilham a ilustração do Líder ajoelhado. Dados em `assets/cutscenes/village_aftermath/data/sequencia.ini`. O checkpoint PIF-RUN-7 aceita o campo opcional `village_aftermath`: interromper a cena retoma a sequência sem refazer o duelo, e concluí-la ou pulá-la retoma na carta. O primeiro grupo e os reforços têm som de terra sincronizado com o início da emergência, usando recorte de `ruptura_solo.wav` (Kenney CC0, fontes em `assets/cutscenes/boss_clareira/audio/CREDITOS-SFX.md`).
+
+- A carta pós-boss do Líder agora usa a arte enviada em `assets/cutscenes/village_aftermath/images/carta.png`, com proporção preservada e comando de continuar abaixo do pergaminho.
 
 ## Terra dos Ossos (19/11/2026)
 

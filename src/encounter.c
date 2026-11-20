@@ -62,22 +62,35 @@ void BeginEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing,
         progress.stage = CLEARING_BOSS_STAGE;
     *e = (Encounter){.progress=progress, .sealEnemy=-1};
     StartStage(e, enemies, clearing, player);
-    BeginAreaEntry(&e->presentation);
+    if (clearing->village && progress.stage==CLEARING_BOSS_STAGE && progress.villageAftermath!=VILLAGE_DUEL) {
+        enemies->list[0].health=0;
+        enemies->list[0].state=ENEMY_FALLEN;
+        e->phase=progress.villageAftermath==VILLAGE_SCENE_PENDING ? ENCOUNTER_VILLAGE_CINEMATIC : ENCOUNTER_LETTER;
+        e->presentation=(StagePresentation){0};
+    } else BeginAreaEntry(&e->presentation);
 }
 
 bool EncounterPaused(const Encounter *e) {
     return e->guardianIntroPending || GuardianLiberationPending(e) || GuardianPassagePending(e) ||
            e->presentation.remaining>0 || e->phase == ENCOUNTER_REWARD ||
-           e->phase == ENCOUNTER_SEAL || e->phase == ENCOUNTER_LETTER ||
+           e->phase == ENCOUNTER_SEAL || e->phase == ENCOUNTER_VILLAGE_CINEMATIC || e->phase == ENCOUNTER_LETTER ||
            e->phase == ENCOUNTER_CHAPEL_TEXT || e->phase == ENCOUNTER_BASEMENT_PILLAR ||
            e->phase == ENCOUNTER_DEFEAT;
+}
+
+void CompleteVillageCinematic(Encounter *e) {
+    if (e->phase!=ENCOUNTER_VILLAGE_CINEMATIC) return;
+    e->progress.villageAftermath=VILLAGE_SCENE_SEEN;
+    e->phase=ENCOUNTER_LETTER;
+    if (!e->practice) SaveClearingCheckpoint(&e->progress);
 }
 
 void CompleteGuardianIntro(Encounter *e, bool cinematicPlayed) {
     if (!e->guardianIntroPending) return;
     e->guardianIntroPending=false;
-    e->progress.guardianIntroSeen=true;
     if (cinematicPlayed) e->presentation=(StagePresentation){0};
+    if (e->progress.map==1) return;
+    e->progress.guardianIntroSeen=true;
     if (!e->practice && !SaveClearingCheckpoint(&e->progress))
         TraceLog(LOG_WARNING,"Nao foi possivel salvar a conclusao da cutscene do Guardiao.");
 }
@@ -266,6 +279,8 @@ bool ChooseEncounterReward(Encounter *e, EnemyGroup *enemies, const Clearing *cl
     e->progress.health=*health;
     if (!e->practice) SaveClearingCheckpoint(&e->progress);
     StartStage(e,enemies,clearing,player);
+    if (clearing->cemetery && e->progress.stage==CLEARING_BOSS_STAGE)
+        e->guardianIntroPending=true;
     return true;
 }
 
@@ -443,9 +458,13 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
     }
     if (e->phase==ENCOUNTER_FIGHT) {
         if (e->progress.map == 2 && !e->villageHordeStarted &&
-            enemies->list[0].type == ENEMY_BOSS && enemies->list[0].state == ENEMY_FALLEN) {
+            enemies->list[0].type == ENEMY_BOSS && enemies->list[0].health<=0) {
             ClearEnemyAttacks(enemies);
-            e->phase = ENCOUNTER_LETTER;
+            enemies->list[0].state=ENEMY_FALLEN;
+            e->progress.villageAftermath=VILLAGE_SCENE_PENDING;
+            e->progress.health=*health;
+            e->phase=ENCOUNTER_VILLAGE_CINEMATIC;
+            if (!e->practice) SaveClearingCheckpoint(&e->progress);
             return false;
         }
         if (EnemiesRemaining(enemies)==0) {
@@ -729,6 +748,19 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
     }
     if (e->phase == ENCOUNTER_LETTER) {
         int sw = GetScreenWidth(), sh = GetScreenHeight();
+        Texture2D letter=enemies->villageLetter;
+        if (letter.id) {
+            const float hintHeight=36;
+            float scale=fminf(sw/(float)letter.width,fmaxf(1,sh-hintHeight)/(float)letter.height);
+            float width=letter.width*scale, height=letter.height*scale;
+            DrawRectangle(0,0,sw,sh,BLACK);
+            DrawTexturePro(letter,(Rectangle){0,0,letter.width,letter.height},
+                (Rectangle){(sw-width)/2,(sh-hintHeight-height)/2,width,height},
+                (Vector2){0},0,WHITE);
+            DrawGameTextIn("Espaço / Enter / E / Clique para continuar",
+                (Rectangle){0,sh-hintHeight,sw,hintHeight},20,GOLD,false);
+            return;
+        }
         int bw = (int)fminf(720.0f, sw - 80.0f), bh = 380;
         int bx = (sw - bw) / 2, by = (sh - bh) / 2;
         DrawRectangle(bx, by, bw, bh, (Color){38, 28, 22, 245});
