@@ -212,6 +212,10 @@ static bool InitSequence(GuardianCutscene *scene, const char *directory, const c
     return true;
 }
 
+bool InitVillageCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume) {
+    return InitSequence(scene,"assets/cutscenes/village_aftermath/","sequencia.ini",musicVolume,effectsVolume);
+}
+
 bool InitCoveiroCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume) {
     return InitSequence(scene,"assets/cutscenes/coveiro/","sequencia.ini",musicVolume,effectsVolume);
 }

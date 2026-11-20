@@ -10,7 +10,7 @@ typedef struct GameAudio {
     Music tracks[TRACK_COUNT];
     float gain[TRACK_COUNT];
     bool playing[TRACK_COUNT];
-    Sound feedback;
+    Sound feedback, villageEmergence;
     int volume[AUDIO_CHANNELS];
     bool ownsDevice;
 } GameAudio;
@@ -18,6 +18,7 @@ typedef struct GameAudio {
 void InitGameAudio(GameAudio *audio);
 void UpdateGameMusic(GameAudio *audio, GameTrack track, float strength, float dt);
 void StopGameMusic(GameAudio *audio);
+void PlayVillageEmergence(const GameAudio *audio, bool initialGroup);
 void PlayAudioFeedback(const GameAudio *audio);
 void SaveAudioSettings(const GameAudio *audio);
 void UnloadGameAudio(GameAudio *audio);

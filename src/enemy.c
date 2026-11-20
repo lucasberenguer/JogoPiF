@@ -331,6 +331,8 @@ bool InitEnemies(EnemyGroup *group) {
     SetTextureFilter(group->villageBossAttack, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->villageBossCharge, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->villageVillager, TEXTURE_FILTER_POINT);
+    group->villageLetter=LoadTexture("assets/cutscenes/village_aftermath/images/carta.png");
+    if (group->villageLetter.id) SetTextureFilter(group->villageLetter,TEXTURE_FILTER_BILINEAR);
     return true;
 }
 
@@ -368,6 +370,7 @@ void UnloadEnemies(EnemyGroup *group) {
     if (group->villageBossAttack.id) UnloadTexture(group->villageBossAttack);
     if (group->villageBossCharge.id) UnloadTexture(group->villageBossCharge);
     if (group->villageVillager.id) UnloadTexture(group->villageVillager);
+    if (group->villageLetter.id) UnloadTexture(group->villageLetter);
     *group = (EnemyGroup){0};
 }
 

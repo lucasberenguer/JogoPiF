@@ -50,6 +50,7 @@ int LayoutGuardianNarration(const char *text, float scale, float width,
                            char lines[8][512], float *fontSize);
 float GuardianNarrationOpacity(const GuardianScene *shot, float elapsed);
 
+bool InitVillageCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume);
 bool InitCoveiroCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume);
 bool InitGuardianCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume);
 bool InitGuardianAftermath(GuardianCutscene *scene, bool passage, float musicVolume, float effectsVolume);

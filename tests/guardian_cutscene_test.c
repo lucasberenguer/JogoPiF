@@ -326,6 +326,15 @@ int main(void) {
         assert(scene.finished && scene.skipped==(skip!=0));
         UnloadGuardianCutscene(&scene);
     }
+    assert(InitVillageCutscene(&scene,.12f,.12f));
+    assert(scene.count==8 && scene.artCount==4);
+    assert(!strcmp(scene.scenes[3].narration,"Eu só queria salvá-los..."));
+    assert(!strcmp(scene.scenes[5].narration,"Mas fui eu quem condenou todos eles."));
+    if (IsAudioDeviceReady()) assert(scene.music.stream.buffer && scene.scenes[0].cue.stream.buffer);
+    for (int i=0;i<400 && !scene.finished;i++)
+        UpdateGuardianCutscene(&scene,.1f,(GuardianCutsceneInput){0});
+    assert(scene.finished && !scene.skipped);
+    UnloadGuardianCutscene(&scene);
     UnloadGameFonts();
     if (IsAudioDeviceReady()) CloseAudioDevice();
     CloseWindow();
