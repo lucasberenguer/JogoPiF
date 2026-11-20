@@ -428,6 +428,10 @@ int main(void) {
     UpdateStagePresentation(&encounter.presentation,.7f);
     Capture("audit/cemetery_boss_intro.png",&encounter,&enemies,&clearing,player);
     UpdateStagePresentation(&encounter.presentation,10);
+    assert(encounter.guardianIntroPending && EncounterPaused(&encounter));
+    assert(!EncounterBossVisible(&encounter,&enemies));
+    CompleteGuardianIntro(&encounter,true);
+    assert(!EncounterPaused(&encounter));
     assert(EncounterBossVisible(&encounter,&enemies) && enemies.list[0].health==2420);
     Capture("audit/cemetery_boss_hud.png",&encounter,&enemies,&clearing,player);
     enemies.list[0].state=ENEMY_IDLE;

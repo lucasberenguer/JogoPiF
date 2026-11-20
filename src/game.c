@@ -671,7 +671,7 @@ int main(void) {
             entryFadeRemaining=entryFadeDuration;
             continue;
         }
-        if (encounter.guardianIntroPending && (clearing.cemetery || clearing.village ||
+        if (encounter.guardianIntroPending && (clearing.village ||
             clearing.chapel || clearing.basement || clearing.invertedChapel)) {
             encounter.guardianIntroPending = false;
         }
@@ -681,8 +681,18 @@ int main(void) {
             ResetBible(&bible);
             ClearEnemyAttacks(&enemies);
             katanaAttackRemaining=katanaAttackCooldown=dodgeRemaining=dodgeCooldown=0;
-            if (InitGuardianCutscene(&guardianIntro,menu.audio.volume[AUDIO_MUSIC]/100.0f,
-                                     menu.audio.volume[AUDIO_EFFECTS]/100.0f)) {
+            if (clearing.cemetery && menu.audio.playing[TRACK_COMBAT]) {
+                BeginDrawing();
+                ClearBackground(BLACK);
+                EndDrawing();
+                continue;
+            }
+            float musicVolume=menu.audio.volume[AUDIO_MUSIC]/100.0f;
+            float effectsVolume=menu.audio.volume[AUDIO_EFFECTS]/100.0f;
+            bool loaded=clearing.cemetery
+                ? InitCoveiroCutscene(&guardianIntro,musicVolume,effectsVolume)
+                : InitGuardianCutscene(&guardianIntro,musicVolume,effectsVolume);
+            if (loaded) {
                 screen=GUARDIAN_SCREEN;
                 BeginDrawing();
                     ClearBackground(BLACK);

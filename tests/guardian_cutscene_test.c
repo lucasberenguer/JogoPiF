@@ -309,6 +309,23 @@ int main(void) {
     assert(!scene.music.stream.buffer || !IsMusicStreamPlaying(scene.music));
     UnloadGuardianCutscene(&scene);
     CheckAftermath();
+    for (int skip=0;skip<2;skip++) {
+        assert(InitCoveiroCutscene(&scene,.12f,.12f));
+        assert(scene.count==11 && scene.artCount==9);
+        if (IsAudioDeviceReady()) assert(scene.music.stream.buffer);
+        float duration=0;
+        for (int i=0;i<scene.count;i++) {
+            assert(scene.scenes[i].artIndex>=0);
+            if (IsAudioDeviceReady()) assert(scene.scenes[i].cue.stream.buffer);
+            duration+=scene.scenes[i].duration;
+        }
+        assert(duration==43);
+        if (skip) UpdateGuardianCutscene(&scene,0,(GuardianCutsceneInput){.skip=true});
+        else for (int i=0;i<500 && !scene.finished;i++)
+            UpdateGuardianCutscene(&scene,.1f,(GuardianCutsceneInput){0});
+        assert(scene.finished && scene.skipped==(skip!=0));
+        UnloadGuardianCutscene(&scene);
+    }
     UnloadGameFonts();
     if (IsAudioDeviceReady()) CloseAudioDevice();
     CloseWindow();

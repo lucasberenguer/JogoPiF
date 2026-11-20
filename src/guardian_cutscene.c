@@ -44,7 +44,7 @@ static bool LoadSequence(GuardianCutscene *scene, const char *sequence) {
             shot = &scene->scenes[scene->count++];
             *shot = (GuardianScene){.duration=4, .fadeIn=.55f, .fadeOut=.55f,
                 .narrationAt=.65f, .narrationDuration=3.6f, .narrationFade=.5f,
-                .cueGain=.55f,
+                .cueGain=.55f, .scoreGain=1,
                 .zoomStart=1, .zoomEnd=1.04f, .focusStart={.5f,.5f}, .focusEnd={.5f,.5f},
                 .sealPosition={.65f,.72f}, .transitionIn=CINEMATIC_CROSSFADE,
                 .transitionOut=CINEMATIC_CROSSFADE, .artIndex=-1};
@@ -92,6 +92,7 @@ static bool LoadSequence(GuardianCutscene *scene, const char *sequence) {
             if (strstr(value,"purify")) shot->effects |= CINEMATIC_PURIFY;
             if (strstr(value,"cyan")) shot->effects |= CINEMATIC_CYAN;
             if (strstr(value,"gold")) shot->effects |= CINEMATIC_GOLD;
+            if (strstr(value,"eyes")) shot->effects |= CINEMATIC_EYES;
             if (strstr(value,"wisp")) shot->effects |= CINEMATIC_WISP;
         } else if (!strcmp(key,"speaker")) snprintf(shot->speaker,sizeof(shot->speaker),"%s",value);
         else if (!strcmp(key,"dialogue")) snprintf(shot->dialogue,sizeof(shot->dialogue),"%s",value);
@@ -102,6 +103,7 @@ static bool LoadSequence(GuardianCutscene *scene, const char *sequence) {
         else if (!strcmp(key,"chapter")) snprintf(shot->chapter,sizeof(shot->chapter),"%s",value);
         else if (!strcmp(key,"tagline")) snprintf(shot->tagline,sizeof(shot->tagline),"%s",value);
         else if (!strcmp(key,"chapter_card")) shot->chapterCard=!strcmp(value,"true");
+        else if (!strcmp(key,"score_gain")) shot->scoreGain=strtof(value,NULL);
         else if (!strcmp(key,"music_start")) shot->musicStart=strtof(value,NULL);
         else if (!strcmp(key,"next")) {
             if (strcmp(value,"duration") && strcmp(value,"advance")) valid=false;
@@ -113,7 +115,7 @@ static bool LoadSequence(GuardianCutscene *scene, const char *sequence) {
         GuardianScene *s = &scene->scenes[i];
         const float numbers[] = {s->duration,s->fadeIn,s->fadeOut,s->cueAt,s->cueGain,s->zoomStart,s->zoomEnd,
             s->narrationAt,s->narrationDuration,s->narrationFade,
-            s->musicStart,
+            s->musicStart,s->scoreGain,
             s->focusStart.x,s->focusStart.y,s->focusEnd.x,s->focusEnd.y,s->sealPosition.x,s->sealPosition.y};
         for (int n=0; n<(int)(sizeof(numbers)/sizeof(*numbers)); n++)
             if (!isfinite(numbers[n])) valid=false;
@@ -129,7 +131,7 @@ static bool LoadSequence(GuardianCutscene *scene, const char *sequence) {
             (s->narration[0] && (s->dialogue[0] || s->speaker[0] || s->title[0])) ||
             s->narrationAt<0 || s->narrationFade<=0 || s->narrationDuration<2*s->narrationFade ||
             (s->narration[0] && s->narrationAt+s->narrationDuration>s->duration) ||
-            s->musicStart<0 || (s->chapterCard && (s->dialogue[0] || s->narration[0])) ||
+            s->musicStart<0 || s->scoreGain<0 || s->scoreGain>1 || (s->chapterCard && (s->dialogue[0] || s->narration[0])) ||
             (s->type==GUARDIAN_EFFECT && !s->effects && !s->audioEvent[0])) valid=false;
         for (int j=0; j<i; j++) if (!strcmp(s->id,scene->scenes[j].id)) valid=false;
     }
@@ -208,6 +210,10 @@ static bool InitSequence(GuardianCutscene *scene, const char *directory, const c
     }
     EnterScene(scene);
     return true;
+}
+
+bool InitCoveiroCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume) {
+    return InitSequence(scene,"assets/cutscenes/coveiro/","sequencia.ini",musicVolume,effectsVolume);
 }
 
 bool InitGuardianCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume) {
@@ -306,11 +312,11 @@ void UpdateGuardianCutscene(GuardianCutscene *scene, float dt, GuardianCutsceneI
     }
     PlaySceneCue(scene);
     if (scene->music.stream.buffer) {
-        float gain=shot->dialogue[0] ? .78f : 1.0f;
+        float gain=shot->scoreGain*(shot->dialogue[0] ? .78f : 1.0f);
         bool changesMusic=scene->current==scene->count-1 ||
             strcmp(shot->music,scene->scenes[scene->current+1].music);
         if (changesMusic && !shot->dialogue[0] && shot->fadeOut>0)
-            gain=Ease((shot->duration-scene->elapsed)/shot->fadeOut);
+            gain*=Ease((shot->duration-scene->elapsed)/shot->fadeOut);
         if (changesMusic && scene->exiting)
             gain*=1-Ease(scene->exitElapsed/shot->fadeOut);
         float step=dt*1.5f;
@@ -367,6 +373,14 @@ static void DrawShot(const GuardianCutscene *scene, int index, Rectangle canvas,
             if ((shot->effects&CINEMATIC_PURIFY) && i%3==0)
                 ink=(Color){216,91,220,(unsigned char)(255*(1-purity))};
             DrawCircleGradient((int)x,(int)y,(3+i%3)*scale,Fade(ink,alpha*.32f),BLANK);
+        }
+    }
+    if (shot->effects&CINEMATIC_EYES) {
+        float pulse=Ease(elapsed/2.5f)*(.65f+.35f*sinf(elapsed*3));
+        for (int i=0;i<2;i++) {
+            Vector2 eye=ArtPoint((Vector2){.525f+i*.148f,.414f+i*.028f},source,destination,art);
+            DrawCircleGradient((int)eye.x,(int)eye.y,canvas.width*.034f,
+                Fade((Color){239,76,255,255},alpha*pulse*.38f),BLANK);
         }
     }
     if (shot->effects&CINEMATIC_WISP) {

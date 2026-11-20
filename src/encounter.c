@@ -68,8 +68,9 @@ bool EncounterPaused(const Encounter *e) {
 void CompleteGuardianIntro(Encounter *e, bool cinematicPlayed) {
     if (!e->guardianIntroPending) return;
     e->guardianIntroPending=false;
-    e->progress.guardianIntroSeen=true;
     if (cinematicPlayed) e->presentation=(StagePresentation){0};
+    if (e->progress.map==1) return;
+    e->progress.guardianIntroSeen=true;
     if (!e->practice && !SaveClearingCheckpoint(&e->progress))
         TraceLog(LOG_WARNING,"Nao foi possivel salvar a conclusao da cutscene do Guardiao.");
 }
@@ -257,6 +258,8 @@ bool ChooseEncounterReward(Encounter *e, EnemyGroup *enemies, const Clearing *cl
     e->progress.health=*health;
     if (!e->practice) SaveClearingCheckpoint(&e->progress);
     StartStage(e,enemies,clearing,player);
+    if (clearing->cemetery && e->progress.stage==CLEARING_BOSS_STAGE)
+        e->guardianIntroPending=true;
     return true;
 }
 
