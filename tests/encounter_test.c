@@ -1037,7 +1037,23 @@ int main(void) {
     assert(fieldHealth < before && enemies.templarBlood.remaining > 0);
     DamageEnemy(marshal, marshal->health);
     UpdateEnemies(&enemies, &field, field.spawn, 1.5f, true, &fieldHealth, 100);
+    assert(marshal->state == ENEMY_FALLEN && !EnemyCanBeHit(marshal));
     templars.presentation = (StagePresentation){0};
+    UpdateEncounter(&templars, &enemies, &field, field.spawn, &fieldHealth);
+    assert(templars.phase == ENCOUNTER_FIGHT && EnemiesRemaining(&enemies) == 1);
+    assert(OpenEncounterSeal(&templars, &enemies, marshal->position));
+    assert(templars.phase == ENCOUNTER_SEAL);
+    float marshalPowerBefore = templars.progress.bossPower;
+    assert(AnswerEncounterSeal(&templars, &enemies, &fieldHealth, (templars.answer + 1) % 3));
+    assert(templars.phase == ENCOUNTER_FIGHT && templars.progress.bossPower > marshalPowerBefore);
+    assert(marshal->health == marshal->maxHealth && EnemyCanBeHit(marshal));
+    DamageEnemy(marshal, marshal->maxHealth);
+    UpdateEnemies(&enemies, &field, field.spawn, 2, true, &fieldHealth, 100);
+    DamageEnemy(marshal, marshal->health);
+    UpdateEnemies(&enemies, &field, field.spawn, 1.5f, true, &fieldHealth, 100);
+    assert(marshal->state == ENEMY_FALLEN);
+    assert(OpenEncounterSeal(&templars, &enemies, marshal->position));
+    assert(AnswerEncounterSeal(&templars, &enemies, &fieldHealth, templars.answer));
     UpdateEncounter(&templars, &enemies, &field, field.spawn, &fieldHealth);
     assert(templars.phase == ENCOUNTER_CLEAR && EnemiesRemaining(&enemies) == 0);
     assert(LoadClearingCheckpoint(&fieldProgress) && fieldProgress.stage == CLEARING_COMPLETE_STAGE);
@@ -1049,6 +1065,8 @@ int main(void) {
     assert(templars.practice && EnemiesRemaining(&enemies) == 6);
     assert(templars.presentation.areaEntry && templars.presentation.wave == 2);
     assert(templars.presentation.waveTotal == 3);
+    assert(StartDevEncounter(&fieldTools, DEV_SEAL, &templars, &enemies, &field, &fieldPlayer, &fieldHealth));
+    assert(templars.practice && templars.phase == ENCOUNTER_SEAL && enemies.list[0].state == ENEMY_FALLEN);
     assert(LoadClearingCheckpoint(&fieldProgress) && fieldProgress.stage == CLEARING_COMPLETE_STAGE);
     UnloadClearing(&field);
 

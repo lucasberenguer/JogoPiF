@@ -589,8 +589,11 @@ bool AnswerEncounterSeal(Encounter *e, EnemyGroup *enemies, int *health, int cho
             enemy->guardianPhase = GUARDIAN_PHASE_ONE;
             enemy->guardianMelee = false;
             enemy->guardianMeleeCooldown = 0;
-            enemy->bossAttack = enemies->boneland ? BONE_DASH :
+            enemy->attackBurst = 0;
+            enemy->bossAttack = enemy->templarRole == TEMPLAR_MARSHAL ? MARSHAL_SLASH :
+                enemies->boneland ? BONE_DASH :
                 (enemies->cemetery ? COVEIRO_ATTACK_COUNT : GUARDIAN_ATTACK_COUNT) - 1;
+            if (enemy->templarRole == TEMPLAR_MARSHAL) enemy->attackCooldown = .25f;
             e->progress.bossPower=fminf(100,e->progress.bossPower*1.2f);
             e->progress.health=*health;
             if (!e->practice) SaveClearingCheckpoint(&e->progress);

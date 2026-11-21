@@ -1134,8 +1134,8 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                              (group->village || enemy->templarRole == TEMPLAR_MARSHAL);
             float dieDuration = humanBoss ? 1.35f : ENEMY_DEFEAT_DURATION;
             if (enemy->stateTime >= dieDuration) {
-                bool requiresSeal = enemy->templarRole == TEMPLAR_NONE &&
-                    (enemy->type == ENEMY_SPECIAL || enemy->type == ENEMY_BOSS);
+                bool requiresSeal = enemy->type == ENEMY_BOSS ||
+                    (enemy->templarRole == TEMPLAR_NONE && enemy->type == ENEMY_SPECIAL);
                 enemy->state = requiresSeal ? ENEMY_FALLEN : ENEMY_GONE;
             }
             continue;
@@ -1769,10 +1769,15 @@ static void DrawTemplar(const EnemyGroup *group, const Enemy *enemy) {
         DrawTemplarSprite(group, enemy, position, facing, frame, 0, WHITE);
         return;
     }
-    float fall = enemy->state == ENEMY_DIE ? Clamp(enemy->stateTime / 1.2f, 0, 1) : 0;
+    float fall = enemy->state == ENEMY_FALLEN ? 1.0f :
+                 enemy->state == ENEMY_DIE ? Clamp(enemy->stateTime / 1.2f, 0, 1) : 0;
     int frame = enemy->state == ENEMY_WALK ? (int)(enemy->walkTime * 9) % 6 : 0;
-    float tilt = 72 * fall;
-    Color tint = enemy->state == ENEMY_HURT ? (Color){255, 173, 173, 255} : Fade(WHITE, 1 - fall);
+    float tilt = (enemy->facing == 2 ? -1.0f : 1.0f) * 72 * fall;
+    Color tint = enemy->state == ENEMY_HURT ? (Color){255, 173, 173, 255} :
+                 role == TEMPLAR_MARSHAL && fall > 0 ? Fade((Color){215, 185, 195, 255}, .80f) :
+                 Fade(WHITE, 1 - fall);
+    if (role == TEMPLAR_MARSHAL && enemy->state == ENEMY_FALLEN)
+        DrawBossGroundSeal(group->sealMarker, enemy->position);
     if (enemy->guardianPhase == GUARDIAN_PHASE_TRANSITION) {
         float pulse = .55f + .25f * sinf(17 * enemy->stateTime);
         DrawCircleV(enemy->position, 47, Fade(MAROON, pulse));
@@ -1807,7 +1812,11 @@ static void DrawTemplar(const EnemyGroup *group, const Enemy *enemy) {
         DrawTemplarAttackPose(group, enemy, feet, enemy->facing, pose, skill, 4 * lean, tint);
         return;
     }
+    if (role == TEMPLAR_MARSHAL && fall > 0)
+        DrawEllipse((int)enemy->position.x, (int)enemy->position.y - 8, 48.0f, 16.0f, Fade(BLACK, .38f));
     DrawTemplarSprite(group, enemy, enemy->position, enemy->facing, frame, tilt, tint);
+    if (role == TEMPLAR_MARSHAL && enemy->state == ENEMY_FALLEN)
+        DrawGameText("E: selar", (int)enemy->position.x - 30, (int)enemy->position.y + 12, 18, GOLD);
 }
 
 void DrawBossGroundSeal(Texture2D sealMarker, Vector2 position) {
@@ -2006,6 +2015,7 @@ static void DrawBoneLord(const EnemyGroup *group, const Enemy *boss) {
     float heightScale = scale * (1 - .48f * collapse);
     float height = (bottom - top) * heightScale;
     Color tint = Fade(collapse > 0 ? (Color){211, 171, 163, 255} : WHITE, reveal);
+    if (boss->state == ENEMY_FALLEN) DrawBossGroundSeal(group->sealMarker, boss->position);
     DrawEllipse((int)boss->position.x, (int)boss->position.y - 9, 54, 19, Fade(BLACK, .38f * reveal));
     if (boss->guardianPhase == GUARDIAN_PHASE_TRANSITION) {
         float flare = Clamp(boss->stateTime / GUARDIAN_PHASE_TRANSITION_TIME, 0, 1);
@@ -2083,6 +2093,12 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
         }
         if (enemy->templarRole != TEMPLAR_NONE) {
             DrawTemplar(group, enemy);
+            if (enemy->type != ENEMY_BOSS && EnemyCanBeHit(enemy) && enemy->health < enemy->maxHealth) {
+                int healthY = (int)(enemy->position.y - templarSizes[enemy->templarRole] * .90f);
+                DrawRectangle((int)enemy->position.x - 24, healthY, 48, 5, DARKGRAY);
+                DrawRectangle((int)enemy->position.x - 24, healthY,
+                              48 * enemy->health / enemy->maxHealth, 5, RED);
+            }
             continue;
         }
         if (enemy->state == ENEMY_SPAWNING) {

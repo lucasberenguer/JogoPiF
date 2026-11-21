@@ -91,8 +91,7 @@ DevAction UpdateDevTools(DevTools *tools, bool inPractice) {
         AdjustField(tools,tools->selected,1);
         return DEV_NONE;
     }
-    if ((!inPractice && (tools->selected==12 || tools->selected==13)) ||
-        (tools->map == TEMPLAR_FIELD_MAP && tools->selected == 11)) return DEV_NONE;
+    if (!inPractice && (tools->selected==12 || tools->selected==13)) return DEV_NONE;
     static const DevAction actions[]={DEV_STAGE,DEV_BOSS_ONE,DEV_BOSS_TWO,DEV_OPENING,DEV_GUARDIAN,
         DEV_SEAL,DEV_HEAL,DEV_CLEAR_STAGE,DEV_LIBERATION,DEV_PASSAGE,DEV_MENU,DEV_CLOSE};
     return actions[tools->selected-6];
@@ -143,8 +142,7 @@ void DrawDevTools(const DevTools *tools, bool inPractice) {
         "Menu principal","Fechar · F1 / Esc"};
     for (int i=6; i<18; i++) {
         Rectangle button=Control(i);
-        bool enabled = (inPractice || (i!=12 && i!=13)) &&
-                       (tools->map != TEMPLAR_FIELD_MAP || i != 11);
+        bool enabled = inPractice || (i!=12 && i!=13);
         bool focused=tools->selected==i;
         Color ink=enabled ? text : (Color){155,134,141,255};
         DrawRectangleRec(button,focused && enabled ? (Color){114,37,46,255} : (Color){49,22,34,255});
@@ -168,7 +166,6 @@ bool StartDevEncounter(const DevTools *tools, DevAction action, Encounter *e,
         tools->weapon<0 || tools->weapon>2 || tools->weaponLevel<0 || tools->weaponLevel>MAX_WEAPON_LEVEL) return false;
     bool aftermath=action==DEV_LIBERATION || action==DEV_PASSAGE;
     int mapId = action == DEV_GUARDIAN || aftermath ? 0 : tools->map;
-    if (mapId == TEMPLAR_FIELD_MAP && action == DEV_SEAL) return false;
     if (ClearingMapId(map) != mapId) {
         Clearing next={0};
         if (!InitCampaignMap(&next, mapId)) return false;

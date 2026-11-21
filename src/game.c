@@ -343,6 +343,7 @@ int main(void) {
                     encounter.presentation=(StagePresentation){0};
                     if (encounter.progress.stage==CLEARING_BOSS_STAGE &&
                         (encounter.progress.map<=1 || encounter.progress.map==BONELAND_MAP ||
+                         encounter.progress.map==TEMPLAR_FIELD_MAP ||
                          encounter.progress.map==NECROMANCER_MAP) &&
                         enemies.list[0].type==ENEMY_BOSS) {
                         Enemy *boss=&enemies.list[0];
