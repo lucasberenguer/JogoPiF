@@ -9,7 +9,25 @@ enum { ENCOUNTER_BOSS_HUD_HEIGHT = 58 };
 typedef enum EncounterPhase { ENCOUNTER_FIGHT, ENCOUNTER_REWARD, ENCOUNTER_SEAL,
                              ENCOUNTER_VILLAGE_CINEMATIC, ENCOUNTER_LETTER, ENCOUNTER_ANGEL_CINEMATIC, ENCOUNTER_CHAPEL_TEXT, ENCOUNTER_BASEMENT_PILLAR,
                              ENCOUNTER_CLEAR, ENCOUNTER_DEFEAT } EncounterPhase;
-typedef struct Reward { int kind; int weapon; int amount; } Reward;
+typedef enum RewardRarity { RARITY_COMMON, RARITY_RARE, RARITY_EPIC, RARITY_COUNT } RewardRarity;
+typedef enum RewardKind {
+    REWARD_DAMAGE,
+    REWARD_HEALTH,
+    REWARD_SPEED,
+    REWARD_SWAP,
+    REWARD_WEAPON_UPGRADE,
+    REWARD_EPIC_DAMAGE,
+    REWARD_EPIC_STATUS,
+    REWARD_EPIC_FULL_HEAL,
+    REWARD_KIND_COUNT
+} RewardKind;
+typedef struct Reward {
+    int kind;
+    int rarity;
+    int weapon;
+    int amount;
+    int bonus[2];
+} Reward;
 typedef struct Encounter {
     RunProgress progress;
     StagePresentation presentation;
@@ -58,6 +76,7 @@ bool CanEnterTemplarField(const Encounter *encounter, const Clearing *clearing,
                           Vector2 player);
 bool EncounterBossVisible(const Encounter *encounter, const EnemyGroup *enemies);
 float EncounterDamage(const Encounter *encounter);
+bool RerollEncounterReward(Encounter *encounter, int slot);
 bool ChooseEncounterReward(Encounter *encounter, EnemyGroup *enemies, const Clearing *clearing,
                            Vector2 player, int *health, int choice);
 bool OpenEncounterSeal(Encounter *encounter, const EnemyGroup *enemies, Vector2 player);

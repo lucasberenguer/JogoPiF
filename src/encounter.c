@@ -3,8 +3,67 @@
 #include "menu.h"
 #include "raymath.h"
 #include <stdio.h>
+#include <string.h>
 
-enum { REWARD_DAMAGE, REWARD_HEALTH, REWARD_SPEED, REWARD_WEAPON, REWARD_SWAP };
+#define COMMON_DAMAGE_BONUS 0.15f
+#define COMMON_HEALTH_BONUS 20
+#define COMMON_SPEED_BONUS 15.0f
+#define EPIC_STATUS_DAMAGE_BONUS 0.20f
+#define EPIC_STATUS_SPEED_BONUS 15.0f
+#define EPIC_STATUS_MIN_TENS 3
+#define EPIC_STATUS_MAX_TENS 6
+#define EPIC_FULL_HEAL_MAX_HP_BONUS 50
+#define RARITY_WEIGHT_COMMON 70
+#define RARITY_WEIGHT_RARE 25
+#define RARITY_WEIGHT_EPIC 5
+#define MAX_CAMPAIGN_MAPS 8
+#define UI_CARD_FRAME_COMMON_PATH "assets/ui/card_frame_common.png"
+#define UI_CARD_FRAME_RARE_PATH "assets/ui/card_frame_rare.png"
+#define UI_CARD_FRAME_EPIC_PATH "assets/ui/card_frame_epic.png"
+#define UI_REROLL_BUTTON_PATH "assets/ui/reroll_button.png"
+#define UI_CARD_NPATCH_SLICE 16
+
+static const char *const cardFramePaths[RARITY_COUNT] = {
+    UI_CARD_FRAME_COMMON_PATH,
+    UI_CARD_FRAME_RARE_PATH,
+    UI_CARD_FRAME_EPIC_PATH
+};
+
+typedef struct RewardUiAssets {
+    bool attempted;
+    Texture2D frames[RARITY_COUNT];
+    Texture2D rerollButton;
+} RewardUiAssets;
+
+static RewardUiAssets rewardUiAssets = {0};
+
+static void EnsureRewardUiAssetsLoaded(void) {
+    if (rewardUiAssets.attempted || !IsWindowReady()) return;
+    rewardUiAssets.attempted = true;
+    for (int i = 0; i < RARITY_COUNT; i++) {
+        if (FileExists(cardFramePaths[i])) {
+            rewardUiAssets.frames[i] = LoadTexture(cardFramePaths[i]);
+            if (rewardUiAssets.frames[i].id)
+                SetTextureFilter(rewardUiAssets.frames[i], TEXTURE_FILTER_POINT);
+        }
+    }
+    if (FileExists(UI_REROLL_BUTTON_PATH)) {
+        rewardUiAssets.rerollButton = LoadTexture(UI_REROLL_BUTTON_PATH);
+        if (rewardUiAssets.rerollButton.id)
+            SetTextureFilter(rewardUiAssets.rerollButton, TEXTURE_FILTER_POINT);
+    }
+}
+
+static const int mapRarityWeights[MAX_CAMPAIGN_MAPS][RARITY_COUNT] = {
+    {RARITY_WEIGHT_COMMON, RARITY_WEIGHT_RARE, RARITY_WEIGHT_EPIC},
+    {RARITY_WEIGHT_COMMON, RARITY_WEIGHT_RARE, RARITY_WEIGHT_EPIC},
+    {RARITY_WEIGHT_COMMON, RARITY_WEIGHT_RARE, RARITY_WEIGHT_EPIC},
+    {RARITY_WEIGHT_COMMON, RARITY_WEIGHT_RARE, RARITY_WEIGHT_EPIC},
+    {RARITY_WEIGHT_COMMON, RARITY_WEIGHT_RARE, RARITY_WEIGHT_EPIC},
+    {RARITY_WEIGHT_COMMON, RARITY_WEIGHT_RARE, RARITY_WEIGHT_EPIC},
+    {RARITY_WEIGHT_COMMON, RARITY_WEIGHT_RARE, RARITY_WEIGHT_EPIC},
+    {RARITY_WEIGHT_COMMON, RARITY_WEIGHT_RARE, RARITY_WEIGHT_EPIC},
+};
 static const char boneLordName[] = "Rasga-Ossos";
 static const struct {
     const char *expression;
@@ -224,8 +283,13 @@ bool CanEnterTemplarField(const Encounter *e, const Clearing *clearing, Vector2 
 
 float EncounterDamage(const Encounter *e) {
     int weapon = e->progress.weapon;
-    return e->progress.damage * (1 + .2f*e->progress.weaponLevel[weapon]) *
-           (e->progress.strongWeapon == weapon ? 1.5f : 1.0f);
+    int level = (weapon >= 0 && weapon < 3) ? e->progress.weaponLevel[weapon] : 0;
+    float weaponBonus = 0.0f;
+    if (weapon == 1 && level >= 1) weaponBonus = BIBLE_L1_DAMAGE_BONUS;
+    else if (weapon == 0 && level >= 2) weaponBonus = GUN_L2_DAMAGE_BONUS;
+    return e->progress.damage * (1.0f + WEAPON_LEVEL_DAMAGE_BONUS * level +
+                                 EPIC_DAMAGE_STACK_BONUS * e->progress.epicDamageStacks +
+                                 weaponBonus);
 }
 
 bool EncounterBossVisible(const Encounter *e, const EnemyGroup *enemies) {
@@ -233,22 +297,93 @@ bool EncounterBossVisible(const Encounter *e, const EnemyGroup *enemies) {
            enemies->list[0].type == ENEMY_BOSS && enemies->list[0].health > 0;
 }
 
+static int CurrentRunWeaponLevel(const Encounter *e) {
+    int w = e->progress.weapon;
+    return (w >= 0 && w < 3) ? e->progress.weaponLevel[w] : e->progress.weaponLevel[0];
+}
+
+static int AvailableKindsForRarity(const Encounter *e, int rarity, const bool used[REWARD_KIND_COUNT],
+                                   int outKinds[4]) {
+    int count = 0;
+    if (rarity == RARITY_COMMON) {
+        static const int commonKinds[3] = {REWARD_DAMAGE, REWARD_HEALTH, REWARD_SPEED};
+        for (int i = 0; i < 3; i++)
+            if (!used[commonKinds[i]]) outKinds[count++] = commonKinds[i];
+    } else if (rarity == RARITY_RARE) {
+        if (!used[REWARD_SWAP]) outKinds[count++] = REWARD_SWAP;
+    } else if (rarity == RARITY_EPIC) {
+        if (CurrentRunWeaponLevel(e) < MAX_WEAPON_LEVEL && !used[REWARD_WEAPON_UPGRADE])
+            outKinds[count++] = REWARD_WEAPON_UPGRADE;
+        if (!used[REWARD_EPIC_DAMAGE]) outKinds[count++] = REWARD_EPIC_DAMAGE;
+        if (!used[REWARD_EPIC_STATUS]) outKinds[count++] = REWARD_EPIC_STATUS;
+        if (!used[REWARD_EPIC_FULL_HEAL]) outKinds[count++] = REWARD_EPIC_FULL_HEAL;
+    }
+    return count;
+}
+
+static Reward MakeReward(const Encounter *e, int rarity, int kind) {
+    Reward r = {.kind = kind, .rarity = rarity, .weapon = e->progress.weapon};
+    if (kind == REWARD_SWAP) {
+        r.weapon = (e->progress.weapon + GetRandomValue(1, 2)) % 3;
+        int first = GetRandomValue(0, 2);
+        int second = (first + GetRandomValue(1, 2)) % 3;
+        r.bonus[0] = first;
+        r.bonus[1] = second;
+    } else if (kind == REWARD_EPIC_STATUS) {
+        r.amount = GetRandomValue(EPIC_STATUS_MIN_TENS, EPIC_STATUS_MAX_TENS) * 10;
+    }
+    return r;
+}
+
+static Reward RollSingleNormalReward(const Encounter *e, const bool used[REWARD_KIND_COUNT]) {
+    int mapIndex = (e->progress.map >= 0 && e->progress.map < MAX_CAMPAIGN_MAPS) ? e->progress.map : 0;
+    int availCount[RARITY_COUNT] = {0};
+    int availKinds[RARITY_COUNT][4] = {{0}};
+    int totalWeight = 0;
+    for (int r = 0; r < RARITY_COUNT; r++) {
+        availCount[r] = AvailableKindsForRarity(e, r, used, availKinds[r]);
+        if (availCount[r] > 0) totalWeight += mapRarityWeights[mapIndex][r];
+    }
+    int chosenRarity = RARITY_COMMON;
+    if (totalWeight > 0) {
+        int roll = GetRandomValue(0, totalWeight - 1);
+        int acc = 0;
+        for (int r = 0; r < RARITY_COUNT; r++) {
+            if (availCount[r] <= 0) continue;
+            acc += mapRarityWeights[mapIndex][r];
+            if (roll < acc) {
+                chosenRarity = r;
+                break;
+            }
+        }
+    }
+    int kindIndex = availCount[chosenRarity] > 1 ? GetRandomValue(0, availCount[chosenRarity] - 1) : 0;
+    return MakeReward(e, chosenRarity, availKinds[chosenRarity][kindIndex]);
+}
+
 static void RollRewards(Encounter *e) {
+    e->rewardCount=3;
     if (e->progress.stage == CLEARING_WAVES) {
-        e->rewardCount=2;
-        e->rewards[0]=(Reward){REWARD_WEAPON,e->progress.weapon,0};
-        e->rewards[1]=(Reward){REWARD_HEALTH,-1,GetRandomValue(3,6)*10};
+        int epicPool[4] = {0};
+        int epicCount = 0;
+        if (CurrentRunWeaponLevel(e) < MAX_WEAPON_LEVEL)
+            epicPool[epicCount++] = REWARD_WEAPON_UPGRADE;
+        epicPool[epicCount++] = REWARD_EPIC_DAMAGE;
+        epicPool[epicCount++] = REWARD_EPIC_STATUS;
+        epicPool[epicCount++] = REWARD_EPIC_FULL_HEAL;
+        for (int i = 0; i < 3; i++) {
+            int pick = i + (epicCount - i > 1 ? GetRandomValue(0, epicCount - 1 - i) : 0);
+            int kind = epicPool[pick];
+            epicPool[pick] = epicPool[i];
+            epicPool[i] = kind;
+            e->rewards[i] = MakeReward(e, RARITY_EPIC, kind);
+        }
         return;
     }
-    e->rewardCount=3;
-    int swap = GetRandomValue(0,99) < 80 ? GetRandomValue(0,2) : -1;
+    bool used[REWARD_KIND_COUNT]={false};
     for (int i=0; i<3; i++) {
-        int kind=GetRandomValue(0,3);
-        if (kind == REWARD_WEAPON && e->progress.weaponLevel[e->progress.weapon] >= 4)
-            kind=REWARD_DAMAGE;
-        if (i==swap) kind=REWARD_SWAP;
-        e->rewards[i]=(Reward){kind, kind==REWARD_SWAP ?
-            (e->progress.weapon+GetRandomValue(1,2))%3 : e->progress.weapon,0};
+        e->rewards[i]=RollSingleNormalReward(e,used);
+        used[e->rewards[i].kind]=true;
     }
 }
 
@@ -256,6 +391,25 @@ static Rectangle ChoiceRect(int index, int count) {
     float w=fminf(330, (GetScreenWidth()-80.0f)/count-16);
     return (Rectangle){GetScreenWidth()/2.0f-(count*w+(count-1)*16)/2+index*(w+16),
                        GetScreenHeight()/2.0f-30,w,140};
+}
+
+static Rectangle RerollButtonRect(int index, int count) {
+    Rectangle card = ChoiceRect(index, count);
+    float bw = fminf(150.0f, card.width - 20.0f);
+    return (Rectangle){card.x + (card.width - bw) * 0.5f, card.y + card.height + 10.0f, bw, 34.0f};
+}
+
+bool RerollEncounterReward(Encounter *e, int slot) {
+    if (e->phase != ENCOUNTER_REWARD || e->progress.stage == CLEARING_WAVES ||
+        e->rerolled || slot < 0 || slot >= e->rewardCount) return false;
+    bool used[REWARD_KIND_COUNT] = {false};
+    for (int i = 0; i < e->rewardCount; i++) {
+        if (e->rewards[i].kind >= 0 && e->rewards[i].kind < REWARD_KIND_COUNT)
+            used[e->rewards[i].kind] = true;
+    }
+    e->rewards[slot] = RollSingleNormalReward(e, used);
+    e->rerolled = true;
+    return true;
 }
 
 static int ChoiceInput(int count) {
@@ -267,34 +421,54 @@ static int ChoiceInput(int count) {
     return -1;
 }
 
+static void ApplyCommonBuffKind(Encounter *e, int kind, int *health) {
+    if (kind == REWARD_DAMAGE) {
+        e->progress.damage += COMMON_DAMAGE_BONUS;
+    } else if (kind == REWARD_HEALTH) {
+        e->progress.maxHealth += COMMON_HEALTH_BONUS;
+        *health += COMMON_HEALTH_BONUS;
+    } else if (kind == REWARD_SPEED) {
+        e->progress.speed += COMMON_SPEED_BONUS;
+    }
+}
+
 static void ApplyReward(Encounter *e, Reward reward, int *health) {
-    bool strong=e->progress.stage==CLEARING_WAVES;
     e->notice[0]=0;
-    if (reward.kind==REWARD_DAMAGE) e->progress.damage+=.15f;
-    else if (reward.kind==REWARD_HEALTH) {
-        int added=strong?reward.amount:20;
-        e->progress.maxHealth+=added;
-        *health+=added;
-        if (strong) { e->progress.damage+=.2f; e->progress.speed+=15; }
-    } else if (reward.kind==REWARD_SPEED) e->progress.speed+=15;
-    else if (reward.kind==REWARD_WEAPON) {
-        if (strong) e->progress.strongWeapon=e->progress.weapon;
-        else if (e->progress.weaponLevel[e->progress.weapon]<4) e->progress.weaponLevel[e->progress.weapon]++;
-    } else {
-        int old=e->progress.weapon;
-        e->progress.weapon=reward.weapon;
-        int bonus=GetRandomValue(0,2);
-        float strength=.08f+.03f*e->progress.weaponLevel[old];
-        if (bonus==0) {
-            e->progress.damage+=strength;
-            snprintf(e->notice,sizeof(e->notice),"Troca: dano +%d%%",(int)(strength*100));
-        } else if (bonus==1) {
-            e->progress.maxHealth+=15; *health+=15;
-            snprintf(e->notice,sizeof(e->notice),"Troca: vida maxima +15");
-        } else {
-            e->progress.speed+=12;
-            snprintf(e->notice,sizeof(e->notice),"Troca: velocidade +12");
+    switch (reward.kind) {
+        case REWARD_DAMAGE:
+        case REWARD_HEALTH:
+        case REWARD_SPEED:
+            ApplyCommonBuffKind(e, reward.kind, health);
+            break;
+        case REWARD_SWAP: {
+            int currentLevel = CurrentRunWeaponLevel(e);
+            e->progress.weapon = reward.weapon;
+            SetRunWeaponLevel(&e->progress, currentLevel);
+            ApplyCommonBuffKind(e, reward.bonus[0], health);
+            ApplyCommonBuffKind(e, reward.bonus[1], health);
+            break;
         }
+        case REWARD_WEAPON_UPGRADE: {
+            int currentLevel = CurrentRunWeaponLevel(e);
+            if (currentLevel < MAX_WEAPON_LEVEL)
+                SetRunWeaponLevel(&e->progress, currentLevel + 1);
+            break;
+        }
+        case REWARD_EPIC_DAMAGE:
+            e->progress.epicDamageStacks++;
+            break;
+        case REWARD_EPIC_STATUS: {
+            int added = reward.amount > 0 ? reward.amount : EPIC_STATUS_MIN_TENS * 10;
+            e->progress.maxHealth += added;
+            *health += added;
+            e->progress.damage += EPIC_STATUS_DAMAGE_BONUS;
+            e->progress.speed += EPIC_STATUS_SPEED_BONUS;
+            break;
+        }
+        case REWARD_EPIC_FULL_HEAL:
+            e->progress.maxHealth += EPIC_FULL_HEAL_MAX_HP_BONUS;
+            *health = e->progress.maxHealth;
+            break;
     }
 }
 
@@ -539,7 +713,16 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
             return true;
         }
     } else if (e->phase==ENCOUNTER_REWARD) {
-        if (IsKeyPressed(KEY_R) && !e->rerolled) { e->rerolled=true; RollRewards(e); }
+        if (e->progress.stage != CLEARING_WAVES && !e->rerolled &&
+            IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            Vector2 mouse = GetMousePosition();
+            for (int i = 0; i < e->rewardCount; i++) {
+                if (CheckCollisionPointRec(mouse, RerollButtonRect(i, e->rewardCount))) {
+                    RerollEncounterReward(e, i);
+                    return false;
+                }
+            }
+        }
         int selected=ChoiceInput(e->rewardCount);
         if (selected>=0) {
             return ChooseEncounterReward(e,enemies,clearing,player,health,selected);
@@ -552,36 +735,205 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
     return false;
 }
 
+static const char *CommonBuffShortText(int kind) {
+    if (kind == REWARD_DAMAGE) return "Dano +15%";
+    if (kind == REWARD_HEALTH) return "Vida max +20 (cura 20)";
+    return "Velocidade +15";
+}
+
+static const char *RarityLabel(int rarity) {
+    if (rarity == RARITY_RARE) return "RARO";
+    if (rarity == RARITY_EPIC) return "ÉPICO";
+    return "COMUM";
+}
+
 static const char *RewardText(const Encounter *e, Reward reward) {
-    if (e->progress.stage==CLEARING_WAVES) return reward.kind==REWARD_WEAPON ?
-        "Arma atual\nDano +50%" : TextFormat("Status\nVida +%d / dano +20%%\nVelocidade +15",reward.amount);
     switch (reward.kind) {
         case REWARD_DAMAGE: return "Dano\n+15% de dano base";
-        case REWARD_HEALTH: return "Vida maxima\n+20 de vida";
+        case REWARD_HEALTH: return "Vida maxima\n+20 de vida e cura 20";
         case REWARD_SPEED: return "Velocidade\n+15 de velocidade";
-        case REWARD_WEAPON: {
-            int nextLevel = e->progress.weaponLevel[reward.weapon] + 1;
+        case REWARD_SWAP:
+            return TextFormat("Trocar por %s\n- %s\n- %s",
+                              WeaponTitle(reward.weapon),
+                              CommonBuffShortText(reward.bonus[0]),
+                              CommonBuffShortText(reward.bonus[1]));
+        case REWARD_WEAPON_UPGRADE: {
+            int nextLevel = CurrentRunWeaponLevel(e) + 1;
             const char *perk = "Dano +20%";
             if (reward.weapon == 0) {
-                if (nextLevel == 1) perk = "Lamina Estendida (+alcance)";
-                else if (nextLevel == 2) perk = "Passo da Ordem (-recarga dash)";
-                else if (nextLevel == 3) perk = "Corte Amplo (+arco e recuo)";
-                else if (nextLevel == 4) perk = "Onda Rubra (onda de choque)";
+                if (nextLevel == 1) perk = "Intervalo 0,20->0,14 s, vel 760->860 px/s";
+                else if (nextLevel == 2) perk = "Dano da arma +25% adicional";
+                else if (nextLevel == 3) perk = "2 tiros por disparo (+-5 graus)";
+                else if (nextLevel == 4) perk = "Tiros perfurantes (ate 2 inimigos)";
+                else if (nextLevel == 5) perk = "Duas pistolas (4 tiros, +-13 px)";
             } else if (reward.weapon == 1) {
-                if (nextLevel == 1) perk = "Canone Expandido (5 livros)";
-                else if (nextLevel == 2) perk = "Vortice Sagrado (+aceleracao)";
-                else if (nextLevel == 3) perk = "Escudo (6 livros, bloqueia tiros)";
-                else if (nextLevel == 4) perk = "Agua Benta (poca de dano)";
+                if (nextLevel == 1) perk = "Empurrao 36 px, dano +15% adicional";
+                else if (nextLevel == 2) perk = "Livros 4->5, orbita 90->102 px";
+                else if (nextLevel == 3) perk = "Boost 1,25->1,65 s, recarga 4,0->2,8 s";
+                else if (nextLevel == 4) perk = "Livros 5->6, bloqueia tiros no boost";
+                else if (nextLevel == 5) perk = "Pocas de agua benta (8 dano/0,45 s)";
             } else if (reward.weapon == 2) {
-                if (nextLevel == 1) perk = "Cadencia Rapida (+tiros/vel)";
-                else if (nextLevel == 2) perk = "Disparo Duplo (2 projeteis)";
-                else if (nextLevel == 3) perk = "Disparo Triplo (3 projeteis)";
-                else if (nextLevel == 4) perk = "Pistolas Duplas (2x os tiros)";
+                if (nextLevel == 1) perk = "Acerto reduz recarga da esquiva em 0,8 s";
+                else if (nextLevel == 2) perk = "Alcance 105->123 px, recuperacao 0,45->0,40 s";
+                else if (nextLevel == 3) perk = "Arco 170->194 graus, recuo 42 px";
+                else if (nextLevel == 4) perk = "Onda de choque (22 dano, recarga 2,5 s)";
+                else if (nextLevel == 5) perk = "Onda tripla (+-20 graus, recarga 1,8 s)";
             }
-            return TextFormat("%s (%d/4)\n%s\nDano +20%%", WeaponTitle(reward.weapon), nextLevel, perk);
+            return TextFormat("%s (%d/%d) -\n%s\nDano +20%%",
+                              WeaponTitle(reward.weapon), nextLevel, MAX_WEAPON_LEVEL, perk);
         }
-        default: return TextFormat("Trocar por %s\nSubstitui a arma atual\nBonus surpresa",WeaponTitle(reward.weapon));
+        case REWARD_EPIC_DAMAGE: {
+            int base = WeaponBaseDamage(e->progress.weapon);
+            int before = (int)ceilf(base * EncounterDamage(e));
+            Encounter afterEncounter = *e;
+            afterEncounter.progress.epicDamageStacks++;
+            int after = (int)ceilf(base * EncounterDamage(&afterEncounter));
+            return TextFormat("Poder das Armas (%s)\nGolpe principal: %d->%d de dano",
+                              WeaponTitle(e->progress.weapon), before, after);
+        }
+        case REWARD_EPIC_STATUS:
+            return TextFormat("Status\nVida +%d / dano +20%%\nVelocidade +15", reward.amount);
+        case REWARD_EPIC_FULL_HEAL:
+            return "Vida plena\nCura toda a vida\nVida maxima +50";
+        default:
+            return "";
     }
+}
+
+static void DrawMultilineCardText(const char *text, Rectangle area, float fontSize, Color color) {
+    char buffer[256];
+    snprintf(buffer, sizeof(buffer), "%s", text);
+    char *lines[6];
+    int lineCount = 0;
+    char *cursor = buffer;
+    while (cursor && *cursor && lineCount < 6) {
+        lines[lineCount++] = cursor;
+        char *newline = strchr(cursor, '\n');
+        if (newline) {
+            *newline = '\0';
+            cursor = newline + 1;
+        } else {
+            break;
+        }
+    }
+    if (lineCount == 0) return;
+    float maxLineW = 1.0f;
+    for (int i = 0; i < lineCount; i++) {
+        float w = MeasureGameTextEx(lines[i], fontSize, false).x;
+        if (w > maxLineW) maxLineW = w;
+    }
+    float lineStep = fontSize * 1.18f;
+    float totalH = lineCount * lineStep;
+    float scale = fminf(1.0f, fminf(area.width / maxLineW, area.height / totalH));
+    float finalSize = fontSize * scale;
+    float finalStep = lineStep * scale;
+    for (int i = 0; i < lineCount; i++) {
+        DrawGameTextEx(lines[i], (Vector2){area.x, area.y + i * finalStep}, finalSize, color, false);
+    }
+}
+
+static void DrawRewardCardFrame(Rectangle box, int rarity, bool hovered) {
+    EnsureRewardUiAssetsLoaded();
+    int r = (rarity >= 0 && rarity < RARITY_COUNT) ? rarity : RARITY_COMMON;
+    static const Color bgNormal[RARITY_COUNT] = {
+        {38, 42, 50, 245},  /* Comum: ardósia prateada escura */
+        {22, 42, 76, 245},  /* Raro: azul profundo */
+        {48, 24, 72, 245}   /* Épico: roxo escuro */
+    };
+    static const Color bgHover[RARITY_COUNT] = {
+        {58, 64, 76, 255},
+        {34, 64, 112, 255},
+        {74, 38, 108, 255}
+    };
+    static const Color outerBorder[RARITY_COUNT] = {
+        {196, 204, 216, 255}, /* Comum: cinza prata claro */
+        {72, 156, 255, 255},  /* Raro: azul brilhante */
+        {182, 92, 255, 255}   /* Épico: roxo vibrante */
+    };
+    static const Color innerBorder[RARITY_COUNT] = {
+        {135, 145, 160, 230},
+        {130, 195, 255, 230},
+        {235, 190, 90, 240}   /* Épico: filete interno dourado */
+    };
+
+    Texture2D tex = rewardUiAssets.frames[r];
+    if (tex.id) {
+        int slice = (int)fminf(UI_CARD_NPATCH_SLICE, fminf(tex.width / 3.0f, tex.height / 3.0f));
+        NPatchInfo patch = {
+            .source = {0, 0, (float)tex.width, (float)tex.height},
+            .left = slice, .top = slice, .right = slice, .bottom = slice,
+            .layout = NPATCH_NINE_PATCH
+        };
+        DrawTextureNPatch(tex, patch, box, (Vector2){0, 0}, 0.0f, hovered ? WHITE : (Color){235, 235, 235, 255});
+    } else {
+        DrawRectangleRec(box, hovered ? bgHover[r] : bgNormal[r]);
+        DrawRectangleLinesEx(box, 3.0f, outerBorder[r]);
+        Rectangle inner = {box.x + 5.0f, box.y + 5.0f, box.width - 10.0f, box.height - 10.0f};
+        DrawRectangleLinesEx(inner, 1.5f, innerBorder[r]);
+    }
+
+    /* Detalhe no topo por raridade: gema e ornamento dourado no épico */
+    Vector2 gemCenter = {box.x + box.width * 0.5f, box.y};
+    if (r == RARITY_COMMON) {
+        DrawCircleV(gemCenter, 7.0f, (Color){110, 118, 130, 255});
+        DrawCircleV(gemCenter, 4.5f, (Color){220, 226, 235, 255});
+    } else if (r == RARITY_RARE) {
+        DrawPoly(gemCenter, 4, 9.0f, 45.0f, (Color){32, 92, 180, 255});
+        DrawPoly(gemCenter, 4, 6.0f, 45.0f, (Color){120, 205, 255, 255});
+        DrawPolyLinesEx(gemCenter, 4, 9.0f, 45.0f, 1.5f, (Color){200, 235, 255, 255});
+    } else {
+        /* Ornamento dourado nos cantos e ao redor da gema roxa do épico */
+        Color gold = (Color){242, 198, 88, 255};
+        DrawLineEx((Vector2){gemCenter.x - 28.0f, gemCenter.y}, (Vector2){gemCenter.x - 10.0f, gemCenter.y}, 3.0f, gold);
+        DrawLineEx((Vector2){gemCenter.x + 10.0f, gemCenter.y}, (Vector2){gemCenter.x + 28.0f, gemCenter.y}, 3.0f, gold);
+        DrawPoly((Vector2){gemCenter.x - 28.0f, gemCenter.y}, 4, 4.0f, 45.0f, gold);
+        DrawPoly((Vector2){gemCenter.x + 28.0f, gemCenter.y}, 4, 4.0f, 45.0f, gold);
+        DrawPoly(gemCenter, 4, 11.0f, 45.0f, gold);
+        DrawPoly(gemCenter, 4, 7.5f, 45.0f, (Color){185, 85, 255, 255});
+        DrawPoly(gemCenter, 4, 4.0f, 45.0f, (Color){245, 210, 255, 255});
+        /* Cantoneiras douradas */
+        float c = 12.0f;
+        DrawLineEx((Vector2){box.x + 2, box.y + 2}, (Vector2){box.x + 2 + c, box.y + 2}, 2.5f, gold);
+        DrawLineEx((Vector2){box.x + 2, box.y + 2}, (Vector2){box.x + 2, box.y + 2 + c}, 2.5f, gold);
+        DrawLineEx((Vector2){box.x + box.width - 2, box.y + 2}, (Vector2){box.x + box.width - 2 - c, box.y + 2}, 2.5f, gold);
+        DrawLineEx((Vector2){box.x + box.width - 2, box.y + 2}, (Vector2){box.x + box.width - 2, box.y + 2 + c}, 2.5f, gold);
+    }
+
+    /* Rótulo de raridade ("COMUM" / "RARO" / "ÉPICO") */
+    const char *tag = RarityLabel(r);
+    Color tagColor = r == RARITY_EPIC ? (Color){245, 208, 105, 255} : outerBorder[r];
+    Rectangle tagBounds = {box.x + 12.0f, box.y + 9.0f, box.width - 24.0f, 18.0f};
+    DrawGameTextIn(tag, tagBounds, 15.0f, tagColor, false);
+}
+
+static void DrawRerollButton(Rectangle btn, bool disabled, bool hovered) {
+    EnsureRewardUiAssetsLoaded();
+    Texture2D strip = rewardUiAssets.rerollButton;
+    if (strip.id && strip.width >= 3) {
+        int stateIndex = disabled ? 2 : (hovered ? 1 : 0);
+        float frameW = strip.width / 3.0f;
+        Rectangle src = {stateIndex * frameW, 0, frameW, (float)strip.height};
+        DrawTexturePro(strip, src, btn, (Vector2){0, 0}, 0.0f, WHITE);
+        return;
+    }
+    Color fill = disabled ? (Color){52, 52, 56, 230}
+                          : (hovered ? (Color){126, 86, 40, 255} : (Color){86, 56, 26, 255});
+    Color border = disabled ? (Color){125, 125, 132, 255}
+                            : (hovered ? (Color){250, 212, 112, 255} : (Color){206, 162, 74, 255});
+    Color ink = disabled ? (Color){165, 165, 172, 255} : RAYWHITE;
+    DrawRectangleRec(btn, fill);
+    DrawRectangleLinesEx(btn, 2.0f, border);
+    Rectangle inner = {btn.x + 3.0f, btn.y + 3.0f, btn.width - 6.0f, btn.height - 6.0f};
+    DrawRectangleLinesEx(inner, 1.0f, Fade(border, 0.55f));
+    /* Ícone de seta circular à esquerda do botão */
+    Vector2 iconCenter = {btn.x + 22.0f, btn.y + btn.height * 0.5f};
+    DrawRing(iconCenter, 5.5f, 8.0f, 35.0f, 325.0f, 16, ink);
+    Vector2 tip = {iconCenter.x + 6.5f, iconCenter.y - 5.5f};
+    DrawTriangle((Vector2){tip.x + 3.0f, tip.y + 1.0f},
+                 (Vector2){tip.x - 4.0f, tip.y - 3.0f},
+                 (Vector2){tip.x - 2.5f, tip.y + 4.0f}, ink);
+    Rectangle textArea = {btn.x + 34.0f, btn.y + 4.0f, btn.width - 42.0f, btn.height - 8.0f};
+    DrawGameTextIn("Sortear", textArea, 17.0f, ink, false);
 }
 
 void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
@@ -846,14 +1198,23 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
     }
     for (int i=0;i<count;i++) {
         Rectangle box=ChoiceRect(i,count);
-        DrawRectangleRec(box,CheckCollisionPointRec(GetMousePosition(),box)?(Color){80,45,50,255}:(Color){40,25,35,255});
-        DrawRectangleLinesEx(box,2,GOLD);
-        const char *label;
-        if (e->phase==ENCOUNTER_REWARD) label=RewardText(e,e->rewards[i]);
-        else if (count==2) label=i==0?"Verdadeiro":"Falso";
-        else label=bossQuestions[e->question].choices[(i+3-e->answer)%3];
-        DrawGameText(TextFormat("%d. %s",i+1,label),(int)box.x+14,(int)box.y+20,19,RAYWHITE);
+        bool hovered = CheckCollisionPointRec(GetMousePosition(),box);
+        if (e->phase==ENCOUNTER_REWARD) {
+            DrawRewardCardFrame(box, e->rewards[i].rarity, hovered);
+            const char *label = RewardText(e, e->rewards[i]);
+            Rectangle textArea = {box.x + 14.0f, box.y + 30.0f, box.width - 28.0f, box.height - 40.0f};
+            DrawMultilineCardText(TextFormat("%d. %s", i + 1, label), textArea, 18.0f, RAYWHITE);
+            if (e->progress.stage != CLEARING_WAVES) {
+                Rectangle btn = RerollButtonRect(i, count);
+                bool btnHover = !e->rerolled && CheckCollisionPointRec(GetMousePosition(), btn);
+                DrawRerollButton(btn, e->rerolled, btnHover);
+            }
+        } else {
+            DrawRectangleRec(box,hovered?(Color){80,45,50,255}:(Color){40,25,35,255});
+            DrawRectangleLinesEx(box,2,GOLD);
+            const char *label = count==2 ? (i==0?"Verdadeiro":"Falso")
+                                         : bossQuestions[e->question].choices[(i+3-e->answer)%3];
+            DrawGameText(TextFormat("%d. %s",i+1,label),(int)box.x+14,(int)box.y+20,19,RAYWHITE);
+        }
     }
-    if (e->phase==ENCOUNTER_REWARD) DrawGameText(e->rerolled?"Novo sorteio utilizado":"R: sortear novamente (1 gratuito)",
-        GetScreenWidth()/2-180,GetScreenHeight()/2+145,20,GOLD);
 }
