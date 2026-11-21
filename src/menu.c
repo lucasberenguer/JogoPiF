@@ -106,6 +106,10 @@ bool SaveClearingCheckpoint(const RunProgress *p) {
         size_t used=strlen(data);
         snprintf(data+used,sizeof(data)-used,"village_aftermath=%d\n",p->villageAftermath);
     }
+    if (p->angelSceneCompleted) {
+        size_t used=strlen(data);
+        snprintf(data+used,sizeof(data)-used,"angel_blessing=%d\n",p->angelBlessingUses);
+    }
     return SaveFileText(SavePath(), data);
 }
 
@@ -163,8 +167,12 @@ bool LoadClearingCheckpoint(RunProgress *p) {
     bool villageValid=!village || (sscanf(village,"\nvillage_aftermath=%d",&aftermathVillage)==1 &&
         aftermathVillage>=VILLAGE_DUEL && aftermathVillage<=VILLAGE_SCENE_SEEN);
     loaded.villageAftermath=(VillageAftermath)aftermathVillage;
+    const char *angel=strstr(data,"\nangel_blessing=");
+    bool angelValid=!angel || (sscanf(angel+1,"angel_blessing=%d",&loaded.angelBlessingUses)==1 &&
+        loaded.angelBlessingUses>=0 && loaded.angelBlessingUses<=3);
+    loaded.angelSceneCompleted=angel!=NULL;
     UnloadFileText(data);
-    bool valid=villageValid && (!currentFormat || seen==0 || seen==1) && loaded.map>=0 &&
+    bool valid=angelValid && villageValid && (!currentFormat || seen==0 || seen==1) && loaded.map>=0 &&
         loaded.map<=(aftermathFormat ? BONELAND_MAP : BONELAND_MAP - 1) &&
         (loaded.map != BONELAND_MAP || loaded.stage <= BONELAND_WAVES || loaded.stage >= CLEARING_BOSS_STAGE) &&
         loaded.weapon>=0 && loaded.weapon<3 && loaded.stage>=1 && loaded.stage<=CLEARING_COMPLETE_STAGE &&

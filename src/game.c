@@ -238,7 +238,7 @@ int main(void) {
     int screen = 0; /* 0: menu, 1: escolha da arma, 2: partida, 3: pausa */
     OpeningCutscene opening = {0};
     GuardianCutscene guardianIntro = {0};
-    enum { GUARDIAN_STORY_INTRO, GUARDIAN_STORY_LIBERATION, GUARDIAN_STORY_PASSAGE, VILLAGE_STORY_AFTERMATH } guardianStory=GUARDIAN_STORY_INTRO;
+    enum { GUARDIAN_STORY_INTRO, GUARDIAN_STORY_LIBERATION, GUARDIAN_STORY_PASSAGE, VILLAGE_STORY_AFTERMATH, ANGEL_STORY } guardianStory=GUARDIAN_STORY_INTRO;
     DevTools devTools={.wave=1,.selected=6};
     bool devOpeningWasPaused=false,devGuardianWasPaused=false;
     bool openingPreview=false;
@@ -367,7 +367,9 @@ int main(void) {
             continue;
         }
         if (screen == GUARDIAN_SCREEN) {
-            UpdateGuardianCutscene(&guardianIntro,GetFrameTime(),ReadGuardianCutsceneInput());
+            GuardianCutsceneInput input=ReadGuardianCutsceneInput();
+            if (guardianIntro.mouseAdvance && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) input.advance=true;
+            UpdateGuardianCutscene(&guardianIntro,GetFrameTime(),input);
             if (guardianIntro.finished) {
                 bool skipped=guardianIntro.skipped;
                 UnloadGuardianCutscene(&guardianIntro);
@@ -377,6 +379,7 @@ int main(void) {
                     CompleteGuardianLiberation(&encounter);
                     if (skipped) FindFreeMapPosition(&clearing,clearing.pedestal,&player);
                 } else if (guardianStory==VILLAGE_STORY_AFTERMATH) CompleteVillageCinematic(&encounter);
+                else if (guardianStory==ANGEL_STORY) CompleteAngelCinematic(&encounter,playerHealth);
                 else CompleteGuardianPassage(&encounter,&enemies,&clearing,&player,playerHealth);
                 screen=2;
                 entryFadeRemaining=entryFadeDuration;
@@ -637,6 +640,19 @@ int main(void) {
             katanaAttackRemaining=0;
             katanaAttackCooldown=0;
             dodgeRemaining=0;
+        }
+        if (encounter.phase==ENCOUNTER_ANGEL_CINEMATIC) {
+            StopGameMusic(&menu.audio);
+            guardianStory=ANGEL_STORY;
+            if (InitAngelCutscene(&guardianIntro,menu.audio.volume[AUDIO_MUSIC]/100.0f,
+                                  menu.audio.volume[AUDIO_EFFECTS]/100.0f))
+                screen=GUARDIAN_SCREEN;
+            else CompleteAngelCinematic(&encounter,playerHealth);
+            BeginDrawing();
+            ClearBackground(BLACK);
+            if (screen==GUARDIAN_SCREEN) DrawGuardianCutscene(&guardianIntro);
+            EndDrawing();
+            continue;
         }
         if (encounter.phase==ENCOUNTER_VILLAGE_CINEMATIC) {
             if (!menu.audio.playing[TRACK_MINIBOSS]) {

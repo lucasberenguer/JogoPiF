@@ -335,6 +335,22 @@ int main(void) {
         UpdateGuardianCutscene(&scene,.1f,(GuardianCutsceneInput){0});
     assert(scene.finished && !scene.skipped);
     UnloadGuardianCutscene(&scene);
+    assert(InitAngelCutscene(&scene,.12f,.12f));
+    assert(scene.count==52 && scene.artCount==15 && scene.mouseAdvance);
+    if (IsAudioDeviceReady()) assert(scene.music.stream.buffer);
+    int angelLines=0;
+    for (int step=0;step<200 && !scene.finished;step++) {
+        GuardianScene *shot=&scene.scenes[scene.current];
+        assert(shot->artIndex>=0);
+        if (shot->waitsForInput && scene.letters==0 && !scene.exiting) angelLines++;
+        UpdateGuardianCutscene(&scene,.1f,(GuardianCutsceneInput){.advance=true});
+    }
+    assert(scene.finished && !scene.skipped && angelLines==46);
+    UnloadGuardianCutscene(&scene);
+    assert(InitAngelCutscene(&scene,0,0));
+    UpdateGuardianCutscene(&scene,0,(GuardianCutsceneInput){.skip=true});
+    assert(scene.finished && scene.skipped);
+    UnloadGuardianCutscene(&scene);
     UnloadGameFonts();
     if (IsAudioDeviceReady()) CloseAudioDevice();
     CloseWindow();

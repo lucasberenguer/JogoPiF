@@ -3,7 +3,7 @@
 
 #include "raylib.h"
 
-enum { GUARDIAN_SCENE_LIMIT = 32, GUARDIAN_ART_LIMIT = 16 };
+enum { GUARDIAN_SCENE_LIMIT = 64, GUARDIAN_ART_LIMIT = 16 };
 typedef enum CinematicTransition { CINEMATIC_CUT, CINEMATIC_FADE, CINEMATIC_CROSSFADE,
                                    CINEMATIC_WHITE } CinematicTransition;
 typedef enum GuardianEventType { GUARDIAN_CINEMATIC, GUARDIAN_NARRATION, GUARDIAN_DIALOGUE,
@@ -37,6 +37,8 @@ typedef struct GuardianCutscene {
     Texture2D art[GUARDIAN_ART_LIMIT];
     int count, artCount, current;
     float elapsed, letters, musicVolume, effectsVolume, musicGain, exitElapsed;
+    float musicFadeIn;
+    bool mouseAdvance;
     Music music;
     char musicPath[160];
     char assetDirectory[256];
@@ -50,6 +52,7 @@ int LayoutGuardianNarration(const char *text, float scale, float width,
                            char lines[8][512], float *fontSize);
 float GuardianNarrationOpacity(const GuardianScene *shot, float elapsed);
 
+bool InitAngelCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume);
 bool InitVillageCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume);
 bool InitCoveiroCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume);
 bool InitGuardianCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume);

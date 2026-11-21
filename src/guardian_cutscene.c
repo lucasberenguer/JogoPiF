@@ -212,6 +212,14 @@ static bool InitSequence(GuardianCutscene *scene, const char *directory, const c
     return true;
 }
 
+bool InitAngelCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume) {
+    if (!InitSequence(scene,"assets/cutscenes/angel_guardian/","sequencia.ini",musicVolume,effectsVolume))
+        return false;
+    scene->musicFadeIn=2;
+    scene->mouseAdvance=true;
+    return true;
+}
+
 bool InitVillageCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume) {
     return InitSequence(scene,"assets/cutscenes/village_aftermath/","sequencia.ini",musicVolume,effectsVolume);
 }
@@ -325,7 +333,9 @@ void UpdateGuardianCutscene(GuardianCutscene *scene, float dt, GuardianCutsceneI
             gain*=1-Ease(scene->exitElapsed/shot->fadeOut);
         float step=dt*1.5f;
         scene->musicGain+=fmaxf(-step,fminf(step,gain-scene->musicGain));
-        SetMusicVolume(scene->music,.42f*scene->musicVolume*scene->musicGain);
+        float introFade=scene->current==0 && scene->musicFadeIn>0
+            ? Ease(scene->elapsed/scene->musicFadeIn) : 1;
+        SetMusicVolume(scene->music,.42f*scene->musicVolume*scene->musicGain*introFade);
         UpdateMusicStream(scene->music);
     }
 }
@@ -345,6 +355,14 @@ static void DrawShot(const GuardianCutscene *scene, int index, Rectangle canvas,
     float zoom=shot->zoomStart+(shot->zoomEnd-shot->zoomStart)*progress;
     Vector2 focus={shot->focusStart.x+(shot->focusEnd.x-shot->focusStart.x)*progress,
                    shot->focusStart.y+(shot->focusEnd.y-shot->focusStart.y)*progress};
+    // Keep wide montage panels intact, including their illustrated borders.
+    if ((float)art.width/art.height>2.4f) {
+        float height=canvas.width*art.height/art.width;
+        DrawTexturePro(art,(Rectangle){0,0,art.width,art.height},
+            (Rectangle){canvas.x,canvas.y+(canvas.height-height)*.43f,canvas.width,height},
+            (Vector2){0},0,Fade(WHITE,alpha));
+        return;
+    }
     float fit=fmaxf(canvas.width/art.width,canvas.height/art.height)*zoom;
     Rectangle source={0,0,canvas.width/fit,canvas.height/fit};
     source.x=fmaxf(0,fminf(art.width-source.width,art.width*focus.x-source.width/2));
@@ -542,6 +560,7 @@ void DrawGuardianCutscene(const GuardianCutscene *scene) {
         }
         const char *controls=IsGamepadAvailable(0)
             ? "A  Completar / avançar    ·    B  Pular    ·    Start  Pausar"
+            : scene->mouseAdvance ? "Espaço / Enter / Clique    ·    Esc  Pular    ·    P  Pausar"
             : "Espaço / Enter  Completar / avançar    ·    Esc  Pular    ·    P  Pausar";
         float hintSize=fmaxf(15,18*scale);
         float hintWidth=MeasureGameTextEx(controls,hintSize,false).x;

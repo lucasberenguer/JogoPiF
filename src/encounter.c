@@ -61,6 +61,7 @@ void BeginEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing,
     if ((clearing->village || clearing->chapel || clearing->basement || clearing->invertedChapel) && progress.stage < CLEARING_BOSS_STAGE)
         progress.stage = CLEARING_BOSS_STAGE;
     *e = (Encounter){.progress=progress, .sealEnemy=-1};
+    e->chapelAltarDone=progress.angelSceneCompleted;
     StartStage(e, enemies, clearing, player);
     if (clearing->village && progress.stage==CLEARING_BOSS_STAGE && progress.villageAftermath!=VILLAGE_DUEL) {
         enemies->list[0].health=0;
@@ -74,8 +75,19 @@ bool EncounterPaused(const Encounter *e) {
     return e->guardianIntroPending || GuardianLiberationPending(e) || GuardianPassagePending(e) ||
            e->presentation.remaining>0 || e->phase == ENCOUNTER_REWARD ||
            e->phase == ENCOUNTER_SEAL || e->phase == ENCOUNTER_VILLAGE_CINEMATIC || e->phase == ENCOUNTER_LETTER ||
-           e->phase == ENCOUNTER_CHAPEL_TEXT || e->phase == ENCOUNTER_BASEMENT_PILLAR ||
+           e->phase == ENCOUNTER_ANGEL_CINEMATIC || e->phase == ENCOUNTER_CHAPEL_TEXT || e->phase == ENCOUNTER_BASEMENT_PILLAR ||
            e->phase == ENCOUNTER_DEFEAT;
+}
+
+void CompleteAngelCinematic(Encounter *e, int health) {
+    if (e->phase!=ENCOUNTER_ANGEL_CINEMATIC || e->progress.angelSceneCompleted) return;
+    e->chapelAltarDone=true;
+    e->progress.angelSceneCompleted=true;
+    e->progress.angelBlessingUses=3;
+    e->progress.health=health;
+    e->phase=ENCOUNTER_FIGHT;
+    snprintf(e->notice,sizeof(e->notice),"Bênção recebida. A passagem à esquerda está aberta.");
+    if (!e->practice) SaveClearingCheckpoint(&e->progress);
 }
 
 void CompleteVillageCinematic(Encounter *e) {
@@ -302,7 +314,15 @@ bool AnswerEncounterSeal(Encounter *e, EnemyGroup *enemies, int *health, int cho
     if (choice<0 || choice>=count) return false;
     int correct=enemy->type==ENEMY_BOSS?e->answer:(e->question==0 || e->question==3?0:1);
     ClearEnemyAttacks(enemies);
-    if (choice==correct) {
+    bool protectedSeal=choice!=correct && e->progress.angelBlessingUses>0 &&
+        *health<=e->progress.maxHealth/3;
+    if (protectedSeal) {
+        e->progress.angelBlessingUses--;
+        e->progress.health=*health;
+        snprintf(e->notice,sizeof(e->notice),"A bênção protegeu o selo. Restam %d usos.",e->progress.angelBlessingUses);
+        if (!e->practice) SaveClearingCheckpoint(&e->progress);
+    }
+    if (choice==correct || protectedSeal) {
         enemy->state=ENEMY_GONE;
         if (enemy->type==ENEMY_BOSS && e->progress.map==0 &&
             e->progress.stage==CLEARING_BOSS_STAGE) {
@@ -348,10 +368,6 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
         if (e->phase == ENCOUNTER_CHAPEL_TEXT) {
             if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_E) ||
                 IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                if (e->chapelTextId == 0 && !e->chapelAltarDone) {
-                    e->chapelAltarDone = true;
-                    snprintf(e->notice, sizeof(e->notice), "Passagem secreta aberta na porta superior esquerda!");
-                }
                 e->phase = ENCOUNTER_FIGHT;
             }
             return false;
@@ -359,7 +375,7 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
         if (IsKeyPressed(KEY_E)) {
             float w = (float)clearing->background.width, h = (float)clearing->background.height;
             if (Vector2Distance(player, (Vector2){w * 0.50f, h * 0.44f}) <= 125.0f) {
-                e->chapelTextId = 0; e->phase = ENCOUNTER_CHAPEL_TEXT;
+                if (!e->chapelAltarDone) e->phase=ENCOUNTER_ANGEL_CINEMATIC;
             } else if (Vector2Distance(player, (Vector2){w * 0.365f, h * 0.26f}) <= 95.0f) {
                 e->chapelTextId = 1; e->phase = ENCOUNTER_CHAPEL_TEXT;
             } else if (Vector2Distance(player, (Vector2){w * 0.63f, h * 0.26f}) <= 95.0f) {

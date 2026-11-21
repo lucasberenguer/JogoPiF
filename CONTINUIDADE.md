@@ -203,3 +203,10 @@ Na entrega do pós-boss de 18/11, build em `out/review` concluído e seis testes
 - Em campanha e no F1, a entrada apresenta **Terra dos Ossos** e cada encontro mostra a numeração de **1/4** a **4/4**. A quarta cartela apresenta o chefe com a marcha animada. O retrato novo de apresentação está aguardando aprovação antes de substituir essa pose na cartela.
 - Validação do chefe e das cartelas: build e os quatro testes executados passaram. A auditoria do F1 confere a transição do nome do mapa para a onda, a pausa do combate durante a cartela, a quarta onda e a carga das três folhas do chefe.
 - O balanceamento em uma partida completa permanece pendente.
+
+## A Voz do Último Guardião
+
+- **A Voz do Último Guardião:** interagir com o altar principal da Capela abre a cutscene. A sequência reutiliza o player do Guardião e reúne as 14 cenas do roteiro, 46 falas, 15 artes e a trilha enviada em `assets/cutscenes/angel_guardian/`. O quadro panorâmico das memórias é exibido inteiro. A fachada e os planos do sacrifício expandem o roteiro; um anexo repetido foi dispensado. A mesma arte da escadaria serve à revelação e à despedida com enquadramentos distintos.
+- Concluir ou pular salva a cena e concede três usos da bênção uma única vez. O campo opcional `angel_blessing` guarda o saldo, inclusive zero. Como a bênção ainda não existia no código, ela protege um selo incorreto quando a vida está em até um terço do máximo, consumindo um uso e evitando o retorno do inimigo. A saída já existente para o porão é liberada e o desafio de quatro pilares permanece por resolver.
+- Validação da Capela em `out/review`: 6/6 testes. O teste de sequência carregou as artes e a trilha, percorreu as 46 falas e verificou o pulo. O teste de encontro verificou a concessão, o checkpoint, a passagem liberada sem resolver o enigma e a ausência de recarga da bênção ao retornar.
+- Integração com a Terra dos Ossos validada em `out/review`: 6/6 testes. O teste de encontro confirma que um checkpoint do mapa 6 preserva a terceira onda e o saldo da bênção.

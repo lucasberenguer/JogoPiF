@@ -25,6 +25,8 @@ typedef struct RunProgress {
     int weaponLevel[3];
     int strongWeapon;
     bool guardianIntroSeen;
+    bool angelSceneCompleted;
+    int angelBlessingUses;
     VillageAftermath villageAftermath;
     GuardianAftermathState guardianAftermath;
 } RunProgress;

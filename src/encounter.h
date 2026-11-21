@@ -7,7 +7,7 @@
 enum { ENCOUNTER_BOSS_HUD_HEIGHT = 58 };
 
 typedef enum EncounterPhase { ENCOUNTER_FIGHT, ENCOUNTER_REWARD, ENCOUNTER_SEAL,
-                             ENCOUNTER_VILLAGE_CINEMATIC, ENCOUNTER_LETTER, ENCOUNTER_CHAPEL_TEXT, ENCOUNTER_BASEMENT_PILLAR,
+                             ENCOUNTER_VILLAGE_CINEMATIC, ENCOUNTER_LETTER, ENCOUNTER_ANGEL_CINEMATIC, ENCOUNTER_CHAPEL_TEXT, ENCOUNTER_BASEMENT_PILLAR,
                              ENCOUNTER_CLEAR, ENCOUNTER_DEFEAT } EncounterPhase;
 typedef struct Reward { int kind; int weapon; int amount; } Reward;
 typedef struct Encounter {
@@ -34,6 +34,7 @@ void BeginEncounter(Encounter *encounter, EnemyGroup *enemies, const Clearing *c
 bool UpdateEncounter(Encounter *encounter, EnemyGroup *enemies, const Clearing *clearing,
                      Vector2 player, int *health);
 bool EncounterPaused(const Encounter *encounter);
+void CompleteAngelCinematic(Encounter *e, int health);
 void CompleteVillageCinematic(Encounter *encounter);
 void CompleteGuardianIntro(Encounter *encounter, bool cinematicPlayed);
 bool GuardianLiberationPending(const Encounter *encounter);
