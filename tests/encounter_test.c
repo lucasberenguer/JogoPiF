@@ -391,7 +391,7 @@ static void CheckLegacyCheckpoints(void) {
     rTest.rewards[0] = (Reward){.kind = REWARD_EPIC_DAMAGE, .rarity = RARITY_EPIC, .weapon = 2};
     assert(ChooseEncounterReward(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth, 0));
     assert(rTest.progress.epicDamageStacks == 1);
-    /* Épico (c): status (+30..60 vida máx e cura, +0.20 dano, +15 velocidade) */
+    /* Épico (c): status (+30..60 vida máx e cura, +0.25 dano, +60 velocidade [+25% da base 240]) */
     rHealth = 50;
     rTest.progress.stage = 1;
     rTest.phase = ENCOUNTER_REWARD;
@@ -399,7 +399,7 @@ static void CheckLegacyCheckpoints(void) {
     rTest.rewards[0] = (Reward){.kind = REWARD_EPIC_STATUS, .rarity = RARITY_EPIC, .amount = 40};
     assert(ChooseEncounterReward(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth, 0));
     assert(rTest.progress.maxHealth == 160 && rHealth == 90);
-    assert(fabsf(rTest.progress.damage - 1.50f) < 0.0001f && fabsf(rTest.progress.speed - 285.0f) < 0.0001f);
+    assert(fabsf(rTest.progress.damage - 1.55f) < 0.0001f && fabsf(rTest.progress.speed - 330.0f) < 0.0001f);
     /* Épico (d): vida plena (+50 de vida máxima e cura toda a vida) */
     rHealth = 35;
     rTest.progress.stage = 1;

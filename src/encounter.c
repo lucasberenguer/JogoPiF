@@ -8,8 +8,8 @@
 #define COMMON_DAMAGE_BONUS 0.15f
 #define COMMON_HEALTH_BONUS 20
 #define COMMON_SPEED_BONUS 15.0f
-#define EPIC_STATUS_DAMAGE_BONUS 0.20f
-#define EPIC_STATUS_SPEED_BONUS 15.0f
+#define EPIC_STATUS_DAMAGE_BONUS 0.25f
+#define EPIC_STATUS_SPEED_BONUS 60.0f
 #define EPIC_STATUS_MIN_TENS 3
 #define EPIC_STATUS_MAX_TENS 6
 #define EPIC_FULL_HEAL_MAX_HP_BONUS 50
@@ -847,7 +847,7 @@ static const char *RewardText(const Encounter *e, Reward reward) {
                               WeaponTitle(e->progress.weapon), before, after);
         }
         case REWARD_EPIC_STATUS:
-            return TextFormat("Status\nVida +%d / dano +20%%\nVelocidade +15", reward.amount);
+            return TextFormat("Status\nVida +%d / dano +25%%\nVelocidade +25%%", reward.amount);
         case REWARD_EPIC_FULL_HEAL:
             return "Vida plena\nCura toda a vida\nVida maxima +50";
         default:
