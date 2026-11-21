@@ -52,6 +52,8 @@ bool CanEnterBasement(const Encounter *encounter, const Clearing *clearing,
                       Vector2 player, bool interactPressed);
 bool CanEnterInvertedChapel(const Encounter *encounter, const Clearing *clearing,
                             Vector2 player);
+bool CanEnterTemplarField(const Encounter *encounter, const Clearing *clearing,
+                          Vector2 player);
 bool EncounterBossVisible(const Encounter *encounter, const EnemyGroup *enemies);
 float EncounterDamage(const Encounter *encounter);
 bool ChooseEncounterReward(Encounter *encounter, EnemyGroup *enemies, const Clearing *clearing,

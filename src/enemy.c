@@ -95,7 +95,7 @@ static int GuardianDefeatFrame(const Enemy *enemy) {
 }
 
 static bool IsGuardianSpawn(const EnemyGroup *group, const Enemy *enemy) {
-    return !group->boneland && !group->cemetery && !group->village &&
+    return !group->boneland && !group->cemetery && !group->village && enemy->templarRole != TEMPLAR_MARSHAL &&
            enemy->type == ENEMY_BOSS && enemy->state == ENEMY_SPAWNING;
 }
 
@@ -281,6 +281,21 @@ static Texture2D LoadBoneLordSprite(const char *path) {
     return texture;
 }
 
+static const float templarArrivalTime = 2.05f;
+static const float templarPlantTime = .48f;
+static const float shieldImpact = .42f;
+static const float executionerImpact = .76f;
+static const float crossbowRelease = .52f;
+static const struct {
+    float impact, activeEnd, duration, reach, arcDot;
+    int damage;
+} marshalSkills[] = {
+    [MARSHAL_SLASH] = {.48f, .64f, .94f, 155, .34f, 20},
+    [MARSHAL_CHARGE] = {.55f, 1.12f, 1.38f, 63, 0, 22},
+    [MARSHAL_RETURN] = {.50f, .68f, 1.07f, 168, -.14f, 22},
+    [MARSHAL_RUPTURE] = {.82f, .99f, 1.60f, 195, .50f, 29},
+};
+
 bool InitEnemies(EnemyGroup *group) {
     *group = (EnemyGroup){0};
     group->sprites = LoadTexture("assets/inimigo_encapuzado.png");
@@ -332,6 +347,32 @@ bool InitEnemies(EnemyGroup *group) {
     group->boneLordWalk = LoadBoneLordSprite("assets/terra_dos_ossos_chefe_marcha.png");
     group->boneLordPounce = LoadBoneLordSprite("assets/terra_dos_ossos_chefe_bote.png");
     group->boneLordClaw = LoadBoneLordSprite("assets/terra_dos_ossos_chefe_garra.png");
+    group->boneLordDash = LoadBoneLordSprite("assets/terra_dos_ossos_chefe_dash.png");
+    group->boneLordBite = LoadBoneLordSprite("assets/terra_dos_ossos_chefe_mordida.png");
+    static const char *const templarFiles[] = {
+        [TEMPLAR_SHIELD] = "assets/templario_escudo.png",
+        [TEMPLAR_EXECUTIONER] = "assets/templario_carrasco.png",
+        [TEMPLAR_CROSSBOW] = "assets/templario_besteiro.png",
+        [TEMPLAR_STANDARD] = "assets/templario_estandarte.png",
+        [TEMPLAR_MARSHAL] = "assets/templario_marechal.png",
+    };
+    static const char *const attackFiles[] = {
+        [TEMPLAR_SHIELD] = "assets/templario_escudo_ataque.png",
+        [TEMPLAR_EXECUTIONER] = "assets/templario_carrasco_ataque.png",
+        [TEMPLAR_CROSSBOW] = "assets/templario_besteiro_ataque.png",
+        [TEMPLAR_STANDARD] = "assets/templario_estandarte_ataque.png",
+        [TEMPLAR_MARSHAL] = "assets/templario_marechal_ataque.png",
+    };
+    for (int role = TEMPLAR_SHIELD; role <= TEMPLAR_MARSHAL; role++) {
+        group->templarWalk[role] = LoadTexture(templarFiles[role]);
+        group->templarAttack[role] = LoadTexture(attackFiles[role]);
+        if (!group->templarWalk[role].id || !group->templarAttack[role].id) {
+            UnloadEnemies(group);
+            return false;
+        }
+        SetTextureFilter(group->templarWalk[role], TEXTURE_FILTER_POINT);
+        SetTextureFilter(group->templarAttack[role], TEXTURE_FILTER_POINT);
+    }
     group->sealMarker = LoadTexture("assets/inimigo_selo.png");
     group->bossSprites = LoadTexture("assets/boss_clareira.png");
     group->guardianSpawn = LoadTexture("assets/boss_clareira_spawn.png");
@@ -339,6 +380,7 @@ bool InitEnemies(EnemyGroup *group) {
     group->bossWalk = LoadTexture("assets/boss_clareira_andar.png");
     group->bossPortrait = LoadTexture("assets/guardiao_intro_pixel_v2.png");
     group->cemeteryPortrait = LoadTexture("assets/coveiro_intro_pixel.png");
+    group->boneLordPortrait = LoadTexture("assets/terra_dos_ossos_chefe_retrato.png");
     group->bossAttack = LoadTexture("assets/boss_clareira_especial_1.png");
     group->roots = LoadTexture("assets/boss_clareira_raizes_area.png");
     group->rootWave = LoadTexture("assets/boss_clareira_onda.png");
@@ -355,10 +397,10 @@ bool InitEnemies(EnemyGroup *group) {
         !group->clearingArcher[0].id || !group->clearingArcher[1].id || !group->clearingArcher[2].id ||
         !group->clearingSpecial[0].id || !group->clearingSpecial[1].id || !group->clearingSpecial[2].id ||
         !group->bonelandGhoul.id || !group->bonelandCultist.id ||
-        !group->boneLordWalk.id || !group->boneLordPounce.id || !group->boneLordClaw.id ||
+        !group->boneLordWalk.id || !group->boneLordPounce.id || !group->boneLordClaw.id || !group->boneLordDash.id || !group->boneLordBite.id ||
         !group->sealMarker.id ||
         !group->roots.id || !group->rootWave.id || !group->curse.id || !group->guardianMelee.id ||
-        !group->bossPortrait.id || !group->cemeteryPortrait.id ||
+        !group->bossPortrait.id || !group->cemeteryPortrait.id || !group->boneLordPortrait.id ||
         !group->villageBossWalk.id || !group->villageBossAttack.id ||
         !group->villageBossCharge.id || !group->villageVillager.id) {
         UnloadEnemies(group);
@@ -381,6 +423,7 @@ bool InitEnemies(EnemyGroup *group) {
     SetTextureFilter(group->bossWalk, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->bossPortrait, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->cemeteryPortrait, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->boneLordPortrait, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->bossAttack, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->roots, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->rootWave, TEXTURE_FILTER_POINT);
@@ -412,17 +455,24 @@ void UnloadEnemies(EnemyGroup *group) {
         if (group->clearingSpecial[i].id) UnloadTexture(group->clearingSpecial[i]);
     }
     if (group->sealMarker.id) UnloadTexture(group->sealMarker);
+    for (int role = TEMPLAR_SHIELD; role <= TEMPLAR_MARSHAL; role++) {
+        if (group->templarWalk[role].id) UnloadTexture(group->templarWalk[role]);
+        if (group->templarAttack[role].id) UnloadTexture(group->templarAttack[role]);
+    }
     if (group->bonelandGhoul.id) UnloadTexture(group->bonelandGhoul);
     if (group->bonelandCultist.id) UnloadTexture(group->bonelandCultist);
     if (group->boneLordWalk.id) UnloadTexture(group->boneLordWalk);
     if (group->boneLordPounce.id) UnloadTexture(group->boneLordPounce);
     if (group->boneLordClaw.id) UnloadTexture(group->boneLordClaw);
+    if (group->boneLordDash.id) UnloadTexture(group->boneLordDash);
+    if (group->boneLordBite.id) UnloadTexture(group->boneLordBite);
     if (group->bossSprites.id) UnloadTexture(group->bossSprites);
     if (group->guardianSpawn.id) UnloadTexture(group->guardianSpawn);
     if (group->guardianDefeat.id) UnloadTexture(group->guardianDefeat);
     if (group->bossWalk.id) UnloadTexture(group->bossWalk);
     if (group->bossPortrait.id) UnloadTexture(group->bossPortrait);
     if (group->cemeteryPortrait.id) UnloadTexture(group->cemeteryPortrait);
+    if (group->boneLordPortrait.id) UnloadTexture(group->boneLordPortrait);
     if (group->bossAttack.id) UnloadTexture(group->bossAttack);
     if (group->roots.id) UnloadTexture(group->roots);
     if (group->rootWave.id) UnloadTexture(group->rootWave);
@@ -440,6 +490,7 @@ void ResetEnemies(EnemyGroup *group, const Clearing *clearing) {
 }
 
 void ClearEnemyAttacks(EnemyGroup *group) {
+    group->templarBlood.remaining = 0;
     memset(group->projectiles, 0, sizeof(group->projectiles));
     memset(group->cemeteryProjectiles,0,sizeof(group->cemeteryProjectiles));
     memset(group->rootAttacks, 0, sizeof(group->rootAttacks));
@@ -503,6 +554,45 @@ static void StartBonelandWave(EnemyGroup *group, const Clearing *map, int wave,
     }
 }
 
+static void StartTemplarWave(EnemyGroup *group, int wave) {
+    static const struct {
+        TemplarRole role;
+        Vector2 position;
+    } formations[][6] = {
+        {{TEMPLAR_SHIELD, {750, 445}}, {TEMPLAR_SHIELD, {835, 470}},
+         {TEMPLAR_SHIELD, {920, 445}}, {TEMPLAR_CROSSBOW, {470, 365}},
+         {TEMPLAR_CROSSBOW, {1200, 365}}},
+        {{TEMPLAR_STANDARD, {835, 323}}, {TEMPLAR_EXECUTIONER, {670, 473}},
+         {TEMPLAR_EXECUTIONER, {1000, 473}}, {TEMPLAR_SHIELD, {755, 402}},
+         {TEMPLAR_SHIELD, {915, 402}}, {TEMPLAR_CROSSBOW, {1090, 350}}},
+    };
+    static const struct {
+        EnemyType type;
+        int health;
+        float speed, power;
+    } stats[] = {
+        [TEMPLAR_SHIELD] = {ENEMY_COMMON_MELEE, 105, 100, 1.15f},
+        [TEMPLAR_EXECUTIONER] = {ENEMY_SPECIAL, 135, 115, 1.25f},
+        [TEMPLAR_CROSSBOW] = {ENEMY_COMMON_RANGED, 75, 115, 1.25f},
+        [TEMPLAR_STANDARD] = {ENEMY_COMMON_MELEE, 90, 84, .9f},
+    };
+    int formation = wave == 1 ? 0 : 1;
+    int count = wave == 1 ? 5 : 6;
+    for (int i = 0; i < ENEMY_COUNT; i++) {
+        group->list[i] = (Enemy){.state = ENEMY_GONE};
+        if (i >= count) continue;
+        TemplarRole role = formations[formation][i].role;
+        group->list[i] = (Enemy){
+            .templarRole = role, .type = stats[role].type, .state = ENEMY_SPAWNING,
+            .position = formations[formation][i].position,
+            .health = stats[role].health, .maxHealth = stats[role].health,
+            .speed = stats[role].speed, .power = stats[role].power,
+            .attackCooldown = role == TEMPLAR_CROSSBOW ? .65f + .1f * i : .8f,
+            .stateTime = -.12f * i, .lastKatanaSwing = -1
+        };
+    }
+}
+
 void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
                     Vector2 player, float playerPower) {
     group->boneland=clearing->boneland;
@@ -513,6 +603,10 @@ void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
     group->villageBossDeathWeapon = -1;
     ClearEnemyAttacks(group);
     group->playerHitCooldown = 0;
+    if (clearing->templarField) {
+        StartTemplarWave(group, wave);
+        return;
+    }
     if (clearing->boneland) {
         StartBonelandWave(group, clearing, wave, player, playerPower);
         return;
@@ -561,20 +655,25 @@ void StartArenaBoss(EnemyGroup *group, const Clearing *clearing, Vector2 player,
     }
     for (int i=0; i<ENEMY_COUNT; i++) group->list[i] = (Enemy){.state = ENEMY_GONE};
     Enemy *boss = &group->list[0];
-    int baseHealth = clearing->boneland ? 2800
+    int baseHealth = clearing->templarField ? 3000 : clearing->boneland ? 2800
         : clearing->village ? 500 : (clearing->cemetery ? CEMETERY_BOSS_BASE_HEALTH : ARENA_BOSS_BASE_HEALTH);
-    Vector2 bossPos = clearing->village
+    Vector2 bossPos = clearing->templarField ? (Vector2){835, 290} : clearing->village
         ? (Vector2){clearing->background.width * 0.62f, clearing->background.height * 0.54f}
         : SpawnPosition(clearing, player);
     *boss = (Enemy){.type = ENEMY_BOSS, .state = ENEMY_SPAWNING,
         .position = bossPos, .maxHealth = (int)(baseHealth*fmaxf(1, power)),
-        .speed = clearing->village ? 185 : (clearing->cemetery ? 160 : 100),
+        .speed = clearing->village || clearing->templarField ? 185 : (clearing->cemetery ? 160 : 100),
         .power = power, .attackCooldown = 1.25f, .lastKatanaSwing = -1,
         .bossAttack = (clearing->cemetery ? COVEIRO_ATTACK_COUNT : GUARDIAN_ATTACK_COUNT) - 1};
     boss->health = boss->maxHealth;
     if (clearing->boneland) {
         boss->bossAttack = BONE_DASH;
         boss->speed = 132;
+    }
+    if (clearing->templarField) {
+        boss->templarRole = TEMPLAR_MARSHAL;
+        boss->bossAttack = MARSHAL_SLASH;
+        boss->attackCooldown = .25f;
     }
 }
 
@@ -597,7 +696,22 @@ Vector2 EnemyCenter(const Enemy *enemy) {
 }
 
 void DamageEnemy(Enemy *enemy, int damage) {
+    DamageEnemyFrom(enemy, damage, enemy->position);
+}
+
+void DamageEnemyFrom(Enemy *enemy, int damage, Vector2 source) {
     if (!EnemyCanBeHit(enemy) || damage<=0) return;
+    static const Vector2 guardDirection[] = {{0,1}, {0,-1}, {-1,0}, {1,0}};
+    Vector2 incoming = Vector2Subtract(source, enemy->position);
+    if (enemy->templarRole == TEMPLAR_SHIELD &&
+        (enemy->state == ENEMY_IDLE || enemy->state == ENEMY_WALK) &&
+        Vector2DotProduct(incoming, guardDirection[enemy->facing]) > Vector2Length(incoming) * .55f) {
+        damage = damage / 2 + damage % 2;
+        if (enemy->health > damage) {
+            enemy->health -= damage;
+            return;
+        }
+    }
     enemy->health -= damage;
     if (enemy->type == ENEMY_BOSS && enemy->guardianPhase == GUARDIAN_PHASE_ONE &&
         enemy->health <= enemy->maxHealth / 2) {
@@ -627,23 +741,37 @@ void MoveEnemy(const Clearing *clearing, Enemy *enemy, Vector2 delta) {
 void KnockbackEnemy(Enemy *enemy, const Clearing *clearing,
                     Vector2 source, float distance) {
     if (!EnemyCanBeHit(enemy)) return;
+    if (enemy->templarRole == TEMPLAR_STANDARD ||
+        (enemy->templarRole == TEMPLAR_SHIELD && enemy->state != ENEMY_HURT)) return;
     if (enemy->type == ENEMY_BOSS) distance *= .15f;
     Vector2 away = Vector2Subtract(enemy->position, source);
     if (Vector2LengthSqr(away) < 0.001f) return;
     MoveEnemy(clearing, enemy, Vector2Scale(Vector2Normalize(away), distance));
 }
 
+static float EnemyAttackPower(const EnemyGroup *group, const Enemy *enemy) {
+    if (enemy->templarRole != TEMPLAR_NONE && enemy->templarRole != TEMPLAR_STANDARD) {
+        for (int i = 0; i < ENEMY_COUNT; i++) {
+            const Enemy *standard = &group->list[i];
+            if (standard->templarRole == TEMPLAR_STANDARD && EnemyCanBeHit(standard) &&
+                Vector2DistanceSqr(standard->position, enemy->position) <= 220.0f * 220.0f)
+                return enemy->power * 1.25f;
+        }
+    }
+    return enemy->power;
+}
+
 static void FireRangedProjectile(EnemyGroup *group, const Enemy *enemy, Vector2 player) {
     Vector2 origin = EnemyCenter(enemy);
     Vector2 toward = Vector2Subtract((Vector2){player.x,player.y-35},origin);
-    if ((group->cemetery || group->boneland) &&
+    if ((group->cemetery || group->boneland || enemy->templarRole == TEMPLAR_CROSSBOW) &&
         Vector2LengthSqr(enemy->attackDirection)>.001f) toward=enemy->attackDirection;
     if (Vector2LengthSqr(toward) < 0.001f) return;
     for (int i = 0; i < ENEMY_PROJECTILE_COUNT; i++) {
         if (group->projectiles[i].remaining <= 0.0f) {
             group->projectiles[i] = (EnemyProjectile){origin, Vector2Normalize(toward),
                 group->cemetery ? 4.0f : 1.5f,
-                (int)((group->cemetery ? 10 : ENEMY_ATTACK_DAMAGE)*enemy->power)};
+                (int)((group->cemetery ? 10 : ENEMY_ATTACK_DAMAGE)*EnemyAttackPower(group, enemy))};
             return;
         }
     }
@@ -732,7 +860,7 @@ static const struct {
     [BONE_DASH] = {0, 245, .80f, 1.00f, 1.46f, 27},
 };
 
-static void MoveBoneLordStraight(const Clearing *map, Enemy *boss, float distance) {
+static void MoveEnemyStraight(const Clearing *map, Enemy *boss, float distance) {
     int steps = (int)ceilf(distance / 4.0f);
     if (steps <= 0) return;
     Vector2 step = Vector2Scale(boss->attackDirection, distance / steps);
@@ -791,7 +919,7 @@ static void UpdateBoneLord(EnemyGroup *group, const Clearing *map, Enemy *boss,
     float active = fmaxf(0, fminf(time, impactEnd) - fmaxf(previous, windup));
     if (attack == BONE_CHARGE && active > 0) {
         Vector2 origin = boss->position;
-        MoveBoneLordStraight(map, boss, active * 560);
+        MoveEnemyStraight(map, boss, active * 560);
         Vector2 segment = Vector2Subtract(boss->position, origin);
         float lengthSquared = Vector2LengthSqr(segment);
         float along = lengthSquared > 0 ? Clamp(Vector2DotProduct(toPlayer, segment) / lengthSquared, 0, 1) : 0;
@@ -820,7 +948,7 @@ static void UpdateBoneLord(EnemyGroup *group, const Clearing *map, Enemy *boss,
         if (active > 0) {
             float remaining = Vector2Distance(boss->position, boss->attackTarget);
             float fraction = active / (impactEnd - fmaxf(previous, windup));
-            MoveBoneLordStraight(map, boss, remaining * fraction);
+            MoveEnemyStraight(map, boss, remaining * fraction);
         }
         if (previous < impactEnd && time >= impactEnd && !boss->attackConnected) {
             BoneLordHit(group, boss, dodging, health);
@@ -834,10 +962,89 @@ static void UpdateBoneLord(EnemyGroup *group, const Clearing *map, Enemy *boss,
     }
 }
 
+static void HurtByTemplar(EnemyGroup *group, Vector2 player, int *health, bool dodging, int damage) {
+    if (dodging || group->practiceInvincible || group->playerHitCooldown > 0 || *health <= 0 || damage <= 0)
+        return;
+    *health = damage < *health ? *health - damage : 0;
+    group->playerHitCooldown = .65f;
+    group->templarBlood = (EnemyImpact){{player.x, player.y - 36}, .36f};
+}
+
+static void StartMarshalSkill(Enemy *boss, int skill, Vector2 direction) {
+    boss->state = ENEMY_ATTACK;
+    boss->bossAttack = skill;
+    boss->stateTime = 0;
+    boss->attackConnected = false;
+    boss->attackDirection = direction;
+    boss->facing = FacingToward(direction);
+}
+
+static void UpdateMarshal(EnemyGroup *group, const Clearing *map, Enemy *boss, Vector2 player,
+                          float dt, bool dodging, int *health) {
+    Vector2 delta = Vector2Subtract(player, boss->position);
+    float distance = Vector2Length(delta);
+    Vector2 toward = distance > .001f ? Vector2Scale(delta, 1 / distance) : (Vector2){0,1};
+    bool enraged = GuardianEnraged(boss);
+    if (boss->state != ENEMY_ATTACK) {
+        if (*health <= 0) return;
+        boss->facing = FacingToward(toward);
+        if (boss->attackCooldown <= 0 && (boss->attackBurst == 0 || distance < 415) &&
+            MapHasClearPath(map, boss->position, player)) {
+            if (boss->attackBurst == 0 || distance > 178) {
+                boss->attackBurst = 1;
+                StartMarshalSkill(boss, MARSHAL_CHARGE, toward);
+            } else if (enraged && boss->bossAttack != MARSHAL_RUPTURE) {
+                StartMarshalSkill(boss, MARSHAL_RUPTURE, toward);
+            } else {
+                StartMarshalSkill(boss, MARSHAL_SLASH, toward);
+            }
+            return;
+        }
+        boss->state = boss->attackBurst != 0 && distance > 93 ? ENEMY_WALK : ENEMY_IDLE;
+        if (boss->state == ENEMY_WALK) {
+            boss->walkTime += dt;
+            MoveEnemy(map, boss, Vector2Scale(toward, boss->speed * dt * (enraged ? 1.13f : 1)));
+        }
+        return;
+    }
+    int skill = boss->bossAttack;
+    float time = boss->stateTime, impact = marshalSkills[skill].impact;
+    float active = fmaxf(0, fminf(time, marshalSkills[skill].activeEnd) - fmaxf(time - dt, impact));
+    float reach = marshalSkills[skill].reach;
+    if (skill == MARSHAL_CHARGE && active > 0) {
+        Vector2 origin = boss->position;
+        MoveEnemyStraight(map, boss, active * (enraged ? 620 : 555));
+        Vector2 segment = Vector2Subtract(boss->position, origin);
+        float lengthSquared = Vector2LengthSqr(segment);
+        float along = lengthSquared > 0 ? Clamp(Vector2DotProduct(delta, segment) / lengthSquared, 0, 1) : 0;
+        Vector2 nearest = Vector2Add(origin, Vector2Scale(segment, along));
+        if (!boss->attackConnected && Vector2DistanceSqr(nearest, player) <= reach * reach &&
+            MapHasClearPath(map, nearest, player)) {
+            boss->attackConnected = true;
+            HurtByTemplar(group, player, health, dodging, (int)(marshalSkills[skill].damage * boss->power));
+        }
+    } else if (skill != MARSHAL_CHARGE && !boss->attackConnected && time >= impact) {
+        boss->attackConnected = true;
+        if (distance <= reach && Vector2DotProduct(toward, boss->attackDirection) >= marshalSkills[skill].arcDot &&
+            MapHasClearPath(map, boss->position, player)) {
+            HurtByTemplar(group, player, health, dodging, (int)(marshalSkills[skill].damage * boss->power));
+        }
+    }
+    if (time < marshalSkills[skill].duration) return;
+    if (enraged && skill == MARSHAL_CHARGE && *health > 0) {
+        StartMarshalSkill(boss, MARSHAL_RETURN, toward);
+        return;
+    }
+    boss->state = ENEMY_IDLE;
+    boss->stateTime = 0;
+    boss->attackCooldown = enraged ? .38f : .57f;
+}
+
 void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                    Vector2 player, float dt, bool playerDodging,
                    int *playerHealth, int playerMaxHealth) {
     group->playerHitCooldown = fmaxf(0.0f, group->playerHitCooldown-dt);
+    group->templarBlood.remaining = fmaxf(0, group->templarBlood.remaining - dt);
     for (int i=0;i<16;i++) group->impacts[i].remaining=fmaxf(0,group->impacts[i].remaining-dt);
     if (group->cemetery && group->list[0].type == ENEMY_BOSS &&
         (group->list[0].guardianPhase == GUARDIAN_PHASE_TRANSITION || group->list[0].state == ENEMY_DIE))
@@ -864,8 +1071,8 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 enemy->guardianPhase = GUARDIAN_PHASE_TWO;
                 enemy->stateTime = 0;
                 /* The Coveiro opens with a charge and the Guardian with a curse. */
-                enemy->bossAttack = group->boneland ? BONE_CLAW :
-                    group->cemetery ? COVEIRO_SHOVEL : GUARDIAN_ROOT_WAVE;
+                enemy->bossAttack = enemy->templarRole == TEMPLAR_MARSHAL ? MARSHAL_SLASH :
+                    group->boneland ? BONE_CLAW : group->cemetery ? COVEIRO_SHOVEL : GUARDIAN_ROOT_WAVE;
                 enemy->attackCooldown = .20f;
                 enemy->guardianMeleeCooldown = .90f;
             }
@@ -873,7 +1080,8 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         }
         if (enemy->state == ENEMY_SPAWNING) {
             float duration = IsGuardianSpawn(group, enemy)
-                ? GUARDIAN_SPAWN_DURATION : 1.0f;
+                ? GUARDIAN_SPAWN_DURATION : enemy->templarRole == TEMPLAR_STANDARD ? templarArrivalTime + templarPlantTime
+                    : enemy->templarRole != TEMPLAR_NONE ? templarArrivalTime : 1.0f;
             if (enemy->stateTime >= duration) { enemy->state = ENEMY_IDLE; enemy->stateTime = 0; }
             continue;
         }
@@ -883,10 +1091,12 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         enemy->bibleHitCooldown = fmaxf(0.0f, enemy->bibleHitCooldown-dt);
         if (enemy->state == ENEMY_DIE) {
             if (enemy->type == ENEMY_BOSS) ClearEnemyAttacks(group);
-            bool humanBoss = group->village && enemy->type == ENEMY_BOSS;
+            bool humanBoss = enemy->type == ENEMY_BOSS &&
+                             (group->village || enemy->templarRole == TEMPLAR_MARSHAL);
             float dieDuration = humanBoss ? 1.35f : ENEMY_DEFEAT_DURATION;
             if (enemy->stateTime >= dieDuration) {
-                bool requiresSeal = enemy->type == ENEMY_SPECIAL || enemy->type == ENEMY_BOSS;
+                bool requiresSeal = enemy->templarRole == TEMPLAR_NONE &&
+                    (enemy->type == ENEMY_SPECIAL || enemy->type == ENEMY_BOSS);
                 enemy->state = requiresSeal ? ENEMY_FALLEN : ENEMY_GONE;
             }
             continue;
@@ -903,11 +1113,32 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             CemeteryUpdateBoss(group, clearing, enemy, player, dt, playerDodging, playerHealth);
             continue;
         }
+        if (enemy->templarRole == TEMPLAR_MARSHAL) {
+            UpdateMarshal(group, clearing, enemy, player, dt, playerDodging, playerHealth);
+            continue;
+        }
         if (group->village && enemy->type == ENEMY_BOSS) {
             VillageUpdateBoss(group, clearing, enemy, player, dt, playerDodging, playerHealth);
             continue;
         }
+        if (enemy->templarRole == TEMPLAR_STANDARD) continue; /* Estabelece a posição ao pé da escadaria. */
         if (enemy->state == ENEMY_ATTACK) {
+            if (enemy->templarRole == TEMPLAR_EXECUTIONER) {
+                float t = enemy->stateTime;
+                float charge = fmaxf(0, fminf(t, executionerImpact) - fmaxf(t - dt, .45f));
+                MoveEnemy(clearing, enemy, Vector2Scale(enemy->attackDirection, 390 * charge));
+                if (t >= executionerImpact && !enemy->attackConnected) {
+                    enemy->attackConnected = true;
+                    Vector2 toward = Vector2Subtract(player, enemy->position);
+                    if (Vector2Length(toward) <= 106 &&
+                        Vector2DotProduct(toward, enemy->attackDirection) >= -.15f * Vector2Length(toward) &&
+                        MapHasClearPath(clearing, enemy->position, player))
+                        HurtByTemplar(group, player, playerHealth, playerDodging,
+                                      (int)(18 * EnemyAttackPower(group, enemy)));
+                }
+                if (t >= 1.45f) { enemy->state = ENEMY_IDLE; enemy->stateTime = 0; }
+                continue;
+            }
             if (enemy->type == ENEMY_BOSS) {
                 if (enemy->guardianMelee) {
                     UpdateGuardianMelee(group, clearing, enemy, player, playerDodging, playerHealth);
@@ -931,7 +1162,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                     if (!enemy->attackConnected && !playerDodging && group->playerHitCooldown <= 0 &&
                         Vector2Distance(player, enemy->position) < 65 && *playerHealth > 0 &&
                         MapHasClearPath(clearing, enemy->position, player)) {
-                        *playerHealth = (int)fmaxf(0, *playerHealth - 18*enemy->power);
+                        *playerHealth = (int)fmaxf(0, *playerHealth - 18*EnemyAttackPower(group, enemy));
                         group->playerHitCooldown = .65f;
                         enemy->attackConnected = true;
                     }
@@ -943,26 +1174,39 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             bool mage = group->cemetery && ranged;
             bool cultist = group->boneland && ranged;
             bool clearingMelee = !group->cemetery && enemy->type == ENEMY_COMMON_MELEE;
-            float release = cultist ? CULTIST_RELEASE_TIME : mage ? .55f : CLEARING_ARCHER_RELEASE_TIME;
-            bool impact = clearingMelee ? ClearingEnemyFrame(enemy, group->boneland) >= CLEARING_MELEE_IMPACT_FRAME :
+            bool crossbow = enemy->templarRole == TEMPLAR_CROSSBOW;
+            bool shield = enemy->templarRole == TEMPLAR_SHIELD;
+            if (shield) {
+                float step = fmaxf(0, fminf(enemy->stateTime, shieldImpact) -
+                                      fmaxf(enemy->stateTime - dt, shieldImpact - .13f));
+                MoveEnemy(clearing, enemy, Vector2Scale(enemy->attackDirection, step * 180));
+            }
+            float release = crossbow ? crossbowRelease : shield ? shieldImpact :
+                cultist ? CULTIST_RELEASE_TIME : mage ? .55f : CLEARING_ARCHER_RELEASE_TIME;
+            bool impact = clearingMelee && !shield ? ClearingEnemyFrame(enemy, group->boneland) >= CLEARING_MELEE_IMPACT_FRAME :
                           enemy->stateTime >= release;
             if (!enemy->attackConnected && impact) {
                 enemy->attackConnected = true;
                 if (enemy->type == ENEMY_COMMON_RANGED) {
-                    if (!mage && !cultist) {
+                    if (!mage && !cultist && enemy->templarRole != TEMPLAR_CROSSBOW) {
                         Vector2 aim = Vector2Subtract((Vector2){player.x, player.y-35}, EnemyCenter(enemy));
                         if (Vector2LengthSqr(aim) > .001f) enemy->facing = FacingToward(aim);
                     }
                     FireRangedProjectile(group, enemy, player);
                 } else if (!playerDodging && group->playerHitCooldown <= 0.0f && *playerHealth > 0 &&
                     Vector2Distance(enemy->position, player) <= ENEMY_ATTACK_RANGE+8.0f &&
+                    (!shield || Vector2DotProduct(Vector2Subtract(player, enemy->position),
+                                                 enemy->attackDirection) > 0) &&
                     MapHasClearPath(clearing, enemy->position, player)) {
-                    *playerHealth -= (int)(ENEMY_ATTACK_DAMAGE * enemy->power);
-                    if (*playerHealth < 0) *playerHealth = 0;
-                    group->playerHitCooldown = 0.65f;
+                    int damage = (int)(ENEMY_ATTACK_DAMAGE * EnemyAttackPower(group, enemy));
+                    if (shield) HurtByTemplar(group, player, playerHealth, playerDodging, damage);
+                    else {
+                        *playerHealth = damage < *playerHealth ? *playerHealth - damage : 0;
+                        group->playerHitCooldown = .65f;
+                    }
                 }
             }
-            if (enemy->stateTime >= (cultist ? CULTIST_CAST_DURATION : mage ? .95f : CLEARING_MELEE_ATTACK_DURATION)) {
+            if (enemy->stateTime >= (crossbow ? 1.18f : shield ? .85f : cultist ? CULTIST_CAST_DURATION : mage ? .95f : CLEARING_MELEE_ATTACK_DURATION)) {
                 enemy->state = ENEMY_IDLE;
                 enemy->stateTime = 0;
             }
@@ -998,14 +1242,16 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 MoveEnemy(clearing, enemy, Vector2Scale(Vector2Normalize(toPlayer), speed*dt));
             } else enemy->state = ENEMY_IDLE;
         } else if (enemy->type == ENEMY_COMMON_RANGED) {
-            bool canSeePlayer = !group->boneland || MapHasClearPath(clearing, enemy->position, player);
+            bool canSeePlayer = (!group->boneland && enemy->templarRole != TEMPLAR_CROSSBOW) ||
+                                MapHasClearPath(clearing, enemy->position, player);
             float maxDistance = group->boneland ? 350.0f : RANGED_MAX_DISTANCE;
             if (distance <= maxDistance && enemy->attackCooldown <= 0.0f && canSeePlayer) {
                 enemy->state = ENEMY_ATTACK;
                 enemy->stateTime = 0.0f;
                 enemy->attackConnected = false;
                 enemy->attackDirection = Vector2Normalize(toPlayer);
-                enemy->attackCooldown = group->boneland ? 2.15f : 1.5f / fminf(enemy->power, 1.36f);
+                enemy->attackCooldown = enemy->templarRole == TEMPLAR_CROSSBOW ? 2.05f :
+                    group->boneland ? 2.15f : 1.5f / fminf(enemy->power, 1.36f);
             } else if (distance < RANGED_MIN_DISTANCE || distance > maxDistance || !canSeePlayer) {
                 enemy->state = ENEMY_WALK;
                 enemy->walkTime += dt;
@@ -1019,6 +1265,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             enemy->state = ENEMY_ATTACK;
             enemy->stateTime = 0.0f;
             enemy->attackConnected = false;
+            enemy->attackDirection = Vector2Normalize(toPlayer);
             enemy->attackCooldown = 1.25f / fminf(enemy->power, 1.36f);
         } else if (distance > ENEMY_ATTACK_RANGE*0.85f) {
             enemy->state = ENEMY_WALK;
@@ -1054,15 +1301,17 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             Vector2 collisionPoint=next;
             if (group->cemetery || group->boneland) collisionPoint.y+=35;
             if (IsClearingBlocked(clearing, collisionPoint)) {
-                if (group->cemetery) AddEnemyImpact(group,next);
+                if (group->cemetery || group->boneland) AddEnemyImpact(group,next);
                 shot->remaining = 0.0f;
             } else {
                 shot->position = next;
                 Vector2 playerCenter = {player.x, player.y - 35.0f};
                 float radius = group->cemetery ? 30 : 24;
                 if (Vector2DistanceSqr(next, playerCenter) <= radius * radius) {
-                    if (group->cemetery) AddEnemyImpact(group,next);
-                    if (!playerDodging && group->playerHitCooldown <= 0.0f && *playerHealth > 0) {
+                    if (group->cemetery || group->boneland) AddEnemyImpact(group,next);
+                    if (clearing->templarField)
+                        HurtByTemplar(group, player, playerHealth, playerDodging, shot->damage);
+                    else if (!playerDodging && group->playerHitCooldown <= 0.0f && *playerHealth > 0) {
                         *playerHealth -= shot->damage;
                         if (*playerHealth < 0) *playerHealth = 0;
                         group->playerHitCooldown = 0.65f;
@@ -1112,7 +1361,24 @@ static void DrawGuardianCurse(Texture2D texture, const EnemyRoot *root, const Gu
         (Vector2){0}, 0, WHITE);
 }
 
+static void DrawEmberBurst(Vector2 point, float progress) {
+    float alpha = 1 - progress;
+    for (int i = 0; i < 8; i++) {
+        float angle = i * (PI / 4) + .6f;
+        float reach = (7 + 22 * progress) * (i % 2 ? .72f : 1);
+        Vector2 spark = Vector2Add(point, (Vector2){cosf(angle) * reach, sinf(angle) * reach});
+        DrawRectangleV(spark, (Vector2){4 * alpha, 4 * alpha},
+                       Fade(i % 2 ? GOLD : ORANGE, alpha));
+    }
+    DrawCircleV(point, 9 * alpha, Fade((Color){255, 224, 151, 255}, alpha * .85f));
+}
+
 static void DrawRangedProjectiles(const EnemyGroup *group) {
+    if (group->boneland) for (int i = 0; i < 16; i++) {
+        const EnemyImpact *impact = &group->impacts[i];
+        if (impact->remaining > 0)
+            DrawEmberBurst(impact->position, 1 - impact->remaining / .32f);
+    }
     if (group->cemetery) for(int i=0;i<16;i++) {
         const EnemyImpact *impact=&group->impacts[i];
         if (impact->remaining<=0) continue;
@@ -1134,10 +1400,19 @@ static void DrawRangedProjectiles(const EnemyGroup *group) {
             continue;
         }
         if (group->boneland) {
-            Vector2 trail = Vector2Subtract(shot->position, Vector2Scale(shot->direction, 23));
-            DrawLineEx(trail, shot->position, 5, Fade(ORANGE, .75f));
-            DrawCircleV(shot->position, 10, Fade(RED, .45f));
-            DrawCircleV(shot->position, 5, GOLD);
+            float age = 1.5f - shot->remaining;
+            Vector2 normal = {-shot->direction.y, shot->direction.x};
+            DrawCircleV(shot->position, 14 + 2 * sinf(age * 19), Fade(MAROON, .72f));
+            for (int i = 5; i > 0; i--) {
+                float phase = age * 34 + i * 2;
+                Vector2 tail = Vector2Subtract(shot->position, Vector2Scale(shot->direction, (float)i * 5));
+                tail = Vector2Add(tail, Vector2Scale(normal, sinf(phase) * i));
+                float size = 8 - i + sinf(phase);
+                DrawRectangleV(Vector2Subtract(tail, (Vector2){size / 2, size / 2}),
+                               (Vector2){size,size}, Fade(i < 3 ? GOLD : ORANGE, 1 - i * .12f));
+            }
+            DrawCircleV(shot->position, 8, ORANGE);
+            DrawCircleV(shot->position, 5 + 1.4f * cosf(age * 21), (Color){255, 234, 171, 255});
             continue;
         }
         Vector2 tail = Vector2Subtract(shot->position, Vector2Scale(shot->direction, 16.0f));
@@ -1293,9 +1568,16 @@ static void DrawBonelandEnemy(const EnemyGroup *group, const Enemy *enemy) {
         pivot, (enemy->facing == 2 ? -1 : 1) * 75 * fall, tint);
     if (cultist && attacking && !enemy->attackConnected) {
         Vector2 origin = EnemyCenter(enemy);
-        Vector2 end = Vector2Add(origin, Vector2Scale(enemy->attackDirection, 120));
-        DrawLineEx(origin, end, 2, Fade(ORANGE, .56f));
-        DrawCircleV(origin, 6 + 5 * enemy->stateTime / CULTIST_RELEASE_TIME, GOLD);
+        float charge = Clamp(enemy->stateTime / CULTIST_RELEASE_TIME, 0, 1);
+        origin = Vector2Add(origin, Vector2Scale(enemy->attackDirection, 12));
+        DrawCircleV(origin, 8 + 7 * charge, Fade(MAROON, .32f + .32f * charge));
+        DrawCircleV(origin, 3 + 6 * charge, GOLD);
+        for (int i = 0; i < 5; i++) {
+            float angle = i * 2 * PI / 5 + charge * 8;
+            Vector2 spark = Vector2Add(origin, (Vector2){cosf(angle) * (19 - 9 * charge),
+                                                        sinf(angle) * (19 - 9 * charge)});
+            DrawRectangleV(spark, (Vector2){3, 3}, Fade(ORANGE, charge));
+        }
     }
 }
 
@@ -1332,6 +1614,149 @@ static void DrawClearingEnemy(const EnemyGroup *group, const Enemy *enemy) {
                    (enemy->facing == 2 ? -1 : 1) * 75.0f * fall, tint);
 }
 
+static const float templarSizes[] = {
+    [TEMPLAR_SHIELD] = 101, [TEMPLAR_EXECUTIONER] = 120, [TEMPLAR_CROSSBOW] = 95,
+    [TEMPLAR_STANDARD] = 135, [TEMPLAR_MARSHAL] = 163,
+};
+static const int templarRows[] = {0, 3, 1, 2};
+
+static void DrawTemplarDust(Vector2 center, Vector2 direction, float progress, float scale) {
+    if (progress < 0 || progress >= 1) return;
+    Vector2 normal = {-direction.y, direction.x};
+    for (int i = 0; i < 9; i++) {
+        float side = (float)(i - 4) / 4;
+        Vector2 p = Vector2Add(center, Vector2Scale(normal, side * scale * (11 + 29 * progress)));
+        p = Vector2Subtract(p, Vector2Scale(direction, scale * (5 + (20 + 4 * (i % 3)) * progress)));
+        p.y -= sinf(PI * progress) * (i % 3) * 8 * scale;
+        float radius = (3.0f + i % 3 + 4 * progress) * scale;
+        DrawEllipse((int)p.x, (int)p.y, radius * 1.45f, radius,
+                    Fade(i % 2 ? (Color){215, 166, 119, 255} : (Color){137, 84, 66, 255},
+                         .52f * (1 - progress)));
+    }
+}
+
+static void DrawTemplarBlood(const EnemyGroup *group) {
+    const EnemyImpact *blood = &group->templarBlood;
+    if (blood->remaining <= 0) return;
+    float time = 1 - blood->remaining / .36f, alpha = 1 - time;
+    for (int i = 0; i < 13; i++) {
+        float a = i * 2.39996f;
+        float reach = (8 + 35 * time) * (.58f + .15f * (i % 4));
+        Vector2 p = {blood->position.x + cosf(a) * reach,
+                     blood->position.y + sinf(a) * reach * .65f - 12 * time + 34 * time * time};
+        DrawRectangleV(p, (Vector2){(i % 3 + 3) * alpha, (i % 3 + 2) * alpha},
+                       Fade(i % 3 == 0 ? (Color){232, 42, 52, 255} : (Color){138, 9, 35, 255}, alpha));
+    }
+}
+
+static void DrawTemplarAttackPose(const EnemyGroup *group, const Enemy *enemy, Vector2 feet,
+                                 int facing, int frame, int skill, float tilt, Color tint) {
+    Texture2D texture = group->templarAttack[enemy->templarRole];
+    bool marshal = enemy->templarRole == TEMPLAR_MARSHAL;
+    float tileW = texture.width / 4.0f, tileH = texture.height / 4.0f;
+    float size = templarSizes[enemy->templarRole] * (marshal ? 1.10f : enemy->templarRole == TEMPLAR_EXECUTIONER ? 1.08f : 1);
+    int row = marshal ? skill : templarRows[facing];
+    Rectangle source = {frame * tileW, row * tileH, marshal && facing == 2 ? -tileW : tileW, tileH};
+    DrawTexturePro(texture, source, (Rectangle){feet.x, feet.y, size, size},
+                   (Vector2){size * .5f, size * .93f}, tilt, tint);
+}
+
+static void DrawTemplarSprite(const EnemyGroup *group, const Enemy *enemy,
+                              Vector2 position, int facing, int frame, float tilt, Color tint) {
+    // A parte mais larga da arma ou bandeira não coincide com a posição dos pés.
+    static const float anchors[][4] = {
+        [TEMPLAR_SHIELD] = {64, 64, 57, 65},
+        [TEMPLAR_EXECUTIONER] = {66, 63, 73, 56},
+        [TEMPLAR_CROSSBOW] = {63, 64, 61, 69},
+        [TEMPLAR_STANDARD] = {63, 63, 62, 66},
+        [TEMPLAR_MARSHAL] = {66, 64, 59, 80},
+    };
+    float size = templarSizes[enemy->templarRole];
+    DrawTexturePro(group->templarWalk[enemy->templarRole],
+        (Rectangle){frame * 128, templarRows[facing] * 128, 128, 128},
+        (Rectangle){position.x, position.y, size, size},
+        (Vector2){anchors[enemy->templarRole][facing] * size / 128, size * .96f}, tilt, tint);
+}
+
+static void DrawTemplar(const EnemyGroup *group, const Enemy *enemy) {
+    TemplarRole role = enemy->templarRole;
+    if (enemy->state == ENEMY_SPAWNING) {
+        if (enemy->stateTime < 0) return;
+        if (role == TEMPLAR_STANDARD && enemy->stateTime >= templarArrivalTime) {
+            float plant = (enemy->stateTime - templarArrivalTime) / templarPlantTime;
+            int frame = plant < .38f ? 0 : plant < .68f ? 1 : 2;
+            DrawTemplarDust(enemy->position, (Vector2){0,1}, (plant - .38f) * 1.6f, 1);
+            DrawTemplarAttackPose(group, enemy, enemy->position, 0, frame, 0, 0, WHITE);
+            return;
+        }
+        float t = Clamp(enemy->stateTime / templarArrivalTime, 0, 1);
+        float descent = role == TEMPLAR_MARSHAL ? .76f : .52f;
+        Vector2 landing = {835 + Clamp((enemy->position.x - 835) * .26f, -83, 83), 284};
+        Vector2 origin = {landing.x, 70};
+        Vector2 position = t < descent ? Vector2Lerp(origin, landing, t / descent) :
+            Vector2Lerp(landing, enemy->position, (t - descent) / (1 - descent));
+        int facing = t < descent ? 0 : FacingToward(Vector2Subtract(enemy->position, landing));
+        int frame = (int)(enemy->stateTime * 10) % 6;
+        if (role == TEMPLAR_MARSHAL) {
+            Enemy escort = {.templarRole = TEMPLAR_SHIELD};
+            float exit = Clamp((t - .53f) / .47f, 0, 1);
+            for (int side = -1; side <= 1; side += 2) {
+                Vector2 feet = {position.x + side * (57 + 130 * exit), position.y + 22 + 42 * exit};
+                DrawTemplarSprite(group, &escort, feet, exit > 0 ? (side < 0 ? 2 : 3) : 0,
+                                 frame, 0, Fade(WHITE, 1 - exit));
+            }
+            facing = 0;
+            if (t > .83f) {
+                frame = 0;
+                float trail = Clamp((t - .83f) / .17f, 0, 1);
+                DrawLineEx((Vector2){position.x - 44, position.y - 4},
+                    (Vector2){position.x - 44 + 29 * trail, position.y - 7}, 3, Fade(ORANGE, 1 - trail));
+            }
+        }
+        DrawTemplarSprite(group, enemy, position, facing, frame, 0, WHITE);
+        return;
+    }
+    float fall = enemy->state == ENEMY_DIE ? Clamp(enemy->stateTime / 1.2f, 0, 1) : 0;
+    int frame = enemy->state == ENEMY_WALK ? (int)(enemy->walkTime * 9) % 6 : 0;
+    float tilt = 72 * fall;
+    Color tint = enemy->state == ENEMY_HURT ? (Color){255, 173, 173, 255} : Fade(WHITE, 1 - fall);
+    if (enemy->guardianPhase == GUARDIAN_PHASE_TRANSITION) {
+        float pulse = .55f + .25f * sinf(17 * enemy->stateTime);
+        DrawCircleV(enemy->position, 47, Fade(MAROON, pulse));
+        tint = (Color){255, 174, 226, 255};
+    }
+    if (role == TEMPLAR_STANDARD && enemy->state != ENEMY_DIE) {
+        int sway = (int)(enemy->stateTime * 3.5f) % 2;
+        DrawTemplarAttackPose(group, enemy, enemy->position, enemy->facing, 2 + sway, 0, 0, tint);
+        return;
+    }
+    if (enemy->state == ENEMY_ATTACK) {
+        float t = enemy->stateTime;
+        bool marshal = role == TEMPLAR_MARSHAL;
+        int skill = marshal ? enemy->bossAttack : 0;
+        bool charge = marshal && skill == MARSHAL_CHARGE;
+        float impact = marshal ? marshalSkills[skill].impact : role == TEMPLAR_EXECUTIONER ?
+            executionerImpact : role == TEMPLAR_CROSSBOW ? crossbowRelease : shieldImpact;
+        float activeEnd = marshal ? marshalSkills[skill].activeEnd : impact + .17f;
+        int pose = t < impact * .46f ? 0 : t < impact ? 1 : t < activeEnd ? 2 : 3;
+        Vector2 feet = enemy->position;
+        float recoil = t >= impact && t < activeEnd ? sinf(PI * (t - impact) / (activeEnd - impact)) : 0;
+        if (role == TEMPLAR_CROSSBOW) {
+            feet = Vector2Subtract(feet, Vector2Scale(enemy->attackDirection, recoil * 8));
+            if (recoil > 0)
+                DrawEmberBurst(Vector2Add(EnemyCenter(enemy), Vector2Scale(enemy->attackDirection, 25)),
+                               (t - impact) / (activeEnd - impact));
+        } else {
+            float dustTime = charge ? (t - impact) / .70f : (t - impact + .07f) / .46f;
+            DrawTemplarDust(feet, enemy->attackDirection, dustTime, marshal ? 1.55f : .9f);
+        }
+        float lean = enemy->facing == 2 ? -recoil : recoil;
+        DrawTemplarAttackPose(group, enemy, feet, enemy->facing, pose, skill, 4 * lean, tint);
+        return;
+    }
+    DrawTemplarSprite(group, enemy, enemy->position, enemy->facing, frame, tilt, tint);
+}
+
 static void DrawSealMarkers(const EnemyGroup *group) {
     for (int i=0; i<ENEMY_COUNT; i++) {
         const Enemy *enemy = &group->list[i];
@@ -1342,6 +1767,69 @@ static void DrawSealMarkers(const EnemyGroup *group) {
         DrawTexturePro(group->sealMarker, (Rectangle){128,36,1056,1064},
             (Rectangle){enemy->position.x-size*.5f, enemy->position.y-height-size*.5f, size, size},
             (Vector2){0},0,WHITE);
+    }
+}
+
+static void DrawTemplarWarnings(const EnemyGroup *group) {
+    for (int i = 0; i < ENEMY_COUNT; i++) {
+        const Enemy *enemy = &group->list[i];
+        if (enemy->templarRole == TEMPLAR_NONE || !EnemyCanBeHit(enemy)) continue;
+        if (enemy->templarRole == TEMPLAR_STANDARD) {
+            DrawCircleV(enemy->position, 220, Fade(GOLD, .08f));
+            DrawCircleLines((int)enemy->position.x, (int)enemy->position.y, 220, Fade(GOLD, .5f));
+        } else if (enemy->templarRole == TEMPLAR_CROSSBOW &&
+                   enemy->state == ENEMY_ATTACK && !enemy->attackConnected) {
+            Vector2 origin = EnemyCenter(enemy);
+            Vector2 end = Vector2Add(origin, Vector2Scale(enemy->attackDirection, 300));
+            DrawLineEx(origin, end, 3, Fade(GOLD, .65f));
+        } else if (enemy->state == ENEMY_ATTACK) {
+            bool shield = enemy->templarRole == TEMPLAR_SHIELD;
+            bool marshal = enemy->templarRole == TEMPLAR_MARSHAL;
+            int skill = marshal ? enemy->bossAttack : 0;
+            bool charge = marshal && skill == MARSHAL_CHARGE;
+            bool rupture = marshal && skill == MARSHAL_RUPTURE;
+            float t = enemy->stateTime;
+            float heading = atan2f(enemy->attackDirection.y, enemy->attackDirection.x) * RAD2DEG;
+            float windup = shield ? shieldImpact : marshal ? marshalSkills[skill].impact : executionerImpact;
+            if (enemy->templarRole == TEMPLAR_CROSSBOW) continue;
+            if (t < windup && (charge || enemy->templarRole == TEMPLAR_EXECUTIONER)) {
+                Vector2 end = Vector2Add(enemy->position, Vector2Scale(enemy->attackDirection, charge ? 280 : 120));
+                DrawLineEx(enemy->position, end, 4, Fade(ORANGE, .68f));
+            }
+            if (charge) {
+                if (t >= windup && t < marshalSkills[skill].activeEnd) {
+                    Vector2 tail = Vector2Subtract(enemy->position, Vector2Scale(enemy->attackDirection, 130));
+                    Vector2 normal = {-enemy->attackDirection.y, enemy->attackDirection.x};
+                    for (int side = -1; side <= 1; side += 2) {
+                        Vector2 offset = Vector2Scale(normal, side * (22 + 7 * sinf(t * 35)));
+                        DrawLineEx(Vector2Add(tail, offset), Vector2Add(enemy->position, offset),
+                                   3, Fade(RAYWHITE, .46f));
+                    }
+                }
+                continue;
+            }
+            float reach = shield ? ENEMY_ATTACK_RANGE + 8 : marshal ? marshalSkills[skill].reach : 106;
+            float spread = shield ? 90 : marshal ? acosf(marshalSkills[skill].arcDot) * RAD2DEG : 99;
+            if (t < windup)
+                DrawCircleSector(enemy->position, reach, heading - spread, heading + spread, 24,
+                                 Fade(ORANGE, .12f + .22f * t / windup));
+            else if (t < windup + (rupture ? .36f : .20f)) {
+                float age = (t - windup) / (rupture ? .36f : .20f);
+                float radius = reach * (.54f + .46f * age);
+                float sweep = heading - spread + 2 * spread * age;
+                bool returning = marshal && skill == MARSHAL_RETURN;
+                if (returning) sweep = heading + spread - 2 * spread * age;
+                float start = rupture ? heading - spread : fmaxf(heading - spread, sweep - spread * .64f);
+                float end = rupture ? heading + spread : fminf(heading + spread, sweep + spread * .64f);
+                DrawRing(enemy->position, radius * .72f, radius, start, end, 24, Fade(ORANGE, .68f * (1 - age)));
+                DrawRing(enemy->position, radius - 4, radius, start, end, 24, Fade(RAYWHITE, .86f * (1 - age)));
+                if (rupture) {
+                    Vector2 center = Vector2Add(enemy->position, Vector2Scale(enemy->attackDirection, 72));
+                    DrawTemplarDust(center, enemy->attackDirection, age, 2.3f);
+                    DrawEmberBurst(center, age);
+                }
+            }
+        }
     }
 }
 
@@ -1381,6 +1869,9 @@ static void DrawBoneLord(const EnemyGroup *group, const Enemy *boss) {
     static const int pounceGround[] = {249, 502, 746, 1080};
     static const int clawRows[] = {0, 282, 544, 814, 1122};
     static const int clawGround[] = {249, 507, 785, 1088};
+    static const int altRows[] = {0, 279, 553, 825, 1122};
+    static const int dashGround[] = {270, 525, 797, 1108};
+    static const int biteGround[] = {246, 507, 785, 1092};
 
     int row = rowForFacing[boss->facing];
     Texture2D texture = group->boneLordWalk;
@@ -1397,7 +1888,18 @@ static void DrawBoneLord(const EnemyGroup *group, const Enemy *boss) {
         float duration = boneAttacks[attack].duration;
         frame = t < windup ? (t < windup * .43f ? 0 : 1)
             : t < impactEnd ? 2 : t < (impactEnd + duration) * .5f ? 3 : 4;
-        if (attack == BONE_CLAW) {
+        bool enraged = GuardianEnraged(boss);
+        if (attack == BONE_DASH || (attack == BONE_CLAW && enraged)) {
+            bool dash = attack == BONE_DASH;
+            texture = dash ? group->boneLordDash : group->boneLordBite;
+            left = frame * texture.width / 5;
+            right = (frame + 1) * texture.width / 5;
+            top = altRows[row];
+            bottom = altRows[row + 1];
+            ground = dash ? dashGround[row] : biteGround[row];
+            if (dash && frame == 2)
+                lift = (enraged ? 39 : 24) * sinf(PI * (t - windup) / (impactEnd - windup));
+        } else if (attack == BONE_CLAW) {
             texture = group->boneLordClaw;
             left = frame * texture.width / 5;
             right = (frame + 1) * texture.width / 5;
@@ -1423,9 +1925,21 @@ static void DrawBoneLord(const EnemyGroup *group, const Enemy *boss) {
     float height = (bottom - top) * heightScale;
     Color tint = Fade(collapse > 0 ? (Color){211, 171, 163, 255} : WHITE, reveal);
     DrawEllipse((int)boss->position.x, (int)boss->position.y - 9, 54, 19, Fade(BLACK, .38f * reveal));
-    if (boss->guardianPhase == GUARDIAN_PHASE_TRANSITION)
-        DrawCircleLines((int)boss->position.x, (int)boss->position.y, 52 + 55 * boss->stateTime,
-                        Fade(ORANGE, 1 - boss->stateTime));
+    if (boss->guardianPhase == GUARDIAN_PHASE_TRANSITION) {
+        float flare = Clamp(boss->stateTime / GUARDIAN_PHASE_TRANSITION_TIME, 0, 1);
+        DrawRing(boss->position, 45 + 72 * flare, 50 + 72 * flare, 0, 360, 36,
+                 Fade(ORANGE, 1 - flare));
+        DrawEmberBurst(boss->position, flare);
+        tint = ColorLerp((Color){255, 165, 120, 255}, WHITE, flare);
+    } else if (GuardianEnraged(boss) && boss->state == ENEMY_ATTACK) {
+        int attack = boss->bossAttack;
+        float impact = boss->stateTime - (attack == BONE_DASH ? boneAttacks[attack].impactEnd :
+                                                                   boneAttacks[attack].windup);
+        if (impact >= 0 && impact < .29f) {
+            Vector2 contact = Vector2Add(boss->position, Vector2Scale(boss->attackDirection, 54));
+            DrawEmberBurst(contact, impact / .29f);
+        }
+    }
     DrawTexturePro(texture, (Rectangle){left, top, right - left, bottom - top},
         (Rectangle){boss->position.x, boss->position.y + 28 * (1 - reveal) - lift, width, height},
         (Vector2){width * .5f, (ground - top) * heightScale},
@@ -1448,6 +1962,7 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
         return;
     }
     if (!foreground) {
+        DrawTemplarWarnings(group);
         if (group->boneland) DrawBoneLordWarning(&group->list[0]);
     }
     if (!foreground) for (int i=0; i<ENEMY_ROOT_COUNT; i++) {
@@ -1480,6 +1995,10 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
         if (enemy->state == ENEMY_GONE) continue;
         if (group->boneland && enemy->type == ENEMY_BOSS) {
             DrawBoneLord(group, enemy);
+            continue;
+        }
+        if (enemy->templarRole != TEMPLAR_NONE) {
+            DrawTemplar(group, enemy);
             continue;
         }
         if (enemy->state == ENEMY_SPAWNING) {
@@ -1562,6 +2081,7 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
     if (foreground) {
         DrawRangedProjectiles(group);
         DrawSealMarkers(group);
+        DrawTemplarBlood(group);
     }
 }
 

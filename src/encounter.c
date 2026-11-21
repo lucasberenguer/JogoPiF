@@ -27,23 +27,31 @@ static void StartStage(Encounter *e, EnemyGroup *enemies, const Clearing *cleari
         e->phase = ENCOUNTER_CLEAR;
     } else {
         e->phase = ENCOUNTER_FIGHT;
-        const char *areaTitle = clearing->boneland ? "Terra dos Ossos" : clearing->invertedChapel ? "Capela Invertida"
+        const char *areaTitle = clearing->templarField ? "Campo de Batalha dos Templários"
+            : clearing->boneland ? "Terra dos Ossos" : clearing->invertedChapel ? "Capela Invertida"
             : (clearing->basement ? "Porão da Capela"
             : (clearing->chapel ? "Capela do Anjo"
             : (clearing->village ? "Vila Lascada"
             : (clearing->cemetery ? "Cemitério das Raízes" : "Clareira do Selo"))));
-        const char *bossTitle = clearing->boneland ? boneLordName : (clearing->village || clearing->chapel || clearing->basement || clearing->invertedChapel) ? NULL
+        const char *bossTitle = clearing->templarField ? "Marechal Carmesim"
+            : clearing->boneland ? boneLordName : (clearing->village || clearing->chapel || clearing->basement || clearing->invertedChapel) ? NULL
             : (clearing->cemetery ? "Coveiro das Raízes" : "Guardião da Clareira");
         int wave = e->progress.stage;
         if (clearing->village || clearing->chapel || clearing->basement || clearing->invertedChapel)
             wave = 0;
-        else if (clearing->boneland && wave == CLEARING_BOSS_STAGE)
-            wave = BONELAND_WAVES + 1;
+        else if ((clearing->boneland || clearing->templarField) && wave == CLEARING_BOSS_STAGE)
+            wave = (clearing->boneland ? BONELAND_WAVES : TEMPLAR_FIELD_WAVES) + 1;
         BeginStagePresentation(&e->presentation, wave, areaTitle,
             e->progress.stage==CLEARING_BOSS_STAGE ? bossTitle : NULL);
         if (clearing->boneland) {
             e->presentation.waveTotal = BONELAND_WAVES + 1;
             e->presentation.portraitCenterX = .74f;
+        }
+        if (clearing->templarField) {
+            e->presentation.waveTotal = TEMPLAR_FIELD_WAVES + 1;
+            e->presentation.areaSubtitle = "A última defesa do palácio";
+            if (wave <= TEMPLAR_FIELD_WAVES)
+                e->presentation.announcement = wave == 1 ? "A LINHA DE FRENTE" : "O ÚLTIMO ESTANDARTE";
         }
         if (clearing->cemetery || clearing->village) e->presentation.portraitCenterX=.73f;
         e->guardianIntroPending=e->progress.map == 0 &&
@@ -181,6 +189,12 @@ bool CanEnterInvertedChapel(const Encounter *e, const Clearing *clearing,
            CheckCollisionPointRec(player, clearing->exit);
 }
 
+bool CanEnterTemplarField(const Encounter *e, const Clearing *clearing, Vector2 player) {
+    return clearing->boneland && e->phase == ENCOUNTER_CLEAR &&
+           e->progress.stage == CLEARING_COMPLETE_STAGE && !EncounterPaused(e) &&
+           CheckCollisionPointRec(player, clearing->exit);
+}
+
 float EncounterDamage(const Encounter *e) {
     int weapon = e->progress.weapon;
     return e->progress.damage * (1 + .2f*e->progress.weaponLevel[weapon]) *
@@ -261,7 +275,8 @@ bool ChooseEncounterReward(Encounter *e, EnemyGroup *enemies, const Clearing *cl
                            Vector2 player, int *health, int choice) {
     if (e->phase!=ENCOUNTER_REWARD || choice<0 || choice>=e->rewardCount) return false;
     ApplyReward(e,e->rewards[choice],health);
-    bool lastWave = clearing->boneland && e->progress.stage == BONELAND_WAVES;
+    bool lastWave = (clearing->boneland && e->progress.stage == BONELAND_WAVES) ||
+                    (clearing->templarField && e->progress.stage == TEMPLAR_FIELD_WAVES);
     e->progress.stage = lastWave ? CLEARING_BOSS_STAGE : e->progress.stage + 1;
     e->progress.health=*health;
     if (!e->practice) SaveClearingCheckpoint(&e->progress);
@@ -455,15 +470,18 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
                 e->progress.health=*health;
                 e->phase=ENCOUNTER_CLEAR;
                 e->notice[0]=0;
-                const char *sub = clearing->boneland ? "O Rasga-Ossos foi selado" : e->progress.map == 2
+                const char *sub = clearing->templarField ? "A escadaria está livre"
+                    : clearing->boneland ? "Siga pela passagem ao norte" : e->progress.map == 2
                     ? "Ultimo registro: \"Sobrevivi, mas falhei em salva-los...\""
                     : (e->progress.map == 1 ? "A saida a direita leva a Vila Lascada"
                                             : "O altar agora leva ao cemiterio");
                 BeginStagePresentation(&e->presentation, 0, sub, NULL);
-                e->presentation.announcement = clearing->boneland ? "TERRA DOS OSSOS LIMPA" : e->progress.map == 2 ? "VILA LASCADA LIMPA"
+                e->presentation.announcement = clearing->templarField ? "MARECHAL CARMESIM DERROTADO"
+                    : clearing->boneland ? "TERRA DOS OSSOS LIMPA" : e->progress.map == 2 ? "VILA LASCADA LIMPA"
                     : (e->progress.map == 1 ? "CEMITERIO LIMPO" : "CLAREIRA LIMPA");
                 e->presentation.duration=e->presentation.remaining=2.5f;
-                if (!clearing->boneland) QueueAreaUnlock(&e->presentation, e->progress.map == 2 ? "Capela do Anjo"
+                if (clearing->boneland) QueueAreaUnlock(&e->presentation, "Campo de Batalha dos Templários");
+                else if (!clearing->templarField) QueueAreaUnlock(&e->presentation, e->progress.map == 2 ? "Capela do Anjo"
                     : (e->progress.map == 1 ? "Vila Lascada" : "Cemitério das Raízes"));
                 if (!e->practice) SaveClearingCheckpoint(&e->progress);
             } else {
@@ -531,10 +549,11 @@ static const char *RewardText(const Encounter *e, Reward reward) {
 
 void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
     if (e->presentation.remaining>0) {
-        Texture2D bossSprite = e->progress.map == BONELAND_MAP ? enemies->boneLordWalk
+        Texture2D bossSprite = e->progress.map == BONELAND_MAP ? enemies->boneLordPortrait
             : e->progress.map == 2 ? enemies->villageBossWalk
             : (e->progress.map == 1 ? enemies->cemeteryPortrait : enemies->bossPortrait);
-        bool animatedPortrait = e->progress.map == 2 || e->progress.map == BONELAND_MAP;
+        if (e->progress.map == TEMPLAR_FIELD_MAP) bossSprite = enemies->templarWalk[TEMPLAR_MARSHAL];
+        bool animatedPortrait = e->progress.map == 2 || e->progress.map == TEMPLAR_FIELD_MAP;
         int cols = animatedPortrait ? 6 : 1;
         int rows = animatedPortrait ? 4 : 1;
         DrawStagePresentation(&e->presentation, bossSprite, cols, rows);
@@ -551,10 +570,16 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         : (e->progress.map == 1 ? "Cemitério limpo - siga pela saída à direita"
                                 : "Clareira limpa - altar liberado");
     const char *bossLabel = e->progress.map == BONELAND_MAP ? boneLordName
+        : e->progress.map == TEMPLAR_FIELD_MAP ? "Marechal Carmesim"
         : e->progress.map == 2 ? "Líder da Vila"
         : (e->progress.map == 1 ? "Coveiro das Raízes" : "Guardião da Clareira");
-    if (e->progress.map == BONELAND_MAP) {
-        const char *status = e->phase == ENCOUNTER_CLEAR ? "Terra dos Ossos concluída"
+    if (e->progress.map == TEMPLAR_FIELD_MAP) {
+        const char *status = e->phase == ENCOUNTER_CLEAR ? "Marechal derrotado"
+            : e->progress.stage == CLEARING_BOSS_STAGE ? "Encontro 3/3 - Marechal Carmesim"
+            : TextFormat("Encontro %d/3 | Restantes: %d", e->progress.stage, EnemiesRemaining(enemies));
+        DrawGameText(status, 24, statusY, 20, GOLD);
+    } else if (e->progress.map == BONELAND_MAP) {
+        const char *status = e->phase == ENCOUNTER_CLEAR ? "Terra dos Ossos limpa - siga ao norte"
             : e->progress.stage == CLEARING_BOSS_STAGE ? TextFormat("Onda %d/%d - %s",
               BONELAND_WAVES + 1, BONELAND_WAVES + 1, boneLordName)
             : TextFormat("Terra dos Ossos - onda %d/%d | Restantes: %d",

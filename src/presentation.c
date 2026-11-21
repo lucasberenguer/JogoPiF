@@ -92,7 +92,8 @@ void DrawStagePresentation(const StagePresentation *p,Texture2D sprite,int colum
             float cw=(float)sprite.width/columns,ch=(float)sprite.height/rows;
             int frame=(int)(elapsed*6)%columns;
             float zoom=1+.025f*sinf(elapsed*1.5f);
-            float drawHeight=size*zoom;
+            float widthLimit = w * (1 - p->portraitCenterX - .025f) * 2;
+            float drawHeight=fminf(size*zoom, widthLimit*ch/cw);
             float drawWidth=drawHeight*cw/ch;
             DrawTexturePro(sprite,(Rectangle){frame*cw,0,cw,ch},
                 (Rectangle){w*p->portraitCenterX-drawWidth/2-offset,h*.50f-drawHeight/2,drawWidth,drawHeight},

@@ -11,6 +11,7 @@ typedef enum GuardianAttack {
     GUARDIAN_ROOTS, GUARDIAN_ROOT_WAVE, GUARDIAN_CURSE, GUARDIAN_ATTACK_COUNT
 } GuardianAttack;
 enum { COVEIRO_ROOTS, COVEIRO_SHOVEL, COVEIRO_CHARGE, COVEIRO_ATTACK_COUNT };
+enum { MARSHAL_SLASH, MARSHAL_CHARGE, MARSHAL_RETURN, MARSHAL_RUPTURE };
 enum { BONE_CHARGE, BONE_CLAW, BONE_DASH, BONE_ATTACK_COUNT };
 typedef enum GuardianPhase {
     GUARDIAN_PHASE_ONE, GUARDIAN_PHASE_TRANSITION, GUARDIAN_PHASE_TWO
@@ -34,6 +35,10 @@ typedef enum EnemyType {
     ENEMY_COMMON_MELEE, ENEMY_COMMON_RANGED, ENEMY_SPECIAL,
     ENEMY_ELITE, ENEMY_BOSS
 } EnemyType;
+typedef enum TemplarRole {
+    TEMPLAR_NONE, TEMPLAR_SHIELD, TEMPLAR_EXECUTIONER, TEMPLAR_CROSSBOW,
+    TEMPLAR_STANDARD, TEMPLAR_MARSHAL
+} TemplarRole;
 typedef enum EnemyState {
     ENEMY_IDLE, ENEMY_WALK, ENEMY_ATTACK, ENEMY_HURT, ENEMY_DIE, ENEMY_GONE,
     ENEMY_SPAWNING, ENEMY_FALLEN
@@ -46,6 +51,7 @@ typedef struct Enemy {
     float power;
     Vector2 attackDirection;
     EnemyType type;
+    TemplarRole templarRole;
     EnemyState state;
     int facing;
     int lastKatanaSwing;
@@ -75,12 +81,13 @@ typedef struct EnemyGroup {
     Texture2D backSprites;
     Texture2D frontSprites;
     Texture2D clearingMelee[3], clearingArcher[3], clearingSpecial[3];
+    Texture2D templarWalk[TEMPLAR_MARSHAL + 1], templarAttack[TEMPLAR_MARSHAL + 1];
     Texture2D bonelandGhoul, bonelandCultist;
-    Texture2D boneLordWalk, boneLordPounce, boneLordClaw;
+    Texture2D boneLordWalk, boneLordPounce, boneLordClaw, boneLordDash, boneLordBite;
     Texture2D sealMarker;
     Texture2D bossSprites, bossWalk, bossAttack, roots, rootWave, curse, guardianMelee;
     Texture2D guardianSpawn, guardianDefeat;
-    Texture2D bossPortrait, cemeteryPortrait;
+    Texture2D bossPortrait, cemeteryPortrait, boneLordPortrait;
     Enemy list[ENEMY_COUNT];
     EnemyProjectile projectiles[ENEMY_PROJECTILE_COUNT];
     EnemyRoot rootAttacks[ENEMY_ROOT_COUNT];
@@ -96,7 +103,7 @@ typedef struct EnemyGroup {
     Texture2D villageBossWalk, villageBossAttack, villageBossCharge, villageVillager;
     Texture2D skeleton,mage,boss[3],effects[3];
     Texture2D skeletonFront,skeletonBack,coveiroWalk,greenFire;
-    EnemyImpact impacts[16];
+    EnemyImpact impacts[16], templarBlood;
     CemeteryProjectile cemeteryProjectiles[CEMETERY_PROJECTILE_COUNT];
 } EnemyGroup;
 
@@ -114,7 +121,9 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                    Vector2 player, float deltaTime, bool playerDodging,
                    int *playerHealth, int playerMaxHealth);
 void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground);
+void DrawHumanBoss(const EnemyGroup *group, const Enemy *enemy, bool foreground);
 void DamageEnemy(Enemy *enemy, int damage);
+void DamageEnemyFrom(Enemy *enemy, int damage, Vector2 source);
 void KnockbackEnemy(Enemy *enemy, const Clearing *clearing,
                     Vector2 source, float distance);
 void MoveEnemy(const Clearing *clearing, Enemy *enemy, Vector2 delta);

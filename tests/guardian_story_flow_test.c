@@ -16,6 +16,7 @@ static void IgnoreToggle(void);
 static void IgnoreFps(int fps);
 static bool TestClose(void);
 static bool TestKey(int key);
+static bool TestKeyDown(int key);
 static float TestDelta(void);
 static MenuAction TestMenu(Menu *menu);
 static bool TestEncounter(Encounter *e,EnemyGroup *enemies,const Clearing *map,Vector2 p,int *health);
@@ -30,6 +31,7 @@ static bool TestPassage(Encounter *e,EnemyGroup *enemies,Clearing *map,Vector2 *
 #define SetTargetFPS IgnoreFps
 #define WindowShouldClose TestClose
 #define IsKeyPressed TestKey
+#define IsKeyDown TestKeyDown
 #define GetFrameTime TestDelta
 #define UpdateMenu TestMenu
 #define UpdateEncounter TestEncounter
@@ -45,6 +47,7 @@ static bool TestPassage(Encounter *e,EnemyGroup *enemies,Clearing *map,Vector2 *
 #undef SetTargetFPS
 #undef WindowShouldClose
 #undef IsKeyPressed
+#undef IsKeyDown
 #undef GetFrameTime
 #undef UpdateMenu
 #undef UpdateEncounter
@@ -55,7 +58,7 @@ static bool TestPassage(Encounter *e,EnemyGroup *enemies,Clearing *map,Vector2 *
 
 static void TestWindow(int w,int h,const char *title) {
     SetConfigFlags(FLAG_WINDOW_HIDDEN);
-    InitWindow(w,h,title);
+    InitWindow(mode >= 2 ? 640 : w, mode >= 2 ? 360 : h, title);
 }
 static void IgnoreResize(int w,int h) {(void)w;(void)h;}
 static void IgnoreToggle(void) {}
@@ -63,16 +66,44 @@ static void IgnoreFps(int fps) {(void)fps;}
 static float TestDelta(void) {return .05f;}
 static bool TestClose(void) {return ++frames>1200 || transported>0;}
 static bool TestKey(int key) {return key==KEY_E && liberated>0;}
+static bool TestKeyDown(int key) {
+    return mode >= 2 && key == KEY_W &&
+           (!active || mode == 3 || active->progress.map == BONELAND_MAP);
+}
 static MenuAction TestMenu(Menu *menu) {
     activeAudio=&menu->audio;
     RunProgress progress=NewRunProgress(2);
     progress.stage=CLEARING_BOSS_STAGE;
     progress.guardianIntroSeen=true;
+    if (mode >= 2) {
+        progress.map = mode == 2 ? BONELAND_MAP : TEMPLAR_FIELD_MAP;
+        progress.stage = CLEARING_COMPLETE_STAGE;
+        progress.guardianAftermath = GUARDIAN_PASSAGE_COMPLETE;
+        progress.health = 83;
+        progress.weaponLevel[2] = 2;
+    }
     assert(SaveClearingCheckpoint(&progress));
     return MENU_CONTINUE;
 }
 static bool TestEncounter(Encounter *e,EnemyGroup *enemies,const Clearing *map,Vector2 p,int *health) {
     active=e;
+    if (mode >= 2) {
+        if (map->templarField && (mode == 2 || p.y < map->exit.height - 15)) {
+            RunProgress saved = {0};
+            assert(*health == 83 && e->progress.weaponLevel[2] == 2);
+            assert(LoadClearingCheckpoint(&saved) && saved.map == TEMPLAR_FIELD_MAP);
+            if (mode == 2) {
+                assert(e->progress.stage == 1 && saved.stage == 1);
+                assert(map->exitLocked && EnemiesRemaining(enemies) == 5);
+                assert(p.x == map->spawn.x && p.y == map->spawn.y);
+            } else {
+                assert(saved.stage == CLEARING_COMPLETE_STAGE && e->phase == ENCOUNTER_CLEAR);
+                assert(!map->exitLocked && EnemiesRemaining(enemies) == 0);
+            }
+            transported++;
+        }
+        return UpdateEncounter(e,enemies,map,p,health);
+    }
     if (!answered && !EncounterPaused(e)) {
         Enemy *boss=&enemies->list[0];
         boss->position=p;
@@ -138,5 +169,12 @@ int main(void) {
         assert(liberated==1 && transported==1 && cinematicFrames>=2);
         printf("Real story loop: %s reached cemetery after %d frames.\n",mode ? "complete":"skip",frames);
     }
+    for (mode=2;mode<4;mode++) {
+        frames=liberated=transported=0;
+        active=NULL;
+        assert(ActualGameMain()==0);
+        assert(transported==1);
+    }
+    puts("The campaign entered the Templar Field and resumed with the stairs open.");
     return 0;
 }

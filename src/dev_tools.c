@@ -3,7 +3,7 @@
 #include <math.h>
 #include <stdio.h>
 
-static const int practiceMaps[] = {0, 1, BONELAND_MAP};
+static const int practiceMaps[] = {0, 1, BONELAND_MAP, TEMPLAR_FIELD_MAP};
 
 static int PracticeMapIndex(int map) {
     for (int i = 0; i < (int)(sizeof(practiceMaps) / sizeof(practiceMaps[0])); i++)
@@ -12,6 +12,7 @@ static int PracticeMapIndex(int map) {
 }
 
 static int PracticeWaves(int map) {
+    if (map == TEMPLAR_FIELD_MAP) return TEMPLAR_FIELD_WAVES;
     return map == BONELAND_MAP ? BONELAND_WAVES : CLEARING_WAVES;
 }
 
@@ -40,7 +41,8 @@ static void AdjustField(DevTools *tools, int index, int direction) {
         case 0: {
             int count = (int)(sizeof(practiceMaps) / sizeof(practiceMaps[0]));
             tools->map = practiceMaps[(PracticeMapIndex(tools->map) + direction + count) % count];
-            if (tools->wave != CLEARING_BOSS_STAGE && tools->wave > PracticeWaves(tools->map))
+            if (tools->map == TEMPLAR_FIELD_MAP ||
+                (tools->wave != CLEARING_BOSS_STAGE && tools->wave > PracticeWaves(tools->map)))
                 tools->wave = 1;
             break;
         }
@@ -88,7 +90,8 @@ DevAction UpdateDevTools(DevTools *tools, bool inPractice) {
         AdjustField(tools,tools->selected,1);
         return DEV_NONE;
     }
-    if (!inPractice && (tools->selected==12 || tools->selected==13)) return DEV_NONE;
+    if ((!inPractice && (tools->selected==12 || tools->selected==13)) ||
+        (tools->map == TEMPLAR_FIELD_MAP && tools->selected == 11)) return DEV_NONE;
     static const DevAction actions[]={DEV_STAGE,DEV_BOSS_ONE,DEV_BOSS_TWO,DEV_OPENING,DEV_GUARDIAN,
         DEV_SEAL,DEV_HEAL,DEV_CLEAR_STAGE,DEV_LIBERATION,DEV_PASSAGE,DEV_MENU,DEV_CLOSE};
     return actions[tools->selected-6];
@@ -109,11 +112,15 @@ void DrawDevTools(const DevTools *tools, bool inPractice) {
     const char *weapons[]={"Arma de fogo","Bíblia","Katana"};
     char waveText[24],levelText[24];
     int waves = PracticeWaves(tools->map);
-    snprintf(waveText,sizeof(waveText),"%d / %d",tools->wave,waves);
+    if (tools->map == TEMPLAR_FIELD_MAP)
+        snprintf(waveText,sizeof(waveText),"%d / %d",tools->wave == CLEARING_BOSS_STAGE ? waves + 1 : tools->wave,
+                 waves + 1);
+    else
+        snprintf(waveText,sizeof(waveText),"%d / %d",tools->wave,waves);
     snprintf(levelText,sizeof(levelText),"%d / 3",tools->weaponLevel);
-    static const char *mapNames[] = {"Clareira", "Cemitério", "Terra dos Ossos"};
+    static const char *mapNames[] = {"Clareira", "Cemitério", "Terra dos Ossos", "Campo dos Templários"};
     const char *values[]={mapNames[PracticeMapIndex(tools->map)],
-        tools->wave==CLEARING_BOSS_STAGE ? "Chefe" : waveText,weapons[tools->weapon],
+        tools->wave==CLEARING_BOSS_STAGE && tools->map != TEMPLAR_FIELD_MAP ? "Chefe" : waveText,weapons[tools->weapon],
         levelText,tools->invincible ? "Ligada" : "Desligada",
         tools->collision ? "Visíveis" : "Ocultas"};
     for (int i=0; i<6; i++) {
@@ -132,7 +139,8 @@ void DrawDevTools(const DevTools *tools, bool inPractice) {
         "Menu principal","Fechar · F1 / Esc"};
     for (int i=6; i<18; i++) {
         Rectangle button=Control(i);
-        bool enabled = inPractice || (i!=12 && i!=13);
+        bool enabled = (inPractice || (i!=12 && i!=13)) &&
+                       (tools->map != TEMPLAR_FIELD_MAP || i != 11);
         bool focused=tools->selected==i;
         Color ink=enabled ? text : (Color){155,134,141,255};
         DrawRectangleRec(button,focused && enabled ? (Color){114,37,46,255} : (Color){49,22,34,255});
@@ -156,6 +164,7 @@ bool StartDevEncounter(const DevTools *tools, DevAction action, Encounter *e,
         tools->weapon<0 || tools->weapon>2 || tools->weaponLevel<0 || tools->weaponLevel>3) return false;
     bool aftermath=action==DEV_LIBERATION || action==DEV_PASSAGE;
     int mapId = action == DEV_GUARDIAN || aftermath ? 0 : tools->map;
+    if (mapId == TEMPLAR_FIELD_MAP && action == DEV_SEAL) return false;
     if (ClearingMapId(map) != mapId) {
         Clearing next={0};
         if (!InitCampaignMap(&next, mapId)) return false;
@@ -174,7 +183,8 @@ bool StartDevEncounter(const DevTools *tools, DevAction action, Encounter *e,
     *health=progress.maxHealth;
     BeginEncounter(e,enemies,map,progress,*player);
     e->practice=true;
-    if (!map->boneland || action == DEV_SEAL) e->presentation=(StagePresentation){0};
+    if ((!map->boneland && !map->templarField) || action == DEV_SEAL)
+        e->presentation=(StagePresentation){0};
     if (action==DEV_BOSS_TWO) {
         Enemy *boss=&enemies->list[0];
         boss->guardianPhase=GUARDIAN_PHASE_TWO;

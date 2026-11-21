@@ -168,6 +168,7 @@ static void CheckDevTools(Encounter *e, EnemyGroup *enemies, Clearing *map) {
     assert(StartDevEncounter(&tools, DEV_BOSS_ONE, e, enemies, map, &player, &health));
     assert(e->presentation.areaEntry && e->presentation.wave == 4 && e->presentation.waveTotal == 4);
     assert(enemies->boneLordWalk.id && enemies->boneLordPounce.id && enemies->boneLordClaw.id);
+    assert(enemies->boneLordDash.id && enemies->boneLordBite.id && enemies->boneLordPortrait.id);
     UpdateStagePresentation(&e->presentation, e->presentation.remaining);
     assert(e->presentation.boss && EncounterPaused(e));
     assert(strcmp(e->presentation.bossName, "Rasga-Ossos") == 0);
@@ -557,7 +558,105 @@ int main(void) {
     Vector2 northPass = {835, 80};
     assert(!IsMapActorBlocked(&bones, northPass));
     assert(MapHasClearPath(&bones, bones.spawn, northPass));
+    assert(!CanEnterTemplarField(&boneEncounter, &bones, northPass));
+    boneEncounter.presentation = (StagePresentation){0};
+    assert(CanEnterTemplarField(&boneEncounter, &bones, northPass));
+    assert(!CanEnterTemplarField(&boneEncounter, &bones, bones.spawn));
     UnloadClearing(&bones);
+
+    Clearing field = {0};
+    assert(InitCampaignMap(&field, TEMPLAR_FIELD_MAP));
+    Vector2 stair = {835, 270};
+    assert(IsMapActorBlocked(&field, stair));
+    assert(IsMapActorBlocked(&field, (Vector2){90, 215}));
+    assert(IsMapActorBlocked(&field, (Vector2){1560, 245}));
+    assert(!IsMapActorBlocked(&field, (Vector2){220, 545}));
+    assert(!IsMapActorBlocked(&field, (Vector2){1430, 535}));
+    assert(!IsMapActorBlocked(&field, field.spawn));
+    Encounter templars;
+    RunProgress fieldProgress = NewRunProgress(2);
+    int fieldHealth = fieldProgress.health;
+    BeginEncounter(&templars, &enemies, &field, fieldProgress, field.spawn);
+    assert(templars.progress.map == TEMPLAR_FIELD_MAP);
+    assert(templars.presentation.areaEntry && templars.presentation.waveTotal == 3);
+    assert(templars.presentation.areaSubtitle);
+    Enemy shield = {.templarRole = TEMPLAR_SHIELD, .state = ENEMY_IDLE,
+                    .position = {100, 100}, .health = 100, .maxHealth = 100};
+    DamageEnemyFrom(&shield, 20, (Vector2){100, 140});
+    assert(shield.health == 90 && shield.state == ENEMY_IDLE);
+    DamageEnemyFrom(&shield, 20, (Vector2){100, 60});
+    assert(shield.health == 70 && shield.state == ENEMY_HURT);
+    shield.state = ENEMY_ATTACK;
+    DamageEnemyFrom(&shield, 20, (Vector2){100, 140});
+    assert(shield.health == 50);
+    for (int wave = 1; wave <= TEMPLAR_FIELD_WAVES; wave++) {
+        assert(templars.progress.stage == wave && EnemiesRemaining(&enemies) == wave + 4);
+        assert(enemies.list[0].templarRole == (wave == 1 ? TEMPLAR_SHIELD : TEMPLAR_STANDARD));
+        for (int i = 0; i < wave + 4; i++) {
+            Enemy *enemy = &enemies.list[i];
+            assert(!IsMapActorBlocked(&field, enemy->position));
+            enemy->state = ENEMY_IDLE;
+            DamageEnemy(enemy, enemy->health * 2);
+        }
+        UpdateEnemies(&enemies, &field, field.spawn, 1, true, &fieldHealth, 100);
+        assert(EnemiesRemaining(&enemies) == 0);
+        templars.presentation = (StagePresentation){0};
+        UpdateEncounter(&templars, &enemies, &field, field.spawn, &fieldHealth);
+        assert(templars.phase == ENCOUNTER_REWARD);
+        assert(ChooseEncounterReward(&templars, &enemies, &field, field.spawn, &fieldHealth, 0));
+        assert(LoadClearingCheckpoint(&fieldProgress));
+        assert(fieldProgress.map == TEMPLAR_FIELD_MAP && fieldProgress.stage == templars.progress.stage);
+    }
+    assert(templars.progress.stage == CLEARING_BOSS_STAGE && EnemiesRemaining(&enemies) == 1);
+    Enemy *marshal = &enemies.list[0];
+    assert(marshal->templarRole == TEMPLAR_MARSHAL && !IsMapActorBlocked(&field, marshal->position));
+    for (int role = TEMPLAR_SHIELD; role <= TEMPLAR_MARSHAL; role++)
+        assert(enemies.templarAttack[role].id);
+    marshal->state = ENEMY_IDLE;
+    Vector2 marshalStart = marshal->position;
+    UpdateEnemies(&enemies, &field, field.spawn, .3f, false, &fieldHealth, 100);
+    assert(marshal->state == ENEMY_ATTACK && marshal->bossAttack == MARSHAL_CHARGE);
+    marshal->state = ENEMY_IDLE;
+    DamageEnemy(marshal, marshal->maxHealth);
+    assert(marshal->guardianPhase == GUARDIAN_PHASE_TRANSITION);
+    UpdateEnemies(&enemies, &field, field.spawn, 2, true, &fieldHealth, 100);
+    assert(marshal->guardianPhase == GUARDIAN_PHASE_TWO);
+    marshal->state = ENEMY_ATTACK;
+    marshal->bossAttack = MARSHAL_CHARGE;
+    marshal->attackDirection = (Vector2){0,1};
+    marshal->stateTime = 1.35f;
+    UpdateEnemies(&enemies, &field, field.spawn, .05f, false, &fieldHealth, 100);
+    assert(marshal->state == ENEMY_ATTACK && marshal->bossAttack == MARSHAL_RETURN);
+    marshal->state = ENEMY_IDLE;
+    marshal->position = marshalStart;
+    marshal->attackCooldown = 0;
+    Vector2 target = {marshalStart.x, marshalStart.y + 125};
+    UpdateEnemies(&enemies, &field, target, .01f, false, &fieldHealth, 100);
+    assert(marshal->bossAttack == MARSHAL_RUPTURE);
+    int before = fieldHealth;
+    marshal->stateTime = .81f;
+    UpdateEnemies(&enemies, &field, target, .02f, true, &fieldHealth, 100);
+    assert(fieldHealth == before && enemies.templarBlood.remaining <= 0);
+    marshal->stateTime = .81f;
+    marshal->attackConnected = false;
+    UpdateEnemies(&enemies, &field, target, .02f, false, &fieldHealth, 100);
+    assert(fieldHealth < before && enemies.templarBlood.remaining > 0);
+    DamageEnemy(marshal, marshal->health);
+    UpdateEnemies(&enemies, &field, field.spawn, 1.5f, true, &fieldHealth, 100);
+    templars.presentation = (StagePresentation){0};
+    UpdateEncounter(&templars, &enemies, &field, field.spawn, &fieldHealth);
+    assert(templars.phase == ENCOUNTER_CLEAR && EnemiesRemaining(&enemies) == 0);
+    assert(LoadClearingCheckpoint(&fieldProgress) && fieldProgress.stage == CLEARING_COMPLETE_STAGE);
+    field.exitLocked = false;
+    assert(MapHasClearPath(&field, field.spawn, stair));
+    DevTools fieldTools = {.map = TEMPLAR_FIELD_MAP, .wave = 2, .weapon = 2};
+    Vector2 fieldPlayer;
+    assert(StartDevEncounter(&fieldTools, DEV_STAGE, &templars, &enemies, &field, &fieldPlayer, &fieldHealth));
+    assert(templars.practice && EnemiesRemaining(&enemies) == 6);
+    assert(templars.presentation.areaEntry && templars.presentation.wave == 2);
+    assert(templars.presentation.waveTotal == 3);
+    assert(LoadClearingCheckpoint(&fieldProgress) && fieldProgress.stage == CLEARING_COMPLETE_STAGE);
+    UnloadClearing(&field);
 
     /* Audit only the test executable's checkpoint, never the player's save. */
     const char *saveFile=TextFormat("%s/partida_pif.sav",GetApplicationDirectory());

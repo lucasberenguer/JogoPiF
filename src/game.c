@@ -275,6 +275,10 @@ int main(void) {
                  encounter.progress.stage <= CLEARING_BOSS_STAGE) {
             track = encounter.guardianIntroPending ? TRACK_SILENT :
                 encounter.progress.stage == CLEARING_BOSS_STAGE ? TRACK_MINIBOSS : TRACK_COMBAT;
+            if (encounter.progress.map == TEMPLAR_FIELD_MAP &&
+                encounter.progress.stage == CLEARING_BOSS_STAGE &&
+                (encounter.presentation.remaining > 0 || enemies.list[0].state == ENEMY_SPAWNING))
+                track = TRACK_SILENT;
             if (screen == 3 || EncounterPaused(&encounter)) musicStrength = 0.42f;
         }
         if (devTools.open) musicStrength*=.15f;
@@ -694,7 +698,9 @@ int main(void) {
         if (entering) entryFadeRemaining = fmaxf(0.0f, entryFadeRemaining - fminf(GetFrameTime(),.05f));
         if (!entering && IsKeyPressed(KEY_F3)) showCollisionGuide = !showCollisionGuide;
         if (!entering && IsKeyPressed(KEY_F6)) showSpriteDebug = !showSpriteDebug;
-        bool nearExit = (clearing.cemetery || clearing.village) &&
+        if (clearing.templarField)
+            clearing.exitLocked = encounter.progress.stage != CLEARING_COMPLETE_STAGE;
+        bool nearExit = (clearing.cemetery || clearing.village || clearing.boneland) &&
             CheckCollisionPointRec(player, clearing.exit);
         bool nearPedestal = encounter.progress.map == 0 &&
             CheckCollisionPointCircle(player, clearing.pedestal, CLEARING_ALTAR_RADIUS);
@@ -705,8 +711,9 @@ int main(void) {
             continue;
         bool toBoneland = clearing.invertedChapel && !EncounterPaused(&encounter) &&
             CheckCollisionPointRec(player, clearing.exit);
+        bool toTemplarField = CanEnterTemplarField(&encounter, &clearing, player);
         if (!entering && playerHealth > 0 &&
-            (toBoneland || CanEnterVillage(&encounter, &clearing, player, interactPressed) ||
+            (toTemplarField || toBoneland || CanEnterVillage(&encounter, &clearing, player, interactPressed) ||
              CanEnterChapel(&encounter, &clearing, player, interactPressed) ||
              CanEnterBasement(&encounter, &clearing, player, interactPressed) ||
              CanEnterInvertedChapel(&encounter, &clearing, player))) {
@@ -715,7 +722,7 @@ int main(void) {
             bool toChapel = clearing.village;
             bool toVillage = clearing.cemetery;
             Clearing next = {0};
-            int nextMap = toBoneland ? BONELAND_MAP
+            int nextMap = toTemplarField ? TEMPLAR_FIELD_MAP : toBoneland ? BONELAND_MAP
                 : toInverted ? 5 : toBasement ? 4 : toChapel ? 3 : toVillage ? 2 : 1;
             if (InitCampaignMap(&next, nextMap)) {
                 UnloadClearing(&clearing);
@@ -906,12 +913,12 @@ int main(void) {
                 Vector2 center = EnemyCenter(enemy);
                 if (currentWeapon == WEAPON_GUN) {
                     int damage = GunHitCircle(&gun, center, EnemyHurtRadius(enemy));
-                    if (damage) DamageEnemy(enemy, (int)ceilf(damage*EncounterDamage(&encounter)));
+                    if (damage) DamageEnemyFrom(enemy, (int)ceilf(damage*EncounterDamage(&encounter)), player);
                 } else if (currentWeapon == WEAPON_BIBLE) {
                     if (enemy->bibleHitCooldown <= 0.0f &&
                         BibleTouchesCircle(&bible, player, center, EnemyHurtRadius(enemy)) &&
                         MapHasClearPath(&clearing,player,enemy->position)) {
-                        DamageEnemy(enemy, (int)ceilf(BibleContactDamage()*EncounterDamage(&encounter)));
+                        DamageEnemyFrom(enemy, (int)ceilf(BibleContactDamage()*EncounterDamage(&encounter)), player);
                         KnockbackEnemy(enemy, &clearing, player, 36.0f);
                         enemy->bibleHitCooldown = 0.45f;
                     }
@@ -927,7 +934,7 @@ int main(void) {
                         if (distance < katanaAttackRange+EnemyHurtRadius(enemy) && distance > 0.0f &&
                             Vector2DotProduct(delta, katanaAttackDirection) >= katanaArcDot*distance &&
                             MapHasClearPath(&clearing,player,enemy->position)) {
-                            DamageEnemy(enemy, (int)ceilf(25*EncounterDamage(&encounter)));
+                            DamageEnemyFrom(enemy, (int)ceilf(25*EncounterDamage(&encounter)), player);
                             enemy->lastKatanaSwing = katanaAttackId;
                             if (weaponLevel >= 2 && !katanaDashReducedThisSwing) {
                                 dodgeCooldown = fmaxf(0.0f, dodgeCooldown - 0.6f);
@@ -943,7 +950,7 @@ int main(void) {
                         if (wave->life <= 0.0f || wave->hitEnemies[i]) continue;
                         float limit = KATANA_SHOCKWAVE_RADIUS + EnemyHurtRadius(enemy);
                         if (Vector2DistanceSqr(wave->position, center) <= limit * limit) {
-                            DamageEnemy(enemy, (int)ceilf(22 * EncounterDamage(&encounter)));
+                            DamageEnemyFrom(enemy, (int)ceilf(22 * EncounterDamage(&encounter)), Vector2Subtract(wave->position, Vector2Scale(wave->direction, 100)));
                             wave->hitEnemies[i] = true;
                         }
                     }
@@ -966,6 +973,12 @@ int main(void) {
             ClearBackground(BLACK);
             BeginMode2D(camera);
                 DrawClearing(&clearing);
+                if (clearing.templarField && clearing.exitLocked) {
+                    Vector2 left = {clearing.exit.x, clearing.exit.y + clearing.exit.height};
+                    Vector2 right = {left.x + clearing.exit.width, left.y};
+                    DrawLineEx(left, right, 7, Fade(MAROON, .85f));
+                    DrawLineEx(left, right, 2, Fade(ORANGE, .8f));
+                }
                 if (altarOpen) DrawClearingAltarGlow(&clearing, (float)GetTime());
                 if (clearing.chapel && encounter.chapelAltarDone) {
                     float w = (float)clearing.background.width, h = (float)clearing.background.height;
@@ -1129,8 +1142,10 @@ int main(void) {
                 DrawGameText("O altar está selado", 24, 53 + hudOffset, 18, GOLD);
             } else {
                 DrawGameText(nearExit
-                    ? (clearing.village ? "Entrar na Capela do Anjo" : "Saída para a Vila Lascada")
-                    : (clearing.boneland ? "Terra dos Ossos"
+                    ? (clearing.boneland ? "Passagem para o Campo dos Templários"
+                        : clearing.village ? "Entrar na Capela do Anjo" : "Saída para a Vila Lascada")
+                    : (clearing.templarField ? (clearing.exitLocked ? "Derrote o Marechal para liberar a escadaria"
+                        : "Escadaria liberada") : clearing.boneland ? "Terra dos Ossos"
                         : clearing.invertedChapel ? "Capela Invertida - saída ao sul"
                         : (clearing.basement ? "Porão da Capela (E nas placas da parede e nos 4 pilares)"
                         : (clearing.chapel ? (encounter.chapelAltarDone

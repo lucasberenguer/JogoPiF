@@ -260,6 +260,17 @@ bool InitBoneland(Clearing *map) {
     return true;
 }
 
+bool InitTemplarField(Clearing *map) {
+    if (!LoadMapWithCollision(map, "assets/campo_templarios.png",
+                             "assets/campo_templarios_collision.png")) return false;
+    map->templarField = true;
+    map->exitLocked = true;
+    map->spawn = (Vector2){835, 853};
+    map->pedestal = (Vector2){-1000, -1000};
+    map->exit = (Rectangle){690, 0, 290, 273};
+    return true;
+}
+
 bool InitCampaignMap(Clearing *map, int mapId) {
     switch (mapId) {
         case 0: return InitClearing(map);
@@ -269,11 +280,13 @@ bool InitCampaignMap(Clearing *map, int mapId) {
         case 4: return InitChapelBasement(map);
         case 5: return InitInvertedChapel(map);
         case BONELAND_MAP: return InitBoneland(map);
+        case TEMPLAR_FIELD_MAP: return InitTemplarField(map);
         default: return false;
     }
 }
 
 int ClearingMapId(const Clearing *map) {
+    if (map->templarField) return TEMPLAR_FIELD_MAP;
     if (map->boneland) return BONELAND_MAP;
     if (map->invertedChapel) return 5;
     if (map->basement) return 4;
@@ -595,7 +608,8 @@ bool IsClearingBlocked(const Clearing *clearing, Vector2 point) {
         Vector2 rock={clearing->background.width*.622f,clearing->background.height*.228f};
         return CheckCollisionPointCircle(point,rock,22);
     }
-    if (!CheckCollisionPointRec(point, clearing->playableBounds)) return true;
+    if (!CheckCollisionPointRec(point, clearing->playableBounds) ||
+        (clearing->exitLocked && CheckCollisionPointRec(point, clearing->exit))) return true;
     for (int i=0;i<clearing->obstacleCount;i++)
         if (CheckCollisionCircleRec(point, 8.0f, clearing->obstacles[i])) return true;
     if (!clearing->collisionPixels) return false;

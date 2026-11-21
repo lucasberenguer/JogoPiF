@@ -255,6 +255,57 @@ static void DrawVillageBossDefeat(const EnemyGroup *group, const Enemy *enemy) {
     }
 }
 
+void DrawHumanBoss(const EnemyGroup *group, const Enemy *enemy, bool foreground) {
+    if (!foreground && enemy->state == ENEMY_ATTACK) {
+        if (enemy->bossAttack == VILLAGE_CHARGE && enemy->stateTime < 0.55f) {
+            Vector2 end = Vector2Add(enemy->position,
+                Vector2Scale(enemy->attackDirection, 280.0f));
+            DrawLineEx(enemy->position, end, 4.0f, Fade(MAROON, 0.55f));
+        } else if (enemy->bossAttack == VILLAGE_SEAL_PULSE && enemy->stateTime < 0.72f) {
+            float p = enemy->stateTime / 0.72f;
+            DrawCircleV(enemy->position, 185.0f, Fade(GOLD, 0.14f + 0.12f * p));
+            DrawCircleLines((int)enemy->position.x, (int)enemy->position.y,
+                            185.0f, Fade(GOLD, 0.75f));
+        }
+    }
+    Texture2D tex = group->villageBossWalk;
+    int rows = 4, row = enemy->facing, frame = 0;
+    bool flip = false;
+    if (enemy->state == ENEMY_DIE || enemy->state == ENEMY_FALLEN) {
+        DrawVillageBossDefeat(group, enemy);
+        return;
+    } else if (enemy->state == ENEMY_ATTACK && enemy->bossAttack == VILLAGE_CHARGE) {
+        tex = group->villageBossCharge;
+        rows = 3;
+        row = (enemy->facing == 0 || enemy->facing == 1) ? 1 : 0;
+        flip = (enemy->facing == 2);
+        frame = enemy->stateTime < 0.55f ? 0
+            : (enemy->stateTime < 1.15f ? 1 + (int)(enemy->stateTime * 10.0f) % 3
+                                        : 4 + (int)fminf((enemy->stateTime - 1.15f) * 4.0f, 1.0f));
+    } else if (enemy->state == ENEMY_ATTACK) {
+        tex = group->villageBossAttack;
+        row = (enemy->facing == 2) ? 2 : enemy->facing;
+        if (enemy->facing == 2) { row = 2; flip = true; }
+        frame = enemy->stateTime < 0.48f
+            ? (int)fminf(enemy->stateTime / 0.48f * 2.0f, 1.0f)
+            : (enemy->stateTime < 0.70f ? 2 + (int)((enemy->stateTime - 0.48f) / 0.22f * 2.0f)
+                                        : 4 + (int)fminf((enemy->stateTime - 0.70f) / 0.18f * 2.0f, 1.0f));
+    } else {
+        if (enemy->facing == 2) { row = 2; flip = true; }
+        else if (enemy->facing == 3) row = 2;
+        else row = enemy->facing;
+        frame = enemy->state == ENEMY_WALK ? ((int)(enemy->walkTime * 9.0f) % 6) : 0;
+    }
+    float cw = (float)tex.width / 6.0f;
+    float ch = (float)tex.height / (float)rows;
+    Rectangle src = {frame * cw, row * ch, flip ? -cw : cw, ch};
+    float drawW = 104.0f, drawH = 104.0f * (ch / cw);
+    Rectangle dst = {enemy->position.x - drawW * 0.5f,
+                     enemy->position.y - drawH * 0.88f, drawW, drawH};
+    Color tint = enemy->state == ENEMY_HURT ? (Color){255, 160, 160, 255} : WHITE;
+    DrawTexturePro(tex, src, dst, (Vector2){0}, 0.0f, tint);
+}
+
 void VillageDrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
     for (int i = 0; i < ENEMY_COUNT; i++) {
         const Enemy *enemy = &group->list[i];
@@ -262,54 +313,7 @@ void VillageDrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground
         if ((enemy->position.y >= player.y) != foreground) continue;
 
         if (enemy->type == ENEMY_BOSS) {
-            if (!foreground && enemy->state == ENEMY_ATTACK) {
-                if (enemy->bossAttack == VILLAGE_CHARGE && enemy->stateTime < 0.55f) {
-                    Vector2 end = Vector2Add(enemy->position,
-                        Vector2Scale(enemy->attackDirection, 280.0f));
-                    DrawLineEx(enemy->position, end, 4.0f, Fade(MAROON, 0.55f));
-                } else if (enemy->bossAttack == VILLAGE_SEAL_PULSE && enemy->stateTime < 0.72f) {
-                    float p = enemy->stateTime / 0.72f;
-                    DrawCircleV(enemy->position, 185.0f, Fade(GOLD, 0.14f + 0.12f * p));
-                    DrawCircleLines((int)enemy->position.x, (int)enemy->position.y,
-                                    185.0f, Fade(GOLD, 0.75f));
-                }
-            }
-            Texture2D tex = group->villageBossWalk;
-            int rows = 4, row = enemy->facing, frame = 0;
-            bool flip = false;
-            if (enemy->state == ENEMY_DIE || enemy->state == ENEMY_FALLEN) {
-                DrawVillageBossDefeat(group, enemy);
-                continue;
-            } else if (enemy->state == ENEMY_ATTACK && enemy->bossAttack == VILLAGE_CHARGE) {
-                tex = group->villageBossCharge;
-                rows = 3;
-                row = (enemy->facing == 0 || enemy->facing == 1) ? 1 : 0;
-                flip = (enemy->facing == 2);
-                frame = enemy->stateTime < 0.55f ? 0
-                    : (enemy->stateTime < 1.15f ? 1 + (int)(enemy->stateTime * 10.0f) % 3
-                                                : 4 + (int)fminf((enemy->stateTime - 1.15f) * 4.0f, 1.0f));
-            } else if (enemy->state == ENEMY_ATTACK) {
-                tex = group->villageBossAttack;
-                row = (enemy->facing == 2) ? 2 : enemy->facing;
-                if (enemy->facing == 2) { row = 2; flip = true; }
-                frame = enemy->stateTime < 0.48f
-                    ? (int)fminf(enemy->stateTime / 0.48f * 2.0f, 1.0f)
-                    : (enemy->stateTime < 0.70f ? 2 + (int)((enemy->stateTime - 0.48f) / 0.22f * 2.0f)
-                                                : 4 + (int)fminf((enemy->stateTime - 0.70f) / 0.18f * 2.0f, 1.0f));
-            } else {
-                if (enemy->facing == 2) { row = 2; flip = true; }
-                else if (enemy->facing == 3) row = 2;
-                else row = enemy->facing;
-                frame = enemy->state == ENEMY_WALK ? ((int)(enemy->walkTime * 9.0f) % 6) : 0;
-            }
-            float cw = (float)tex.width / 6.0f;
-            float ch = (float)tex.height / (float)rows;
-            Rectangle src = {frame * cw, row * ch, flip ? -cw : cw, ch};
-            float drawW = 104.0f, drawH = 104.0f * (ch / cw);
-            Rectangle dst = {enemy->position.x - drawW * 0.5f,
-                             enemy->position.y - drawH * 0.88f, drawW, drawH};
-            Color tint = enemy->state == ENEMY_HURT ? (Color){255, 160, 160, 255} : WHITE;
-            DrawTexturePro(tex, src, dst, (Vector2){0}, 0.0f, tint);
+            DrawHumanBoss(group, enemy, foreground);
             continue;
         }
 

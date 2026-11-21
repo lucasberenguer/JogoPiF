@@ -22,7 +22,7 @@ No novo chat: ler `AGENTS.md` e `CONTINUIDADE.md`, conferir o Git e retomar a pa
 | Vila Lascada | Consequências para os habitantes; ondas e miniboss, seguindo a base dos primeiros mapas. |
 | Capela do Anjo | Exploração jogável sem combate até o encontro com o anjo e a revelação sobre o necromante; desmoronamento leva ao portal. |
 | Inferno Inicial | Mapa simples arruinado, fogo e inimigos demoníacos; duas ondas e miniboss com cutscene. |
-| Palácio do Necromante | Combate em ondas, última defesa antes do chefe. Quantidade ainda pendente; três ondas sem miniboss foi apenas proposta. |
+| Campo de Batalha dos Templários | Última defesa antes do chefe final. Dois grupos de templários e um duelo contra o Marechal Carmesim. |
 | Topo do Palácio | Arena da batalha final, selo do necromante e desfecho. |
 
 O Pátio dos Guardiões foi retirado da sequência. Cutscene de descoberta do palácio entre inferno e palácio: proposta de reaproveitar a composição da cena do menu, com os inimigos de pé.
@@ -181,13 +181,27 @@ Na entrega do pós-boss de 18/11, build em `out/review` concluído e seis testes
 
 - Mapa 6 integrado: arte revisada **Mapa sombrio com ossos, espadas e escudo**, sem o muro e com a carroça ao noroeste, e máscara de colisão revisada. A entrada fica ao sul da Capela Invertida. O checkpoint guarda o mapa e a etapa.
 - Três ondas com 20, 26 e 30 inimigos. As composições são 15 carniçais e 5 cultistas, 19 e 7, e 21 e 9. As entradas são escalonadas com os mesmos intervalos das três primeiras ondas da Clareira. Vida base dos carniçais: 49, 53 e 56 PV. Vida base dos cultistas: 36, 39 e 41 PV.
-- Os carniçais avançam mais rápido e têm mais vida que os cultistas. Os cultistas atacam à distância quando têm linha de visão, anunciam o disparo com um brilho e travam a mira antes de soltar um projétil de brasa mais lento.
+- Os carniçais avançam mais rápido e têm mais vida que os cultistas. Os cultistas atacam à distância quando têm linha de visão, concentram um brilho com fagulhas antes de soltar uma brasa pulsante com rastro e faíscas no impacto. A mira continua travada durante a preparação.
 - Carniçais e cultistas usam suas folhas próprias em campanha e no F1. As quatro direções têm pose de espera, dois passos e uma pose de ataque. O fundo magenta é removido no carregamento e cada quadro é ancorado pelos pés.
 - Validação dos sprites em `out/review`: passaram os quatro testes executados. A auditoria do F1 confirmou os 20 inimigos da primeira onda e a transparência das duas folhas. A captura `audit/boneland_attack_poses.png` mostra os ataques nas quatro direções.
-- Completar a terceira onda abre a quarta, o duelo contra o Senhor dos Ossos. O chefe tem 2.800 PV base, acelera na segunda fase e exige selamento para concluir a área.
+- Completar a terceira onda abre a quarta, o duelo contra o Senhor dos Ossos. O chefe tem 2.800 PV base, acelera na segunda fase e exige selamento antes de liberar a saída norte.
 - A investida marca uma faixa reta, para em obstáculos e causa 25 de dano base. A garrada marca um arco curto e causa 19. O dash marca um raio de 245 unidades por 0,80 s e trava o acerto na liberação se o jogador ainda está dentro do alcance e a linha está livre. O impacto causa 27 de dano base, inclusive durante a esquiva depois da trava. A invulnerabilidade de treino continua valendo.
 - Validação da integração em `out/review`: build concluído. Passaram a auditoria dos inimigos, incluindo os três golpes e o dash fora de alcance, atrás de obstáculo e com invulnerabilidade de treino, e os testes de conectividade e colisão. As passagens livres, a carroça sólida e a remoção da colisão do muro foram conferidas na máscara do build. A versão anterior do teste de encontro validou a retomada da onda 3 e a transição ao chefe. A reexecução do teste atualizado foi bloqueada pelo Controle de Aplicativo do Windows.
-- Chefe com o nome provisório **Rasga-Ossos**, antigo Senhor dos Ossos. As folhas próprias de marcha, bote e garra foram integradas nas quatro direções. A investida e o dash aproveitam o bote com tempos distintos. A derrota usa uma transição de queda com o próprio sprite.
-- Em campanha e no F1, a entrada apresenta **Terra dos Ossos** e cada encontro mostra a numeração de **1/4** a **4/4**. A quarta cartela apresenta o chefe com a marcha animada. O retrato novo de apresentação está aguardando aprovação antes de substituir essa pose na cartela.
+- Chefe com o nome provisório **Rasga-Ossos**, antigo Senhor dos Ossos. As folhas próprias de marcha, bote, garra, dash e mordida foram integradas nas quatro direções. Na fase 2, a mordida toma o lugar da garra com a mesma janela e o mesmo alcance. A transição e os impactos da fase 2 têm efeitos de brasas e o dash tem um salto mais alto. A derrota usa uma transição de queda com o próprio sprite.
+- Em campanha e no F1, a entrada apresenta **Terra dos Ossos** e cada encontro mostra a numeração de **1/4** a **4/4**. A quarta cartela apresenta o chefe com um retrato estático em pixel art.
 - Validação do chefe e das cartelas: build e os quatro testes executados passaram. A auditoria do F1 confere a transição do nome do mapa para a onda, a pausa do combate durante a cartela, a quarta onda e a carga das três folhas do chefe.
 - O balanceamento em uma partida completa permanece pendente.
+
+## Campo de Batalha dos Templários (20/11/2026)
+
+- O mapa 7 usa a arte fornecida **Campo de batalha pixelado**, com máscara redesenhada para colunas, muros e bordas. A entrada fica ao sul e a escadaria ao norte, bloqueada até a derrota do Marechal. O checkpoint registra as etapas e conserva a arma, os upgrades e a vida na transição.
+- A entrada apresenta o nome da arena e o subtítulo “A última defesa do palácio”. A Linha de Frente traz três escudeiros pelo centro e dois besteiros que se abrem pelos flancos. O Último Estandarte traz o porta-estandarte ao pé da escadaria, dois carrascos, dois escudeiros e um besteiro.
+- Escudeiros reduzem o dano frontal enquanto mantêm a guarda e ficam vulneráveis durante a escudada. Besteiros travam a mira, disparam e recarregam. Carrascos anunciam a investida, dão um corte amplo e se recuperam. O porta-estandarte mantém a posição e fortalece aliados dentro do círculo dourado.
+- O Marechal Carmesim desce a escadaria com dois escudeiros de escolta, raspa a espada na pedra e abre o duelo sozinho com uma investida. Na segunda fase, emenda um corte anunciado após a investida. A música baixa durante a entrada e retorna no duelo. Derrotá-lo libera a escadaria.
+- Os quatro soldados têm faixas próprias de ataque em quatro direções: escudada, corte de arrasto, pontaria/disparo/recarga e fincada da bandeira. Cada faixa usa quatro poses novas, ancoradas pela base e sincronizadas com o impacto ou o disparo.
+- O Marechal usa quatro faixas de combate em três quartos, com espelhamento horizontal, para o corte de comando, a investida, o corte de retorno e o golpe de ruptura. Na fase 2, a investida emenda no corte de retorno, e de perto ele alterna o corte de comando com a ruptura de espada no chão.
+- Os ataques têm poeira e vento sincronizados com o movimento, além de faíscas no disparo e na ruptura. O efeito de sangue só é emitido quando o jogador perde vida. A esquiva e a invulnerabilidade de prática impedem o efeito.
+- Validação das animações: os seis testes passaram. As poses e efeitos das oito habilidades foram conferidos em captura do renderizador. O teste de encontro cobre a investida de abertura, o corte de retorno da fase 2 e a ruptura acertando ou sendo esquivada.
+- Ao trocar para o Campo no painel F1, o seletor inicia em 1/3 e inclui o Marechal em 3/3. Os botões de fase do chefe ainda abrem o duelo diretamente em prática. A Arena do Necromante e o encontro final continuam pendentes.
+
+- Validação local em out/review: os seis testes passaram, com reexecução isolada do teste de encontro após uma falha inicial ao iniciar o executável. A apresentação e a descida da escolta foram conferidas em capturas do renderizador.
