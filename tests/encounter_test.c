@@ -615,6 +615,10 @@ int main(void) {
         assert(fieldProgress.angelSceneCompleted && fieldProgress.angelBlessingUses == 2);
     }
     assert(templars.progress.stage == CLEARING_BOSS_STAGE && EnemiesRemaining(&enemies) == 1);
+    assert(enemies.marshalPortrait.id && templars.presentation.separateBossWave);
+    assert(templars.presentation.wave == 3 && !templars.presentation.boss);
+    UpdateStagePresentation(&templars.presentation, templars.presentation.remaining);
+    assert(templars.presentation.boss && templars.presentation.remaining > 0);
     Enemy *marshal = &enemies.list[0];
     assert(marshal->templarRole == TEMPLAR_MARSHAL && !IsMapActorBlocked(&field, marshal->position));
     for (int role = TEMPLAR_SHIELD; role <= TEMPLAR_MARSHAL; role++)

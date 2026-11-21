@@ -51,7 +51,9 @@ static void StartStage(Encounter *e, EnemyGroup *enemies, const Clearing *cleari
             e->presentation.waveTotal = TEMPLAR_FIELD_WAVES + 1;
             e->presentation.areaSubtitle = "A última defesa do palácio";
             if (wave <= TEMPLAR_FIELD_WAVES)
-                e->presentation.announcement = wave == 1 ? "A LINHA DE FRENTE" : "O ÚLTIMO ESTANDARTE";
+                e->presentation.announcement = wave == 1 ? "A Linha de Frente" : "O Último Estandarte";
+            else
+                ShowWaveBeforeBoss(&e->presentation);
         }
         if (clearing->cemetery || clearing->village) e->presentation.portraitCenterX=.73f;
         e->guardianIntroPending=e->progress.map == 0 &&
@@ -511,8 +513,8 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
                     : (e->progress.map == 1 ? "A saida a direita leva a Vila Lascada"
                                             : "O altar agora leva ao cemiterio");
                 BeginStagePresentation(&e->presentation, 0, sub, NULL);
-                e->presentation.announcement = clearing->templarField ? "MARECHAL CARMESIM DERROTADO"
-                    : clearing->boneland ? "TERRA DOS OSSOS LIMPA" : e->progress.map == 2 ? "VILA LASCADA LIMPA"
+                e->presentation.announcement = clearing->templarField ? "Marechal Carmesim derrotado"
+                    : clearing->boneland ? "Terra dos Ossos limpa" : e->progress.map == 2 ? "VILA LASCADA LIMPA"
                     : (e->progress.map == 1 ? "CEMITERIO LIMPO" : "CLAREIRA LIMPA");
                 e->presentation.duration=e->presentation.remaining=2.5f;
                 if (clearing->boneland) QueueAreaUnlock(&e->presentation, "Campo de Batalha dos Templários");
@@ -587,11 +589,12 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         Texture2D bossSprite = e->progress.map == BONELAND_MAP ? enemies->boneLordPortrait
             : e->progress.map == 2 ? enemies->villageBossWalk
             : (e->progress.map == 1 ? enemies->cemeteryPortrait : enemies->bossPortrait);
-        if (e->progress.map == TEMPLAR_FIELD_MAP) bossSprite = enemies->templarWalk[TEMPLAR_MARSHAL];
-        bool animatedPortrait = e->progress.map == 2 || e->progress.map == TEMPLAR_FIELD_MAP;
+        if (e->progress.map == TEMPLAR_FIELD_MAP) bossSprite = enemies->marshalPortrait;
+        bool animatedPortrait = e->progress.map == 2;
         int cols = animatedPortrait ? 6 : 1;
         int rows = animatedPortrait ? 4 : 1;
-        DrawStagePresentation(&e->presentation, bossSprite, cols, rows);
+        bool gothic = e->progress.map == BONELAND_MAP || e->progress.map == TEMPLAR_FIELD_MAP;
+        DrawStagePresentation(&e->presentation, bossSprite, cols, rows, gothic);
         return;
     }
     bool bossVisible = EncounterBossVisible(e, enemies);

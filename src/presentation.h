@@ -7,6 +7,7 @@ typedef struct StagePresentation {
     float portraitCenterX;
     int wave, waveTotal;
     bool boss;
+    bool separateBossWave;
     const char *mapName, *bossName;
     const char *announcement;
     const char *areaSubtitle;
@@ -15,8 +16,9 @@ typedef struct StagePresentation {
     bool areaEntry;
 } StagePresentation;
 void BeginStagePresentation(StagePresentation *p, int wave, const char *mapName, const char *bossName);
+void ShowWaveBeforeBoss(StagePresentation *p);
 void QueueAreaUnlock(StagePresentation *p, const char *mapName);
 void BeginAreaEntry(StagePresentation *p);
 void UpdateStagePresentation(StagePresentation *p, float dt);
-void DrawStagePresentation(const StagePresentation *p, Texture2D bossSprite, int columns, int rows);
+void DrawStagePresentation(const StagePresentation *p, Texture2D bossSprite, int columns, int rows, bool gothic);
 #endif

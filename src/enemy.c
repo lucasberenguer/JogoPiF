@@ -381,6 +381,7 @@ bool InitEnemies(EnemyGroup *group) {
     group->bossPortrait = LoadTexture("assets/guardiao_intro_pixel_v2.png");
     group->cemeteryPortrait = LoadTexture("assets/coveiro_intro_pixel.png");
     group->boneLordPortrait = LoadTexture("assets/terra_dos_ossos_chefe_retrato.png");
+    group->marshalPortrait = LoadTexture("assets/templario_marechal_retrato.png");
     group->bossAttack = LoadTexture("assets/boss_clareira_especial_1.png");
     group->roots = LoadTexture("assets/boss_clareira_raizes_area.png");
     group->rootWave = LoadTexture("assets/boss_clareira_onda.png");
@@ -400,7 +401,7 @@ bool InitEnemies(EnemyGroup *group) {
         !group->boneLordWalk.id || !group->boneLordPounce.id || !group->boneLordClaw.id || !group->boneLordDash.id || !group->boneLordBite.id ||
         !group->sealMarker.id ||
         !group->roots.id || !group->rootWave.id || !group->curse.id || !group->guardianMelee.id ||
-        !group->bossPortrait.id || !group->cemeteryPortrait.id || !group->boneLordPortrait.id ||
+        !group->bossPortrait.id || !group->cemeteryPortrait.id || !group->boneLordPortrait.id || !group->marshalPortrait.id ||
         !group->villageBossWalk.id || !group->villageBossAttack.id ||
         !group->villageBossCharge.id || !group->villageVillager.id) {
         UnloadEnemies(group);
@@ -424,6 +425,7 @@ bool InitEnemies(EnemyGroup *group) {
     SetTextureFilter(group->bossPortrait, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->cemeteryPortrait, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->boneLordPortrait, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->marshalPortrait, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->bossAttack, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->roots, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->rootWave, TEXTURE_FILTER_POINT);
@@ -475,6 +477,7 @@ void UnloadEnemies(EnemyGroup *group) {
     if (group->bossPortrait.id) UnloadTexture(group->bossPortrait);
     if (group->cemeteryPortrait.id) UnloadTexture(group->cemeteryPortrait);
     if (group->boneLordPortrait.id) UnloadTexture(group->boneLordPortrait);
+    if (group->marshalPortrait.id) UnloadTexture(group->marshalPortrait);
     if (group->bossAttack.id) UnloadTexture(group->bossAttack);
     if (group->roots.id) UnloadTexture(group->roots);
     if (group->rootWave.id) UnloadTexture(group->rootWave);
