@@ -10,13 +10,13 @@
 #define BIBLE_PI 3.14159265358979323846f
 
 static int BibleBookCount(int level) {
-    if (level >= 3) return 6;
-    if (level >= 1) return 5;
-    return 4;
+    if (level >= 4) return BIBLE_L4_BOOKS;
+    if (level >= 2) return BIBLE_L2_BOOKS;
+    return BIBLE_BASE_BOOKS;
 }
 
 static float BibleOrbitRadius(int level) {
-    return level >= 1 ? 102.0f : 90.0f;
+    return level >= 2 ? BIBLE_L2_ORBIT_RADIUS : BIBLE_BASE_ORBIT_RADIUS;
 }
 
 static Vector2 BookCenter(const Bible *b, Vector2 player, int index) {
@@ -64,8 +64,8 @@ void UpdateBible(Bible *b, float dt, bool activate, int level,
                  bool inCombat, Vector2 player) {
     b->level = level;
     if (activate && b->boostCooldown <= 0.0f) {
-        b->boostRemaining = level >= 2 ? 1.65f : 1.25f;
-        b->boostCooldown = level >= 2 ? 2.8f : 4.0f;
+        b->boostRemaining = level >= 3 ? BIBLE_L3_BOOST_DURATION : BIBLE_BASE_BOOST_DURATION;
+        b->boostCooldown = level >= 3 ? BIBLE_L3_BOOST_COOLDOWN : BIBLE_BASE_BOOST_COOLDOWN;
         b->activationRemaining = BIBLE_ACTIVATION_DURATION;
     }
     bool boosted = b->boostRemaining > 0.0f;
@@ -77,7 +77,7 @@ void UpdateBible(Bible *b, float dt, bool activate, int level,
     if (b->activationRemaining > 0.0f)
         b->activationRemaining = fmaxf(0.0f, b->activationRemaining - dt);
 
-    if (level >= 4 && inCombat) {
+    if (level >= 5 && inCombat) {
         b->holyWaterCooldown -= dt;
         if (b->holyWaterCooldown <= 0.0f) {
             int slot = 0;
@@ -182,7 +182,7 @@ bool BibleTouchesCircle(const Bible *b, Vector2 player,
 
 bool BibleBlocksCircle(const Bible *b, Vector2 player,
                        Vector2 point, float radius) {
-    if (b->level < 3 || b->boostRemaining <= 0.0f) return false;
+    if (b->level < 4 || b->boostRemaining <= 0.0f) return false;
     return BibleTouchesCircle(b, player, point, radius + 8.0f);
 }
 
@@ -197,4 +197,4 @@ bool BibleHolyWaterHits(const Bible *b, Vector2 enemy, float enemyRadius) {
     return false;
 }
 
-int BibleContactDamage(void) { return 12; }
+int BibleContactDamage(void) { return WeaponBaseDamage(1); }

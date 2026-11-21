@@ -1,9 +1,22 @@
 #ifndef BIBLE_H
 #define BIBLE_H
 #include "raylib.h"
+#include "run_progress.h"
 #define BIBLE_ACTIVATION_DURATION 0.64f
 #define BIBLE_ACTIVATION_FRAMES 8
 #define BIBLE_MAX_POOLS 4
+#define BIBLE_BASE_BOOKS 4
+#define BIBLE_L2_BOOKS 5
+#define BIBLE_L4_BOOKS 6
+#define BIBLE_BASE_ORBIT_RADIUS 90.0f
+#define BIBLE_L2_ORBIT_RADIUS 102.0f
+#define BIBLE_HIT_COOLDOWN 0.45f
+#define BIBLE_L1_KNOCKBACK 36.0f
+#define BIBLE_BASE_BOOST_DURATION 1.25f
+#define BIBLE_L3_BOOST_DURATION 1.65f
+#define BIBLE_BASE_BOOST_COOLDOWN 4.0f
+#define BIBLE_L3_BOOST_COOLDOWN 2.8f
+#define BIBLE_POOL_DAMAGE 8
 
 typedef struct HolyWaterPool {
     Vector2 position;

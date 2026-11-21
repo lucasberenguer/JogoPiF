@@ -3,11 +3,11 @@
 #include <math.h>
 #include <string.h>
 
-#define SHOT_SPEED 760.0f
+#define SHOT_SPEED GUN_BASE_SHOT_SPEED
 #define SHOT_LIFE 0.85f
 #define SHOT_RADIUS 8.0f
-#define SHOT_DAMAGE 5
-#define SHOT_INTERVAL 0.20f
+#define SHOT_DAMAGE WeaponBaseDamage(0)
+#define SHOT_INTERVAL GUN_BASE_SHOT_INTERVAL
 
 static void AddImpact(Gun *gun, Vector2 at) {
     for (int i=0; i<GUN_MAX_IMPACTS; i++) {
@@ -53,10 +53,10 @@ static Vector2 RotateDir(Vector2 dir, float radians) {
 }
 
 static void SpawnGunShot(Gun *gun, Vector2 pos, Vector2 dir, float delay,
-                         bool spawned[GUN_MAX_SHOTS]) {
+                         int maxHits, bool spawned[GUN_MAX_SHOTS]) {
     for (int i = 0; i < GUN_MAX_SHOTS; i++) {
         if (gun->shots[i].life <= 0.0f) {
-            gun->shots[i] = (GunShot){pos, dir, SHOT_LIFE, delay};
+            gun->shots[i] = (GunShot){pos, dir, SHOT_LIFE, delay, maxHits, -1};
             spawned[i] = true;
             return;
         }
@@ -65,15 +65,12 @@ static void SpawnGunShot(Gun *gun, Vector2 pos, Vector2 dir, float delay,
 
 static void SpawnSpreadShots(Gun *gun, Vector2 pos, Vector2 aim, int level,
                              float delay, bool spawned[GUN_MAX_SHOTS]) {
-    if (level < 2) {
-        SpawnGunShot(gun, pos, aim, delay, spawned);
-    } else if (level == 2) {
-        SpawnGunShot(gun, pos, RotateDir(aim, -5.0f * DEG2RAD), delay, spawned);
-        SpawnGunShot(gun, pos, RotateDir(aim, 5.0f * DEG2RAD), delay, spawned);
+    int maxHits = level >= 4 ? GUN_L4_MAX_HITS : GUN_BASE_MAX_HITS;
+    if (level < 3) {
+        SpawnGunShot(gun, pos, aim, delay, maxHits, spawned);
     } else {
-        SpawnGunShot(gun, pos, RotateDir(aim, -9.0f * DEG2RAD), delay, spawned);
-        SpawnGunShot(gun, pos, aim, delay, spawned);
-        SpawnGunShot(gun, pos, RotateDir(aim, 9.0f * DEG2RAD), delay, spawned);
+        SpawnGunShot(gun, pos, RotateDir(aim, -GUN_L3_SPREAD_DEG * DEG2RAD), delay, maxHits, spawned);
+        SpawnGunShot(gun, pos, RotateDir(aim, GUN_L3_SPREAD_DEG * DEG2RAD), delay, maxHits, spawned);
     }
 }
 
@@ -99,14 +96,14 @@ void UpdateGun(Gun *gun, const Clearing *clearing, Vector2 player,
     gun->muzzle = Vector2Add(origin, Vector2Scale(gun->aim, 32.0f));
 
     bool spawned[GUN_MAX_SHOTS] = {false};
-    float interval = level >= 1 ? 0.14f : SHOT_INTERVAL;
-    float speed = level >= 1 ? 920.0f : SHOT_SPEED;
+    float interval = level >= 1 ? GUN_L1_SHOT_INTERVAL : SHOT_INTERVAL;
+    float speed = level >= 1 ? GUN_L1_SHOT_SPEED : SHOT_SPEED;
     if (triggerPressed && gun->shotCooldown <= 0.0f) {
         float delay = GUN_POSE_DURATION * 2.0f / GUN_POSE_FRAMES;
-        if (level >= 4) {
+        if (level >= 5) {
             Vector2 perp = {-gun->aim.y, gun->aim.x};
-            Vector2 muzzleA = Vector2Add(gun->muzzle, Vector2Scale(perp, 13.0f));
-            Vector2 muzzleB = Vector2Subtract(gun->muzzle, Vector2Scale(perp, 13.0f));
+            Vector2 muzzleA = Vector2Add(gun->muzzle, Vector2Scale(perp, GUN_L5_DUAL_OFFSET));
+            Vector2 muzzleB = Vector2Subtract(gun->muzzle, Vector2Scale(perp, GUN_L5_DUAL_OFFSET));
             SpawnSpreadShots(gun, muzzleA, gun->aim, level, delay, spawned);
             SpawnSpreadShots(gun, muzzleB, gun->aim, level, delay, spawned);
         } else {
@@ -164,16 +161,28 @@ void DrawGun(const Gun *gun) {
     }
 }
 
-int GunHitCircle(Gun *gun, Vector2 enemy, float enemyRadius) {
+int GunHitEnemyCircle(Gun *gun, int enemyIndex, Vector2 enemy, float enemyRadius) {
     float limit = SHOT_RADIUS + enemyRadius;
+    int hits = 0;
     for (int i=0; i<GUN_MAX_SHOTS; i++) {
         GunShot *shot = &gun->shots[i];
         if (shot->life <= 0.0f || shot->delay > 0.0f) continue;
+        if (enemyIndex >= 0 && shot->firstHitEnemy == enemyIndex) continue;
         if (Vector2DistanceSqr(shot->position, enemy) <= limit*limit) {
             AddImpact(gun, shot->position);
-            shot->life = 0.0f;
-            return SHOT_DAMAGE;
+            if (shot->hitsRemaining <= 1) {
+                shot->life = 0.0f;
+                shot->hitsRemaining = 0;
+            } else {
+                shot->hitsRemaining--;
+                shot->firstHitEnemy = enemyIndex;
+            }
+            hits++;
         }
     }
-    return 0;
+    return hits * SHOT_DAMAGE;
+}
+
+int GunHitCircle(Gun *gun, Vector2 enemy, float enemyRadius) {
+    return GunHitEnemyCircle(gun, -1, enemy, enemyRadius);
 }

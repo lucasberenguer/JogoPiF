@@ -42,8 +42,24 @@ static Vector2 FacingVector(int facing) {
     }
 }
 
-#define KATANA_MAX_SHOCKWAVES 4
+static Vector2 RotateVector2(Vector2 dir, float radians) {
+    float c = cosf(radians), s = sinf(radians);
+    return (Vector2){dir.x * c - dir.y * s, dir.x * s + dir.y * c};
+}
+
+#define KATANA_BASE_RANGE 105.0f
+#define KATANA_L2_RANGE 123.0f
+#define KATANA_BASE_RECOVERY 0.45f
+#define KATANA_L2_RECOVERY 0.40f
+#define KATANA_BASE_ARC_DOT 0.0872f
+#define KATANA_L3_ARC_DOT -0.12f
+#define KATANA_L3_KNOCKBACK 42.0f
+#define KATANA_L1_DODGE_REDUCTION 0.8f
+#define KATANA_MAX_SHOCKWAVES 12
 #define KATANA_SHOCKWAVE_COOLDOWN 2.5f
+#define KATANA_L5_SHOCKWAVE_COOLDOWN 1.8f
+#define KATANA_L5_FAN_ANGLE_DEG 20.0f
+#define KATANA_SHOCKWAVE_DAMAGE 22
 #define KATANA_SHOCKWAVE_SPEED 620.0f
 #define KATANA_SHOCKWAVE_LIFE 0.95f
 #define KATANA_SHOCKWAVE_RADIUS 32.0f
@@ -223,7 +239,6 @@ int main(void) {
     bool showSpriteDebug = false;
     float pedestalMessageTime = 0.0f;
     const float katanaAttackDuration = 0.42f;
-    const float katanaAttackRecovery = 0.45f;
     float katanaAttackRemaining = 0.0f;
     float katanaAttackCooldown = 0.0f;
     float katanaShockwaveCooldown = 0.0f;
@@ -432,7 +447,7 @@ int main(void) {
                     .damage = 28.0f,
                     .bossPower = 1.0f,
                     .guardianIntroSeen = true,
-                    .weaponLevel = {2, 0, 0}
+                    .weaponLevel = {2, 2, 2}
                 };
                 BeginEncounter(&encounter, &enemies, &clearing, progress, clearing.spawn);
                 encounter.practice = true;
@@ -457,7 +472,7 @@ int main(void) {
                     .damage = 28.0f,
                     .bossPower = 1.0f,
                     .guardianIntroSeen = true,
-                    .weaponLevel = {2, 0, 0}
+                    .weaponLevel = {2, 2, 2}
                 };
                 BeginEncounter(&encounter, &enemies, &clearing, progress, clearing.spawn);
                 encounter.practice = true;
@@ -803,8 +818,12 @@ int main(void) {
         }
         int weaponLevel = (currentWeapon >= 0 && currentWeapon < 3)
             ? encounter.progress.weaponLevel[currentWeapon] : 0;
-        float katanaAttackRange = (currentWeapon == WEAPON_KATANA && weaponLevel >= 1) ? 130.0f : 105.0f;
-        float katanaArcDot = (currentWeapon == WEAPON_KATANA && weaponLevel >= 3) ? -0.35f : -0.12f;
+        float katanaAttackRange = (currentWeapon == WEAPON_KATANA && weaponLevel >= 2)
+            ? KATANA_L2_RANGE : KATANA_BASE_RANGE;
+        float katanaAttackRecovery = (currentWeapon == WEAPON_KATANA && weaponLevel >= 2)
+            ? KATANA_L2_RECOVERY : KATANA_BASE_RECOVERY;
+        float katanaArcDot = (currentWeapon == WEAPON_KATANA && weaponLevel >= 3)
+            ? KATANA_L3_ARC_DOT : KATANA_BASE_ARC_DOT;
 
         if (dodgeCooldown > 0.0f) dodgeCooldown -= deltaTime;
         if (katanaAttackCooldown > 0.0f) katanaAttackCooldown -= deltaTime;
@@ -855,18 +874,25 @@ int main(void) {
             katanaAttackRemaining = katanaAttackDuration;
             katanaAttackCooldown = katanaAttackRecovery;
             if (weaponLevel >= 4 && katanaShockwaveCooldown <= 0.0f) {
-                for (int s = 0; s < KATANA_MAX_SHOCKWAVES; s++) {
-                    if (katanaShockwaves[s].life <= 0.0f) {
-                        katanaShockwaves[s] = (KatanaShockwave){
-                            .position = Vector2Add((Vector2){player.x, player.y - 35.0f},
-                                                   Vector2Scale(katanaAttackDirection, 28.0f)),
-                            .direction = katanaAttackDirection,
-                            .life = KATANA_SHOCKWAVE_LIFE
-                        };
-                        katanaShockwaveCooldown = KATANA_SHOCKWAVE_COOLDOWN;
-                        break;
+                static const float fanAnglesDeg[3] = {-KATANA_L5_FAN_ANGLE_DEG, 0.0f, KATANA_L5_FAN_ANGLE_DEG};
+                int waveCount = weaponLevel >= 5 ? 3 : 1;
+                for (int w = 0; w < waveCount; w++) {
+                    float rad = (waveCount == 3 ? fanAnglesDeg[w] : 0.0f) * DEG2RAD;
+                    Vector2 waveDir = RotateVector2(katanaAttackDirection, rad);
+                    for (int s = 0; s < KATANA_MAX_SHOCKWAVES; s++) {
+                        if (katanaShockwaves[s].life <= 0.0f) {
+                            katanaShockwaves[s] = (KatanaShockwave){
+                                .position = Vector2Add((Vector2){player.x, player.y - 35.0f},
+                                                       Vector2Scale(waveDir, 28.0f)),
+                                .direction = waveDir,
+                                .life = KATANA_SHOCKWAVE_LIFE
+                            };
+                            break;
+                        }
                     }
                 }
+                katanaShockwaveCooldown = weaponLevel >= 5
+                    ? KATANA_L5_SHOCKWAVE_COOLDOWN : KATANA_SHOCKWAVE_COOLDOWN;
             }
         }
         if (dodgePressed && dodgeRemaining <= 0.0f && dodgeCooldown <= 0.0f) {
@@ -958,18 +984,19 @@ int main(void) {
                 int healthBefore = enemy->health;
                 Vector2 center = EnemyCenter(enemy);
                 if (currentWeapon == WEAPON_GUN) {
-                    int damage = GunHitCircle(&gun, center, EnemyHurtRadius(enemy));
+                    int damage = GunHitEnemyCircle(&gun, i, center, EnemyHurtRadius(enemy));
                     if (damage) DamageEnemyFrom(enemy, (int)ceilf(damage*EncounterDamage(&encounter)), player);
                 } else if (currentWeapon == WEAPON_BIBLE) {
                     if (enemy->bibleHitCooldown <= 0.0f &&
                         BibleTouchesCircle(&bible, player, center, EnemyHurtRadius(enemy)) &&
                         MapHasClearPath(&clearing,player,enemy->position)) {
                         DamageEnemyFrom(enemy, (int)ceilf(BibleContactDamage()*EncounterDamage(&encounter)), player);
-                        KnockbackEnemy(enemy, &clearing, player, 36.0f);
-                        enemy->bibleHitCooldown = 0.45f;
+                        if (weaponLevel >= 1)
+                            KnockbackEnemy(enemy, &clearing, player, BIBLE_L1_KNOCKBACK);
+                        enemy->bibleHitCooldown = BIBLE_HIT_COOLDOWN;
                     }
-                    if (weaponLevel >= 4 && BibleHolyWaterHits(&bible, enemy->position, EnemyHurtRadius(enemy))) {
-                        DamageEnemy(enemy, (int)ceilf(8 * EncounterDamage(&encounter)));
+                    if (weaponLevel >= 5 && BibleHolyWaterHits(&bible, enemy->position, EnemyHurtRadius(enemy))) {
+                        DamageEnemy(enemy, (int)ceilf(BIBLE_POOL_DAMAGE * EncounterDamage(&encounter)));
                     }
                 } else if (currentWeapon == WEAPON_KATANA) {
                     if (katanaAttackRemaining > 0.0f &&
@@ -980,14 +1007,14 @@ int main(void) {
                         if (distance < katanaAttackRange+EnemyHurtRadius(enemy) && distance > 0.0f &&
                             Vector2DotProduct(delta, katanaAttackDirection) >= katanaArcDot*distance &&
                             MapHasClearPath(&clearing,player,enemy->position)) {
-                            DamageEnemyFrom(enemy, (int)ceilf(25*EncounterDamage(&encounter)), player);
+                            DamageEnemyFrom(enemy, (int)ceilf(WeaponBaseDamage(WEAPON_KATANA)*EncounterDamage(&encounter)), player);
                             enemy->lastKatanaSwing = katanaAttackId;
-                            if (weaponLevel >= 2 && !katanaDashReducedThisSwing) {
-                                dodgeCooldown = fmaxf(0.0f, dodgeCooldown - 0.6f);
+                            if (weaponLevel >= 1 && !katanaDashReducedThisSwing) {
+                                dodgeCooldown = fmaxf(0.0f, dodgeCooldown - KATANA_L1_DODGE_REDUCTION);
                                 katanaDashReducedThisSwing = true;
                             }
                             if (weaponLevel >= 3) {
-                                KnockbackEnemy(enemy, &clearing, player, 42.0f);
+                                KnockbackEnemy(enemy, &clearing, player, KATANA_L3_KNOCKBACK);
                             }
                         }
                     }
@@ -996,7 +1023,7 @@ int main(void) {
                         if (wave->life <= 0.0f || wave->hitEnemies[i]) continue;
                         float limit = KATANA_SHOCKWAVE_RADIUS + EnemyHurtRadius(enemy);
                         if (Vector2DistanceSqr(wave->position, center) <= limit * limit) {
-                            DamageEnemyFrom(enemy, (int)ceilf(22 * EncounterDamage(&encounter)), Vector2Subtract(wave->position, Vector2Scale(wave->direction, 100)));
+                            DamageEnemyFrom(enemy, (int)ceilf(KATANA_SHOCKWAVE_DAMAGE * EncounterDamage(&encounter)), Vector2Subtract(wave->position, Vector2Scale(wave->direction, 100)));
                             wave->hitEnemies[i] = true;
                         }
                     }
