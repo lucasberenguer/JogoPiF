@@ -54,7 +54,7 @@ static void AdjustField(DevTools *tools, int index, int direction) {
             break;
         }
         case 2: tools->weapon=(tools->weapon+direction+3)%3; break;
-        case 3: tools->weaponLevel=(tools->weaponLevel+direction+4)%4; break;
+        case 3: tools->weaponLevel=(tools->weaponLevel+direction+MAX_WEAPON_LEVEL+1)%(MAX_WEAPON_LEVEL+1); break;
         case 4: tools->invincible=!tools->invincible; break;
         case 5: tools->collision=!tools->collision; break;
     }
@@ -117,7 +117,7 @@ void DrawDevTools(const DevTools *tools, bool inPractice) {
                  waves + 1);
     else
         snprintf(waveText,sizeof(waveText),"%d / %d",tools->wave,waves);
-    snprintf(levelText,sizeof(levelText),"%d / 3",tools->weaponLevel);
+    snprintf(levelText,sizeof(levelText),"%d / %d",tools->weaponLevel,MAX_WEAPON_LEVEL);
     static const char *mapNames[] = {"Clareira", "Cemitério", "Terra dos Ossos", "Campo dos Templários"};
     const char *values[]={mapNames[PracticeMapIndex(tools->map)],
         tools->wave==CLEARING_BOSS_STAGE && tools->map != TEMPLAR_FIELD_MAP ? "Chefe" : waveText,weapons[tools->weapon],
@@ -161,7 +161,7 @@ bool StartDevEncounter(const DevTools *tools, DevAction action, Encounter *e,
         action!=DEV_GUARDIAN && action!=DEV_SEAL && action!=DEV_LIBERATION && action!=DEV_PASSAGE) return false;
     if (PracticeMapIndex(tools->map) < 0 || tools->wave < 1 ||
         (tools->wave > PracticeWaves(tools->map) && tools->wave != CLEARING_BOSS_STAGE) ||
-        tools->weapon<0 || tools->weapon>2 || tools->weaponLevel<0 || tools->weaponLevel>3) return false;
+        tools->weapon<0 || tools->weapon>2 || tools->weaponLevel<0 || tools->weaponLevel>MAX_WEAPON_LEVEL) return false;
     bool aftermath=action==DEV_LIBERATION || action==DEV_PASSAGE;
     int mapId = action == DEV_GUARDIAN || aftermath ? 0 : tools->map;
     if (mapId == TEMPLAR_FIELD_MAP && action == DEV_SEAL) return false;
@@ -173,7 +173,7 @@ bool StartDevEncounter(const DevTools *tools, DevAction action, Encounter *e,
     }
     RunProgress progress=NewRunProgress(tools->weapon);
     progress.stage=action==DEV_STAGE ? tools->wave : CLEARING_BOSS_STAGE;
-    progress.weaponLevel[tools->weapon]=tools->weaponLevel;
+    SetRunWeaponLevel(&progress, tools->weaponLevel);
     progress.guardianIntroSeen=action!=DEV_GUARDIAN;
     if (aftermath) {
         progress.stage=CLEARING_COMPLETE_STAGE;

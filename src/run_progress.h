@@ -10,6 +10,11 @@
 #define TEMPLAR_FIELD_WAVES 2
 #define CLEARING_BOSS_STAGE 5
 #define CLEARING_COMPLETE_STAGE 6
+#define MAX_WEAPON_LEVEL 5
+#define WEAPON_LEVEL_DAMAGE_BONUS 0.2f
+#define EPIC_DAMAGE_STACK_BONUS 0.5f
+#define BIBLE_L1_DAMAGE_BONUS 0.15f
+#define GUN_L2_DAMAGE_BONUS 0.25f
 
 typedef enum GuardianAftermathState {
     GUARDIAN_UNPURIFIED, GUARDIAN_LIBERATION_PENDING, GUARDIAN_ALTAR_READY,
@@ -26,6 +31,7 @@ typedef struct RunProgress {
     float damage, speed, bossPower;
     int weaponLevel[3];
     int strongWeapon;
+    int epicDamageStacks;
     bool guardianIntroSeen;
     bool angelSceneCompleted;
     int angelBlessingUses;
@@ -33,8 +39,17 @@ typedef struct RunProgress {
     GuardianAftermathState guardianAftermath;
 } RunProgress;
 
+static inline void SetRunWeaponLevel(RunProgress *p, int level) {
+    for (int i = 0; i < 3; i++) p->weaponLevel[i] = level;
+}
+
+static inline int WeaponBaseDamage(int weapon) {
+    static const int baseDamages[3] = {5, 12, 20};
+    return (weapon >= 0 && weapon < 3) ? baseDamages[weapon] : 0;
+}
+
 static inline RunProgress NewRunProgress(int weapon) {
     return (RunProgress){.weapon=weapon, .stage=1, .health=100, .maxHealth=100,
-        .damage=1, .speed=240, .bossPower=1, .strongWeapon=-1};
+        .damage=1, .speed=240, .bossPower=1, .strongWeapon=-1, .epicDamageStacks=0};
 }
 #endif
