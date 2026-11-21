@@ -16,6 +16,8 @@ typedef enum GuardianAftermathState {
     GUARDIAN_PASSAGE_PENDING, GUARDIAN_PASSAGE_COMPLETE
 } GuardianAftermathState;
 
+typedef enum VillageAftermath { VILLAGE_DUEL, VILLAGE_SCENE_PENDING, VILLAGE_SCENE_SEEN } VillageAftermath;
+
 typedef struct RunProgress {
     int map;
     int weapon;
@@ -25,6 +27,9 @@ typedef struct RunProgress {
     int weaponLevel[3];
     int strongWeapon;
     bool guardianIntroSeen;
+    bool angelSceneCompleted;
+    int angelBlessingUses;
+    VillageAftermath villageAftermath;
     GuardianAftermathState guardianAftermath;
 } RunProgress;
 

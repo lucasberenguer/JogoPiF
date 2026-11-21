@@ -309,8 +309,11 @@ void DrawHumanBoss(const EnemyGroup *group, const Enemy *enemy, bool foreground)
 void VillageDrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
     for (int i = 0; i < ENEMY_COUNT; i++) {
         const Enemy *enemy = &group->list[i];
-        if (enemy->state == ENEMY_GONE) continue;
         if ((enemy->position.y >= player.y) != foreground) continue;
+        if (enemy->state == ENEMY_GONE) {
+            if (enemy->pickupAvailable) DrawHealthPickup(enemy->position);
+            continue;
+        }
 
         if (enemy->type == ENEMY_BOSS) {
             DrawHumanBoss(group, enemy, foreground);

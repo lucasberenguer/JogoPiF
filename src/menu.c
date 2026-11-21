@@ -102,6 +102,14 @@ bool SaveClearingCheckpoint(const RunProgress *p) {
         p->weapon,p->stage,p->health,p->maxHealth,p->damage,p->speed,p->bossPower,
         p->weaponLevel[0],p->weaponLevel[1],p->weaponLevel[2],p->strongWeapon,p->map,p->guardianIntroSeen,
         p->guardianAftermath);
+    if (p->villageAftermath!=VILLAGE_DUEL) {
+        size_t used=strlen(data);
+        snprintf(data+used,sizeof(data)-used,"village_aftermath=%d\n",p->villageAftermath);
+    }
+    if (p->angelSceneCompleted) {
+        size_t used=strlen(data);
+        snprintf(data+used,sizeof(data)-used,"angel_blessing=%d\n",p->angelBlessingUses);
+    }
     return SaveFileText(SavePath(), data);
 }
 
@@ -154,8 +162,17 @@ bool LoadClearingCheckpoint(RunProgress *p) {
     loaded.guardianAftermath=aftermathFormat ? (GuardianAftermathState)aftermath :
         loaded.map>0 ? GUARDIAN_PASSAGE_COMPLETE :
         loaded.stage==CLEARING_COMPLETE_STAGE ? GUARDIAN_ALTAR_READY : GUARDIAN_UNPURIFIED;
+    const char *village=strstr(data,"\nvillage_aftermath=");
+    int aftermathVillage=0;
+    bool villageValid=!village || (sscanf(village,"\nvillage_aftermath=%d",&aftermathVillage)==1 &&
+        aftermathVillage>=VILLAGE_DUEL && aftermathVillage<=VILLAGE_SCENE_SEEN);
+    loaded.villageAftermath=(VillageAftermath)aftermathVillage;
+    const char *angel=strstr(data,"\nangel_blessing=");
+    bool angelValid=!angel || (sscanf(angel+1,"angel_blessing=%d",&loaded.angelBlessingUses)==1 &&
+        loaded.angelBlessingUses>=0 && loaded.angelBlessingUses<=3);
+    loaded.angelSceneCompleted=angel!=NULL;
     UnloadFileText(data);
-    bool valid=(!currentFormat || seen==0 || seen==1) && loaded.map>=0 &&
+    bool valid=angelValid && villageValid && (!currentFormat || seen==0 || seen==1) && loaded.map>=0 &&
         loaded.map<=(aftermathFormat ? TEMPLAR_FIELD_MAP : BONELAND_MAP - 1) &&
         (loaded.map != BONELAND_MAP || loaded.stage <= BONELAND_WAVES || loaded.stage >= CLEARING_BOSS_STAGE) &&
         (loaded.map != TEMPLAR_FIELD_MAP || loaded.stage <= TEMPLAR_FIELD_WAVES || loaded.stage >= CLEARING_BOSS_STAGE) &&

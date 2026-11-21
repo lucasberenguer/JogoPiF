@@ -46,6 +46,7 @@ void InitGameAudio(GameAudio *audio) {
         audio->tracks[i].looping = true;
     }
     audio->feedback = LoadFeedback();
+    audio->villageEmergence=LoadSound("assets/cutscenes/village_aftermath/audio/emergencia.wav");
 }
 
 void UpdateGameMusic(GameAudio *audio, GameTrack track, float strength, float dt) {
@@ -73,6 +74,12 @@ void UpdateGameMusic(GameAudio *audio, GameTrack track, float strength, float dt
     }
 }
 
+void PlayVillageEmergence(const GameAudio *audio, bool initialGroup) {
+    if (!audio->villageEmergence.stream.buffer) return;
+    SetSoundVolume(audio->villageEmergence,(initialGroup ? .58f : .26f)*audio->volume[AUDIO_EFFECTS]/100.0f);
+    PlaySound(audio->villageEmergence);
+}
+
 void PlayAudioFeedback(const GameAudio *audio) {
     if (!audio->feedback.stream.buffer) return;
     SetSoundVolume(audio->feedback, audio->volume[AUDIO_EFFECTS]/100.0f);
@@ -98,6 +105,7 @@ void UnloadGameAudio(GameAudio *audio) {
     for (int i = 0; i < TRACK_COUNT; i++)
         if (audio->tracks[i].stream.buffer) UnloadMusicStream(audio->tracks[i]);
     if (audio->feedback.stream.buffer) UnloadSound(audio->feedback);
+    if (audio->villageEmergence.stream.buffer) UnloadSound(audio->villageEmergence);
     if (audio->ownsDevice) CloseAudioDevice();
     *audio = (GameAudio){0};
 }

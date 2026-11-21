@@ -181,11 +181,7 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
         const Enemy *enemy = &group->list[i];
         if ((enemy->position.y >= player.y) != foreground) continue;
         if (enemy->state == ENEMY_GONE) {
-            if (enemy->pickupAvailable) {
-                Vector2 drop = {enemy->position.x, enemy->position.y - 9};
-                DrawCircleV(drop, 9, Fade(GOLD, .65f));
-                DrawCircleV(drop, 6, RED);
-            }
+            if (enemy->pickupAvailable) DrawHealthPickup(enemy->position);
             continue;
         }
         if (enemy->state == ENEMY_SPAWNING) {
@@ -226,6 +222,7 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
         } else if (boss && enemy->guardianPhase == GUARDIAN_PHASE_TWO && enemy->health > 0) {
             DrawCircleV(enemy->position, 43, Fade(VIOLET, .26f));
         }
+        if (boss && fallen) DrawBossGroundSeal(group->sealMarker, enemy->position);
         DrawTexturePro(tex, (Rectangle){frame*cw, row*ch, pose.flip?-cw:cw, ch},
             (Rectangle){enemy->position.x, enemy->position.y+bob, width, height},
             (Vector2){width/2,height*.94f}, lean, tint);

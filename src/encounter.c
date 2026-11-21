@@ -69,23 +69,48 @@ void BeginEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing,
     if ((clearing->village || clearing->chapel || clearing->basement || clearing->invertedChapel) && progress.stage < CLEARING_BOSS_STAGE)
         progress.stage = CLEARING_BOSS_STAGE;
     *e = (Encounter){.progress=progress, .sealEnemy=-1};
+    e->chapelAltarDone=progress.angelSceneCompleted;
     StartStage(e, enemies, clearing, player);
-    BeginAreaEntry(&e->presentation);
+    if (clearing->village && progress.stage==CLEARING_BOSS_STAGE && progress.villageAftermath!=VILLAGE_DUEL) {
+        enemies->list[0].health=0;
+        enemies->list[0].state=ENEMY_FALLEN;
+        e->phase=progress.villageAftermath==VILLAGE_SCENE_PENDING ? ENCOUNTER_VILLAGE_CINEMATIC : ENCOUNTER_LETTER;
+        e->presentation=(StagePresentation){0};
+    } else BeginAreaEntry(&e->presentation);
 }
 
 bool EncounterPaused(const Encounter *e) {
     return e->guardianIntroPending || GuardianLiberationPending(e) || GuardianPassagePending(e) ||
            e->presentation.remaining>0 || e->phase == ENCOUNTER_REWARD ||
-           e->phase == ENCOUNTER_SEAL || e->phase == ENCOUNTER_LETTER ||
-           e->phase == ENCOUNTER_CHAPEL_TEXT || e->phase == ENCOUNTER_BASEMENT_PILLAR ||
+           e->phase == ENCOUNTER_SEAL || e->phase == ENCOUNTER_VILLAGE_CINEMATIC || e->phase == ENCOUNTER_LETTER ||
+           e->phase == ENCOUNTER_ANGEL_CINEMATIC || e->phase == ENCOUNTER_CHAPEL_TEXT || e->phase == ENCOUNTER_BASEMENT_PILLAR ||
            e->phase == ENCOUNTER_DEFEAT;
+}
+
+void CompleteAngelCinematic(Encounter *e, int health) {
+    if (e->phase!=ENCOUNTER_ANGEL_CINEMATIC || e->progress.angelSceneCompleted) return;
+    e->chapelAltarDone=true;
+    e->progress.angelSceneCompleted=true;
+    e->progress.angelBlessingUses=3;
+    e->progress.health=health;
+    e->phase=ENCOUNTER_FIGHT;
+    snprintf(e->notice,sizeof(e->notice),"Bênção recebida. A passagem à esquerda está aberta.");
+    if (!e->practice) SaveClearingCheckpoint(&e->progress);
+}
+
+void CompleteVillageCinematic(Encounter *e) {
+    if (e->phase!=ENCOUNTER_VILLAGE_CINEMATIC) return;
+    e->progress.villageAftermath=VILLAGE_SCENE_SEEN;
+    e->phase=ENCOUNTER_LETTER;
+    if (!e->practice) SaveClearingCheckpoint(&e->progress);
 }
 
 void CompleteGuardianIntro(Encounter *e, bool cinematicPlayed) {
     if (!e->guardianIntroPending) return;
     e->guardianIntroPending=false;
-    e->progress.guardianIntroSeen=true;
     if (cinematicPlayed) e->presentation=(StagePresentation){0};
+    if (e->progress.map==1) return;
+    e->progress.guardianIntroSeen=true;
     if (!e->practice && !SaveClearingCheckpoint(&e->progress))
         TraceLog(LOG_WARNING,"Nao foi possivel salvar a conclusao da cutscene do Guardiao.");
 }
@@ -281,6 +306,8 @@ bool ChooseEncounterReward(Encounter *e, EnemyGroup *enemies, const Clearing *cl
     e->progress.health=*health;
     if (!e->practice) SaveClearingCheckpoint(&e->progress);
     StartStage(e,enemies,clearing,player);
+    if (clearing->cemetery && e->progress.stage==CLEARING_BOSS_STAGE)
+        e->guardianIntroPending=true;
     return true;
 }
 
@@ -302,7 +329,15 @@ bool AnswerEncounterSeal(Encounter *e, EnemyGroup *enemies, int *health, int cho
     if (choice<0 || choice>=count) return false;
     int correct=enemy->type==ENEMY_BOSS?e->answer:(e->question==0 || e->question==3?0:1);
     ClearEnemyAttacks(enemies);
-    if (choice==correct) {
+    bool protectedSeal=choice!=correct && e->progress.angelBlessingUses>0 &&
+        *health<=e->progress.maxHealth/3;
+    if (protectedSeal) {
+        e->progress.angelBlessingUses--;
+        e->progress.health=*health;
+        snprintf(e->notice,sizeof(e->notice),"A bênção protegeu o selo. Restam %d usos.",e->progress.angelBlessingUses);
+        if (!e->practice) SaveClearingCheckpoint(&e->progress);
+    }
+    if (choice==correct || protectedSeal) {
         enemy->state=ENEMY_GONE;
         if (enemy->type==ENEMY_BOSS && e->progress.map==0 &&
             e->progress.stage==CLEARING_BOSS_STAGE) {
@@ -348,10 +383,6 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
         if (e->phase == ENCOUNTER_CHAPEL_TEXT) {
             if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_E) ||
                 IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                if (e->chapelTextId == 0 && !e->chapelAltarDone) {
-                    e->chapelAltarDone = true;
-                    snprintf(e->notice, sizeof(e->notice), "Passagem secreta aberta na porta superior esquerda!");
-                }
                 e->phase = ENCOUNTER_FIGHT;
             }
             return false;
@@ -359,7 +390,7 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
         if (IsKeyPressed(KEY_E)) {
             float w = (float)clearing->background.width, h = (float)clearing->background.height;
             if (Vector2Distance(player, (Vector2){w * 0.50f, h * 0.44f}) <= 125.0f) {
-                e->chapelTextId = 0; e->phase = ENCOUNTER_CHAPEL_TEXT;
+                if (!e->chapelAltarDone) e->phase=ENCOUNTER_ANGEL_CINEMATIC;
             } else if (Vector2Distance(player, (Vector2){w * 0.365f, h * 0.26f}) <= 95.0f) {
                 e->chapelTextId = 1; e->phase = ENCOUNTER_CHAPEL_TEXT;
             } else if (Vector2Distance(player, (Vector2){w * 0.63f, h * 0.26f}) <= 95.0f) {
@@ -458,9 +489,13 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
     }
     if (e->phase==ENCOUNTER_FIGHT) {
         if (e->progress.map == 2 && !e->villageHordeStarted &&
-            enemies->list[0].type == ENEMY_BOSS && enemies->list[0].state == ENEMY_FALLEN) {
+            enemies->list[0].type == ENEMY_BOSS && enemies->list[0].health<=0) {
             ClearEnemyAttacks(enemies);
-            e->phase = ENCOUNTER_LETTER;
+            enemies->list[0].state=ENEMY_FALLEN;
+            e->progress.villageAftermath=VILLAGE_SCENE_PENDING;
+            e->progress.health=*health;
+            e->phase=ENCOUNTER_VILLAGE_CINEMATIC;
+            if (!e->practice) SaveClearingCheckpoint(&e->progress);
             return false;
         }
         if (EnemiesRemaining(enemies)==0) {
@@ -754,6 +789,19 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
     }
     if (e->phase == ENCOUNTER_LETTER) {
         int sw = GetScreenWidth(), sh = GetScreenHeight();
+        Texture2D letter=enemies->villageLetter;
+        if (letter.id) {
+            const float hintHeight=36;
+            float scale=fminf(sw/(float)letter.width,fmaxf(1,sh-hintHeight)/(float)letter.height);
+            float width=letter.width*scale, height=letter.height*scale;
+            DrawRectangle(0,0,sw,sh,BLACK);
+            DrawTexturePro(letter,(Rectangle){0,0,letter.width,letter.height},
+                (Rectangle){(sw-width)/2,(sh-hintHeight-height)/2,width,height},
+                (Vector2){0},0,WHITE);
+            DrawGameTextIn("Espaço / Enter / E / Clique para continuar",
+                (Rectangle){0,sh-hintHeight,sw,hintHeight},20,GOLD,false);
+            return;
+        }
         int bw = (int)fminf(720.0f, sw - 80.0f), bh = 380;
         int bx = (sw - bw) / 2, by = (sh - bh) / 2;
         DrawRectangle(bx, by, bw, bh, (Color){38, 28, 22, 245});

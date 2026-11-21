@@ -183,6 +183,8 @@ bool StartDevEncounter(const DevTools *tools, DevAction action, Encounter *e,
     *health=progress.maxHealth;
     BeginEncounter(e,enemies,map,progress,*player);
     e->practice=true;
+    if (action==DEV_STAGE && map->cemetery && progress.stage==CLEARING_BOSS_STAGE)
+        e->guardianIntroPending=true;
     if ((!map->boneland && !map->templarField) || action == DEV_SEAL)
         e->presentation=(StagePresentation){0};
     if (action==DEV_BOSS_TWO) {
