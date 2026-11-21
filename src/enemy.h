@@ -2,6 +2,7 @@
 #define ENEMY_H
 #include "raylib.h"
 #include "clearing.h"
+#include "necromancer.h"
 
 #define ENEMY_COUNT 30
 #define ENEMY_PROJECTILE_COUNT 48
@@ -56,6 +57,7 @@ typedef struct Enemy {
     Vector2 attackDirection;
     EnemyType type;
     TemplarRole templarRole;
+    int necromancerForm;
     EnemyState state;
     int facing;
     int lastKatanaSwing;
@@ -85,6 +87,9 @@ typedef struct EnemyGroup {
     Texture2D backSprites;
     Texture2D frontSprites;
     Texture2D clearingMelee[3], clearingArcher[3], clearingSpecial[3];
+    Texture2D necromancerWalk[NECROMANCER_FORMS], necromancerSkills[NECROMANCER_FORMS];
+    Texture2D necromancerThrone, necromancerPortrait;
+    NecromancerFight necromancer;
     Texture2D templarWalk[TEMPLAR_MARSHAL + 1], templarAttack[TEMPLAR_MARSHAL + 1];
     Texture2D bonelandGhoul, bonelandCultist;
     Texture2D boneLordWalk, boneLordPounce, boneLordClaw, boneLordDash, boneLordBite;

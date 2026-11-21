@@ -260,6 +260,8 @@ int main(void) {
             if ((screen==2 || screen==3 || screen==GUARDIAN_SCREEN) && encounter.progress.stage>0) {
                 devTools.map=encounter.progress.map;
                 devTools.wave=encounter.progress.stage>CLEARING_BOSS_STAGE ? CLEARING_BOSS_STAGE : encounter.progress.stage;
+                if (clearing.necromancerArena && enemies.list[0].necromancerForm<3)
+                    devTools.wave=enemies.list[0].necromancerForm>0?enemies.list[0].necromancerForm:1;
                 devTools.weapon=encounter.progress.weapon;
                 devTools.weaponLevel=encounter.progress.weaponLevel[devTools.weapon];
             }
@@ -325,13 +327,18 @@ int main(void) {
                     ClearEnemyAttacks(&enemies);
                     encounter.presentation=(StagePresentation){0};
                     if (encounter.progress.stage==CLEARING_BOSS_STAGE &&
-                        (encounter.progress.map<=1 || encounter.progress.map==BONELAND_MAP) &&
+                        (encounter.progress.map<=1 || encounter.progress.map==BONELAND_MAP ||
+                         encounter.progress.map==NECROMANCER_MAP) &&
                         enemies.list[0].type==ENEMY_BOSS) {
                         Enemy *boss=&enemies.list[0];
                         boss->guardianPhase=GUARDIAN_PHASE_TWO;
                         boss->health=0;
                         boss->state=ENEMY_FALLEN;
                         boss->stateTime=0;
+                        if (clearing.necromancerArena) {
+                            boss->necromancerForm=3;
+                            boss->position=clearing.pedestal;
+                        }
                         player=boss->position;
                         OpenEncounterSeal(&encounter,&enemies,player);
                     } else {
@@ -565,6 +572,11 @@ int main(void) {
             EndDrawing();
             continue;
         }
+        if (clearing.necromancerArena && encounter.phase==ENCOUNTER_CLEAR &&
+            encounter.presentation.remaining<=0 && IsKeyPressed(KEY_ENTER)) {
+            screen=0;
+            continue;
+        }
         if (playerHealth <= 0) {
             Rectangle retry = {GetScreenWidth()/2.0f-150,GetScreenHeight()/2.0f+25,300,65};
             bool hover=CheckCollisionPointRec(GetMousePosition(),retry);
@@ -579,11 +591,19 @@ int main(void) {
                 RunProgress progress=practice ? encounter.progress : NewRunProgress(currentWeapon);
                 progress.health=progress.maxHealth;
                 if (practice) progress.guardianIntroSeen=true;
+                int retryForm=practice && clearing.necromancerArena ? enemies.list[0].necromancerForm : 0;
                 BeginEncounter(&encounter,&enemies,&clearing,progress,clearing.spawn);
                 encounter.practice=practice;
                 if (practice) {
                     if (!clearing.boneland) encounter.presentation=(StagePresentation){0};
-                    if (progress.stage==CLEARING_BOSS_STAGE && practiceScenario==DEV_BOSS_TWO) {
+                    if (retryForm>1) {
+                        Enemy *boss=&enemies.list[0];
+                        boss->necromancerForm=retryForm;
+                        boss->health=boss->maxHealth*(retryForm==2?70:35)/100;
+                        boss->state=ENEMY_IDLE;
+                        boss->position=clearing.pedestal;
+                    } else if (!clearing.necromancerArena && progress.stage==CLEARING_BOSS_STAGE &&
+                               practiceScenario==DEV_BOSS_TWO) {
                         enemies.list[0].guardianPhase=GUARDIAN_PHASE_TWO;
                         enemies.list[0].health=enemies.list[0].maxHealth/2;
                         enemies.list[0].state=ENEMY_IDLE;
@@ -758,8 +778,10 @@ int main(void) {
         bool toBoneland = clearing.invertedChapel && !EncounterPaused(&encounter) &&
             CheckCollisionPointRec(player, clearing.exit);
         bool toTemplarField = CanEnterTemplarField(&encounter, &clearing, player);
+        bool toNecromancer = clearing.templarField && !clearing.exitLocked &&
+                            CheckCollisionPointRec(player,(Rectangle){700,0,270,150});
         if (!entering && playerHealth > 0 &&
-            (toTemplarField || toBoneland || CanEnterVillage(&encounter, &clearing, player, interactPressed) ||
+            (toNecromancer || toTemplarField || toBoneland || CanEnterVillage(&encounter, &clearing, player, interactPressed) ||
              CanEnterChapel(&encounter, &clearing, player, interactPressed) ||
              CanEnterBasement(&encounter, &clearing, player, interactPressed) ||
              CanEnterInvertedChapel(&encounter, &clearing, player))) {
@@ -768,7 +790,7 @@ int main(void) {
             bool toChapel = clearing.village;
             bool toVillage = clearing.cemetery;
             Clearing next = {0};
-            int nextMap = toTemplarField ? TEMPLAR_FIELD_MAP : toBoneland ? BONELAND_MAP
+            int nextMap = toNecromancer ? NECROMANCER_MAP : toTemplarField ? TEMPLAR_FIELD_MAP : toBoneland ? BONELAND_MAP
                 : toInverted ? 5 : toBasement ? 4 : toChapel ? 3 : toVillage ? 2 : 1;
             if (InitCampaignMap(&next, nextMap)) {
                 UnloadClearing(&clearing);
@@ -776,7 +798,7 @@ int main(void) {
                 player = clearing.spawn;
                 RunProgress nextProgress=encounter.progress;
                 nextProgress.map = nextMap;
-                nextProgress.stage = (toInverted || toBasement || toChapel || toVillage) ? CLEARING_BOSS_STAGE : 1;
+                nextProgress.stage = (toNecromancer || toInverted || toBasement || toChapel || toVillage) ? CLEARING_BOSS_STAGE : 1;
                 if (toInverted || toBasement || toChapel || toVillage) nextProgress.guardianIntroSeen = true;
                 nextProgress.bossPower=1;
                 nextProgress.health=playerHealth;
@@ -1197,7 +1219,7 @@ int main(void) {
                     ? (clearing.boneland ? "Passagem para o Campo dos Templários"
                         : clearing.village ? "Entrar na Capela do Anjo" : "Saída para Chã da Tristeza")
                     : (clearing.templarField ? (clearing.exitLocked ? "Derrote o Marechal para liberar a escadaria"
-                        : "Escadaria liberada") : clearing.boneland ? "Terra dos Ossos"
+                        : "Suba ao Topo do Palácio") : clearing.necromancerArena ? "Topo do Palácio" : clearing.boneland ? "Terra dos Ossos"
                         : clearing.invertedChapel ? "Capela Invertida - saída ao sul"
                         : (clearing.basement ? "Porão da Capela (E nas placas da parede e nos 4 pilares)"
                         : (clearing.chapel ? (encounter.chapelAltarDone
