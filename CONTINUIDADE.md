@@ -225,3 +225,5 @@ Na entrega do pós-boss de 18/11, build em `out/review` concluído e seis testes
 - Ao trocar para o Campo no painel F1, o seletor inicia em 1/3 e inclui o Marechal em 3/3. Os botões de fase do chefe ainda abrem o duelo diretamente em prática. A Arena do Necromante e o encontro final continuam pendentes.
 
 - Validação local em out/review: os seis testes passaram, com reexecução isolada do teste de encontro após uma falha inicial ao iniciar o executável. A apresentação e a descida da escolta foram conferidas em capturas do renderizador.
+
+- **21/11 — Cutscene da vila revisada:** abre no flashback de Chã de Alegria, passa pela febre e pela tentativa do Líder de mexer no selo, depois volta ao presente para as duas falas do Líder e o fade para a carta. O antigo quadro do protagonista chorando saiu da sequência.

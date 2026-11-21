@@ -327,10 +327,12 @@ int main(void) {
         UnloadGuardianCutscene(&scene);
     }
     assert(InitVillageCutscene(&scene,.12f,.12f));
-    assert(scene.count==8 && scene.artCount==4);
+    assert(scene.count==5 && scene.artCount==4);
+    const char *villageImages[]={"cha_de_alegria.png","febre.png","selo.png","presente.png","presente.png"};
+    for (int i=0;i<scene.count;i++) assert(!strcmp(scene.scenes[i].image,villageImages[i]));
     assert(!strcmp(scene.scenes[3].narration,"Eu só queria salvá-los..."));
-    assert(!strcmp(scene.scenes[5].narration,"Mas fui eu quem condenou todos eles."));
-    if (IsAudioDeviceReady()) assert(scene.music.stream.buffer && scene.scenes[0].cue.stream.buffer);
+    assert(!strcmp(scene.scenes[4].narration,"Mas fui eu quem condenou todos eles."));
+    if (IsAudioDeviceReady()) assert(scene.music.stream.buffer && scene.scenes[1].cue.stream.buffer);
     for (int i=0;i<400 && !scene.finished;i++)
         UpdateGuardianCutscene(&scene,.1f,(GuardianCutsceneInput){0});
     assert(scene.finished && !scene.skipped);
