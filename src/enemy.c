@@ -317,6 +317,7 @@ bool InitEnemies(EnemyGroup *group) {
         if (group->cemeteryLantern[i].id) SetTextureFilter(group->cemeteryLantern[i],TEXTURE_FILTER_POINT);
     }
     group->coveiroWalk=LoadTexture("assets/coveiro_walk_v4.png");
+    group->coveiroMelee=LoadTexture("assets/coveiro_melee_v4.png");
     group->cemeterySpell=LoadTexture("assets/zumbi_lanterna_projetil.png");
     group->boss[0] = LoadTexture("assets/coveiro_slam_v3.png");
     group->boss[1] = LoadTexture("assets/coveiro_throw_v4.png");
@@ -326,13 +327,14 @@ bool InitEnemies(EnemyGroup *group) {
     group->effects[2]=LoadTexture("assets/coveiro_efeito_investida.png");
     if (!group->cemeteryZombie[0].id || !group->cemeteryZombie[1].id || !group->cemeteryZombie[2].id ||
         !group->cemeteryLantern[0].id || !group->cemeteryLantern[1].id || !group->cemeteryLantern[2].id ||
-        !group->coveiroWalk.id || !group->cemeterySpell.id || !group->boss[0].id ||
+        !group->coveiroWalk.id || !group->coveiroMelee.id || !group->cemeterySpell.id || !group->boss[0].id ||
         !group->boss[1].id || !group->boss[2].id || !group->effects[0].id ||
         !group->effects[1].id || !group->effects[2].id) {
         UnloadEnemies(group);
         return false;
     }
     SetTextureFilter(group->coveiroWalk,TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->coveiroMelee,TEXTURE_FILTER_POINT);
     SetTextureFilter(group->cemeterySpell,TEXTURE_FILTER_POINT);
     for (int i=0;i<3;i++) SetTextureFilter(group->boss[i], TEXTURE_FILTER_POINT);
     for (int i=0;i<3;i++) SetTextureFilter(group->effects[i], TEXTURE_FILTER_POINT);
@@ -465,6 +467,7 @@ void UnloadEnemies(EnemyGroup *group) {
     for (int i=0;i<3;i++) if (group->cemeteryZombie[i].id) UnloadTexture(group->cemeteryZombie[i]);
     for (int i=0;i<3;i++) if (group->cemeteryLantern[i].id) UnloadTexture(group->cemeteryLantern[i]);
     if (group->coveiroWalk.id) UnloadTexture(group->coveiroWalk);
+    if (group->coveiroMelee.id) UnloadTexture(group->coveiroMelee);
     if (group->cemeterySpell.id) UnloadTexture(group->cemeterySpell);
     for (int i=0;i<3;i++) if (group->boss[i].id) UnloadTexture(group->boss[i]);
     for (int i=0;i<3;i++) if (group->effects[i].id) UnloadTexture(group->effects[i]);

@@ -294,6 +294,20 @@ int main(void) {
            fabsf(group.cemeteryProjectiles[0].velocity.y) >= 739);
     ClearEnemyAttacks(&group);
     coveiro->state=ENEMY_IDLE;coveiro->attackCooldown=10;
+    coveiro->position=(Vector2){700,400};
+    coveiro->guardianMeleeCooldown=0;
+    coveiro->power=1;
+    group.playerHitCooldown=0;health=100;
+    UpdateEnemies(&group,&map,target,.01f,false,&health,100);
+    assert(coveiro->state==ENEMY_ATTACK && coveiro->guardianMelee && coveiro->facing==3);
+    assert(CemeteryAnimationPose(coveiro).atlas==CEM_BOSS_MELEE && CemeteryAnimationPose(coveiro).frame==0);
+    UpdateEnemies(&group,&map,target,.34f,false,&health,100);
+    assert(health==100 && !coveiro->attackConnected);
+    UpdateEnemies(&group,&map,target,.03f,false,&health,100);
+    assert(health==72 && coveiro->attackConnected && CemeteryAnimationPose(coveiro).frame==3);
+    UpdateEnemies(&group,&map,target,.45f,false,&health,100);
+    assert(coveiro->state==ENEMY_IDLE && !coveiro->guardianMelee && coveiro->guardianMeleeCooldown>0);
+    coveiro->position=(Vector2){800,600};
     group.playerHitCooldown=0;health=100;
     group.cemeteryProjectiles[0]=(CemeteryProjectile){.active=true,
         .position={target.x-40,target.y+35},.velocity={620,0},.life=2,.damage=38};

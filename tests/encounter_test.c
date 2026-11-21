@@ -905,6 +905,14 @@ int main(void) {
         .position={850+i*150,350+i*110},.velocity={740,(i-1)*180},.life=1.9f-i*.08f};
     Capture("audit/cemetery_attack_poses_shovel_v4.png",&encounter,&enemies,&clearing,(Vector2){30,30});
     ClearEnemyAttacks(&enemies);
+    for(int i=0;i<ENEMY_COUNT;i++) enemies.list[i]=(Enemy){.state=ENEMY_GONE};
+    for(int face=0;face<4;face++) for(int beat=0;beat<4;beat++) {
+        enemies.list[face*4+beat]=(Enemy){.position={380+beat*270,250+face*155},
+            .type=ENEMY_BOSS,.state=ENEMY_ATTACK,.guardianMelee=true,.facing=face,
+            .stateTime=(float[]){.10f,.28f,.40f,.65f}[beat],.health=2420,.maxHealth=2420};
+    }
+    Capture("audit/cemetery_melee_poses_v4.png",&encounter,&enemies,&clearing,(Vector2){30,30});
+    ClearEnemyAttacks(&enemies);
     player=clearing.spawn;health=100;
     RunProgress cemeteryProgress=NewRunProgress(0);
     cemeteryProgress.damage=1.4f;

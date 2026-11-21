@@ -7,6 +7,11 @@
 #define COVEIRO_ROOT_DAMAGE 44
 #define COVEIRO_SHOVEL_DAMAGE 38
 #define COVEIRO_CHARGE_DAMAGE 42
+#define COVEIRO_MELEE_RANGE 122.0f
+#define COVEIRO_MELEE_DAMAGE 28
+#define COVEIRO_MELEE_COOLDOWN 1.65f
+#define COVEIRO_MELEE_WINDUP .36f
+#define COVEIRO_MELEE_DURATION .78f
 #define COVEIRO_MOVEMENT_SCALE .92f
 #define COVEIRO_CHARGE_SPEED (560.0f * COVEIRO_MOVEMENT_SCALE)
 #define COVEIRO_ENRAGED_CHARGE_SPEED (680.0f * COVEIRO_MOVEMENT_SCALE)
@@ -66,6 +71,26 @@ void CemeteryUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
     bool phaseTwo = boss->guardianPhase == GUARDIAN_PHASE_TWO;
     if (boss->state == ENEMY_ATTACK) {
         float t = boss->stateTime;
+        if (boss->guardianMelee) {
+            if (t >= COVEIRO_MELEE_WINDUP && !boss->attackConnected) {
+                boss->attackConnected = true;
+                Vector2 offset = Vector2Subtract(player, boss->position);
+                float distance = Vector2Length(offset);
+                if (distance <= COVEIRO_MELEE_RANGE &&
+                    Vector2DotProduct(offset, boss->attackDirection) >= distance * .42f &&
+                    MapHasClearPath(map, boss->position, player)) {
+                    HitPlayer(group, dodging, health, (int)(COVEIRO_MELEE_DAMAGE * boss->power));
+                }
+            }
+            if (t >= COVEIRO_MELEE_WINDUP && t < COVEIRO_MELEE_WINDUP + .16f)
+                MoveEnemy(map, boss, Vector2Scale(boss->attackDirection, 95 * COVEIRO_MOVEMENT_SCALE * dt));
+            if (t >= COVEIRO_MELEE_DURATION) {
+                boss->state = ENEMY_IDLE;
+                boss->stateTime = 0;
+                boss->guardianMelee = false;
+            }
+            return;
+        }
         if (t >= COVEIRO_WINDUP && !boss->attackConnected) {
             if (boss->bossAttack == COVEIRO_SHOVEL) {
                 boss->attackConnected = true;
@@ -114,7 +139,17 @@ void CemeteryUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
     Vector2 offset = Vector2Subtract(player, boss->position);
     float distance = Vector2Length(offset);
     boss->facing = fabsf(offset.x) > fabsf(offset.y) ? (offset.x < 0 ? 2 : 3) : (offset.y < 0 ? 1 : 0);
-    if (distance <= 560 && boss->attackCooldown <= 0) {
+    bool melee = distance <= COVEIRO_MELEE_RANGE && boss->guardianMeleeCooldown <= 0 &&
+                 MapHasClearPath(map, boss->position, player);
+    if (melee) {
+        const Vector2 directions[] = {{0, 1}, {0, -1}, {-1, 0}, {1, 0}};
+        boss->state = ENEMY_ATTACK;
+        boss->stateTime = 0;
+        boss->attackConnected = false;
+        boss->guardianMelee = true;
+        boss->guardianMeleeCooldown = phaseTwo ? 1.25f : COVEIRO_MELEE_COOLDOWN;
+        boss->attackDirection = directions[boss->facing];
+    } else if (distance <= 560 && boss->attackCooldown <= 0) {
         boss->bossAttack = (boss->bossAttack + 1) % COVEIRO_ATTACK_COUNT;
         boss->state = ENEMY_ATTACK;
         boss->stateTime = 0;
@@ -123,7 +158,7 @@ void CemeteryUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
         boss->attackTarget = player;
         boss->attackDirection = distance > .01f ? Vector2Normalize(offset) : (Vector2){0, 1};
         boss->attackCooldown = phaseTwo ? 1.75f : 2.65f;
-    } else if (distance > 150) {
+    } else if (distance > 110) {
         boss->state = ENEMY_WALK;
         boss->walkTime+=dt;
         MoveEnemy(map, boss, Vector2Scale(Vector2Normalize(offset), boss->speed * COVEIRO_MOVEMENT_SCALE * (phaseTwo ? 1.5f : 1) * dt));
@@ -139,6 +174,16 @@ CemeteryPose CemeteryAnimationPose(const Enemy *enemy) {
         if(enemy->state==ENEMY_WALK) p.frame=(int)(enemy->walkTime*18)%12;
         else if(enemy->state==ENEMY_IDLE) p.frame=(int)(enemy->stateTime*5)%2;
         if(enemy->state==ENEMY_ATTACK) {
+            if (enemy->guardianMelee) {
+                p.atlas = CEM_BOSS_MELEE;
+                p.columns = 6;
+                float t = enemy->stateTime;
+                if (t < COVEIRO_MELEE_WINDUP) p.frame = (int)fminf(t / COVEIRO_MELEE_WINDUP * 3.0f, 2.0f);
+                else if (t < COVEIRO_MELEE_WINDUP + .16f) p.frame = 3;
+                else if (t < COVEIRO_MELEE_WINDUP + .30f) p.frame = 4;
+                else p.frame = 5;
+                return p;
+            }
             p.atlas=CEM_BOSS_SLAM+enemy->bossAttack;
             p.columns=6;
             float t=enemy->stateTime;
@@ -203,7 +248,7 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
         float collapse = fallen ? 1.0f :
             (boss && enemy->state == ENEMY_DIE ? Clamp(enemy->stateTime / .85f, 0.0f, 1.0f) : 0.0f);
         CemeteryPose pose=CemeteryAnimationPose(enemy);
-        const Texture2D atlases[]={group->coveiroWalk,group->boss[0],group->boss[1],group->boss[2],
+        const Texture2D atlases[]={group->coveiroWalk,group->boss[0],group->boss[1],group->boss[2],group->coveiroMelee,
             group->cemeteryZombie[0],group->cemeteryZombie[1],group->cemeteryZombie[2],
             group->cemeteryLantern[0],group->cemeteryLantern[1],group->cemeteryLantern[2]};
         Texture2D tex=atlases[pose.atlas];
@@ -247,7 +292,7 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
             DrawRectangle(x, y, 48, 5, DARKGRAY);
             DrawRectangle(x, y, 48*enemy->health/enemy->maxHealth, 5, RED);
         }
-        if (boss && enemy->state == ENEMY_ATTACK) {
+        if (boss && enemy->state == ENEMY_ATTACK && !enemy->guardianMelee) {
             Color warning = enemy->stateTime < COVEIRO_WINDUP ? Fade(VIOLET, .45f) : VIOLET;
             bool phaseTwo = enemy->guardianPhase == GUARDIAN_PHASE_TWO;
             if(enemy->bossAttack==COVEIRO_SHOVEL && enemy->stateTime<COVEIRO_WINDUP) {
@@ -283,7 +328,7 @@ void DrawEnemyProjectiles(const EnemyGroup *group) {
         if(root->age<.8f) DrawCircleLines((int)root->position.x,(int)root->position.y,62,GREEN);
         else DrawEffect(group->effects[0],root->position,(int)fminf((root->age-.8f)*10,7),124);
     }
-    if (boss->type == ENEMY_BOSS && boss->state == ENEMY_ATTACK && boss->stateTime >= COVEIRO_WINDUP) {
+    if (boss->type == ENEMY_BOSS && boss->state == ENEMY_ATTACK && !boss->guardianMelee && boss->stateTime >= COVEIRO_WINDUP) {
         int frame = (int)fminf((boss->stateTime-COVEIRO_WINDUP)/1.2f*8, 7);
         if (boss->bossAttack == COVEIRO_ROOTS)
             DrawEffect(group->effects[0], boss->attackTarget, frame, boss->guardianPhase == GUARDIAN_PHASE_TWO ? 230 : 190);

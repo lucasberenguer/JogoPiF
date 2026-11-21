@@ -113,7 +113,7 @@ typedef struct EnemyGroup {
     Texture2D villageBossWalk, villageBossAttack, villageBossCharge;
     Texture2D villageZombie[VILLAGE_ZOMBIE_ATLAS_COUNT];
     Texture2D cemeteryZombie[3], cemeteryLantern[3], cemeterySpell;
-    Texture2D coveiroWalk,boss[3],effects[3];
+    Texture2D coveiroWalk,coveiroMelee,boss[3],effects[3];
     EnemyImpact impacts[16], templarBlood;
     CemeteryProjectile cemeteryProjectiles[CEMETERY_PROJECTILE_COUNT];
 } EnemyGroup;
@@ -147,7 +147,7 @@ bool EnemyShouldDrop(EnemyType type, int roll);
 int EnemyAnimationFrame(const Enemy *enemy);
 void DrawEnemyDebug(const EnemyGroup *group);
 typedef struct CemeteryPose { int atlas,columns,rows,row,frame; bool flip; } CemeteryPose;
-enum { CEM_BOSS_WALK,CEM_BOSS_SLAM,CEM_BOSS_THROW,CEM_BOSS_CHARGE,
+enum { CEM_BOSS_WALK,CEM_BOSS_SLAM,CEM_BOSS_THROW,CEM_BOSS_CHARGE,CEM_BOSS_MELEE,
        CEM_ZOMBIE_IDLE,CEM_ZOMBIE_WALK,CEM_ZOMBIE_ATTACK,
        CEM_LANTERN_IDLE,CEM_LANTERN_WALK,CEM_LANTERN_ATTACK };
 #define CEM_ZOMBIE_HIT_TIME .41f
