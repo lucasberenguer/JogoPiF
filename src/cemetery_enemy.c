@@ -131,8 +131,7 @@ void CemeteryUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
 }
 
 CemeteryPose CemeteryAnimationPose(const Enemy *enemy) {
-    CemeteryPose p={CEM_SKELETON_SIDE,5,5,0,0,false};
-    bool dead=enemy->state==ENEMY_DIE || enemy->state==ENEMY_FALLEN;
+    CemeteryPose p;
     if(enemy->type==ENEMY_BOSS) {
         p=(CemeteryPose){CEM_BOSS_WALK,12,4,enemy->facing,0,false};
         /* Lateral assets are authored facing right; mirror them explicitly. */
@@ -156,23 +155,31 @@ CemeteryPose CemeteryAnimationPose(const Enemy *enemy) {
         }
         return p;
     }
-    if(enemy->type==ENEMY_COMMON_RANGED) {
-        const int directions[]={0,1,3,2};
-        p=(CemeteryPose){CEM_MAGE,4,4,directions[enemy->facing],0,false};
-        if(enemy->state==ENEMY_WALK) p.frame=(int)(enemy->walkTime*9)%2;
-        if(enemy->state==ENEMY_ATTACK) p.frame=enemy->stateTime<.25f?0:enemy->stateTime<.55f?1:enemy->stateTime<.75f?2:3;
+    const int rows[]={0,2,3,1}; // down, up, left, right
+    if (enemy->type==ENEMY_COMMON_RANGED) {
+        p=(CemeteryPose){CEM_LANTERN_IDLE,4,4,rows[enemy->facing],0,false};
+        if (enemy->state==ENEMY_WALK) {
+            p.atlas=CEM_LANTERN_WALK;
+            p.columns=6;
+            p.frame=(int)(enemy->walkTime*9)%6;
+        } else if (enemy->state==ENEMY_ATTACK) {
+            p.atlas=CEM_LANTERN_ATTACK;
+            p.columns=6;
+            float t=enemy->stateTime;
+            if (t<CEM_LANTERN_RELEASE_TIME) p.frame=(int)fminf(3, t*4/CEM_LANTERN_RELEASE_TIME);
+            else p.frame=t<.73f?4:5;
+        } else if (enemy->state==ENEMY_IDLE) p.frame=(int)(enemy->stateTime*5)%4;
         return p;
     }
-    if(!dead && enemy->facing<2) {
-        p=(CemeteryPose){enemy->facing==1?CEM_SKELETON_BACK:CEM_SKELETON_FRONT,4,2,
-            enemy->state==ENEMY_WALK || enemy->state==ENEMY_ATTACK?1:0,0,false};
-        p.frame=(int)((enemy->state==ENEMY_WALK?enemy->walkTime:enemy->stateTime)*10)%4;
-    } else {
-        p.flip=enemy->facing==2;
-        p.row=dead?4:enemy->state==ENEMY_ATTACK?2:enemy->state==ENEMY_HURT?3:enemy->state==ENEMY_WALK?1:0;
-        p.frame=dead?(enemy->state==ENEMY_FALLEN?4:(int)fminf(enemy->stateTime*6,4)):
-            enemy->state==ENEMY_ATTACK?(int)fminf(enemy->stateTime*9,4):(int)(enemy->walkTime*10)%5;
-    }
+    p=(CemeteryPose){CEM_ZOMBIE_IDLE,4,4,rows[enemy->facing],0,false};
+    if (enemy->state==ENEMY_WALK) {
+        p.atlas=CEM_ZOMBIE_WALK;
+        p.frame=(int)(enemy->walkTime*9)%4;
+    } else if (enemy->state==ENEMY_ATTACK) {
+        p.atlas=CEM_ZOMBIE_ATTACK;
+        p.columns=6;
+        p.frame=(int)fminf(5,enemy->stateTime*4/CEM_ZOMBIE_HIT_TIME);
+    } else if (enemy->state==ENEMY_IDLE) p.frame=(int)(enemy->stateTime*5)%4;
     return p;
 }
 
@@ -192,17 +199,17 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
         }
 
         bool boss = enemy->type == ENEMY_BOSS;
-        bool ranged = enemy->type == ENEMY_COMMON_RANGED;
         bool fallen = enemy->state == ENEMY_FALLEN;
         CemeteryPose pose=CemeteryAnimationPose(enemy);
-        const Texture2D atlases[]={group->skeleton,group->skeletonFront,group->skeletonBack,
-            group->mage,group->coveiroWalk,group->boss[0],group->boss[1],group->boss[2]};
+        const Texture2D atlases[]={group->coveiroWalk,group->boss[0],group->boss[1],group->boss[2],
+            group->cemeteryZombie[0],group->cemeteryZombie[1],group->cemeteryZombie[2],
+            group->cemeteryLantern[0],group->cemeteryLantern[1],group->cemeteryLantern[2]};
         Texture2D tex=atlases[pose.atlas];
         int frame=pose.frame,row=pose.row;
         float cw=(float)tex.width/pose.columns,ch=(float)tex.height/pose.rows;
-        float height=boss?190:80;
+        float height=boss?190:96;
         float width=height*cw/ch;
-        float bob=ranged && enemy->state==ENEMY_WALK?sinf(enemy->walkTime*12)*1.5f:0;
+        float bob=0;
         float lean=0;
         if(boss && !fallen && enemy->state!=ENEMY_DIE) {
             if(enemy->state==ENEMY_WALK) {bob=-fabsf(sinf(enemy->walkTime*14))*3;lean=sinf(enemy->walkTime*14)*1.5f;}
@@ -213,7 +220,8 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
                 bob=-fabsf(sinf(t*9))*2;
             } else bob=sinf(enemy->stateTime*5)*1.2f;
         }
-        Color tint = enemy->state == ENEMY_HURT ? RED : enemy->type == ENEMY_SPECIAL ? VIOLET : WHITE;
+        Color tint = enemy->state == ENEMY_HURT ? RED : WHITE;
+        if (!boss && enemy->state==ENEMY_DIE) tint=Fade(tint,fmaxf(0,1-enemy->stateTime/.45f));
         if (boss && (fallen || enemy->state == ENEMY_DIE)) tint = Fade(tint, .45f);
         if (boss && enemy->guardianPhase == GUARDIAN_PHASE_TRANSITION) {
             float radius = 50 + 120 * enemy->stateTime;
@@ -225,11 +233,9 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
         if (boss && fallen) DrawBossGroundSeal(group->sealMarker, enemy->position);
         DrawTexturePro(tex, (Rectangle){frame*cw, row*ch, pose.flip?-cw:cw, ch},
             (Rectangle){enemy->position.x, enemy->position.y+bob, width, height},
-            (Vector2){width/2,height*.94f}, lean, tint);
+            (Vector2){width/2,height*(boss?.94f:.914f)}, lean, tint);
 
         if (fallen) DrawGameText("E: selar", (int)enemy->position.x-30, (int)enemy->position.y+10, 16, GOLD);
-        if (enemy->type == ENEMY_SPECIAL && enemy->state == ENEMY_ATTACK && enemy->stateTime < .5f)
-            DrawCircleLines((int)enemy->position.x, (int)enemy->position.y, 55, ORANGE);
         if (!boss && EnemyCanBeHit(enemy) && enemy->health < enemy->maxHealth) {
             int x = (int)enemy->position.x-24, y = (int)(enemy->position.y-height)-8;
             DrawRectangle(x, y, 48, 5, DARKGRAY);

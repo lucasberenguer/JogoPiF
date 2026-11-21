@@ -429,6 +429,15 @@ int main(void) {
     encounter.presentation.remaining=0;
     Capture("audit/cemetery_directions_v3.png",&encounter,&enemies,&clearing,(Vector2){30,30});
     for(int i=0;i<ENEMY_COUNT;i++) enemies.list[i]=(Enemy){.state=ENEMY_GONE};
+    for (int face=0;face<4;face++) {
+        enemies.list[face]=(Enemy){.position={380+face*270,520},.type=ENEMY_COMMON_RANGED,
+            .state=ENEMY_ATTACK,.stateTime=CEM_LANTERN_RELEASE_TIME,.facing=face,.health=50,.maxHealth=50};
+    }
+    enemies.projectiles[0]=(EnemyProjectile){{800,455},{1,0},3.76f,10};
+    enemies.impacts[0]=(EnemyImpact){.position={920,450},.remaining=.27f,.direction={1,0}};
+    Capture("audit/cemetery_lantern_cast.png",&encounter,&enemies,&clearing,(Vector2){30,30});
+    ClearEnemyAttacks(&enemies);
+    for(int i=0;i<ENEMY_COUNT;i++) enemies.list[i]=(Enemy){.state=ENEMY_GONE};
     for(int attack=0;attack<3;attack++) for(int beat=0;beat<4;beat++) {
         enemies.list[attack*4+beat]=(Enemy){.position={380+beat*270,300+attack*185},
             .type=ENEMY_BOSS,.state=ENEMY_ATTACK,.bossAttack=attack,

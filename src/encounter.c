@@ -42,7 +42,7 @@ static void StartStage(Encounter *e, EnemyGroup *enemies, const Clearing *cleari
             : clearing->boneland ? "Terra dos Ossos" : clearing->invertedChapel ? "Capela Invertida"
             : (clearing->basement ? "Porão da Capela"
             : (clearing->chapel ? "Capela do Anjo"
-            : (clearing->village ? "Vila Lascada"
+            : (clearing->village ? "Chã da Tristeza"
             : (clearing->cemetery ? "Cemitério das Raízes" : "Clareira do Selo"))));
         const char *bossTitle = clearing->necromancerArena ? "Necromante" :
             clearing->templarField ? "Marechal Carmesim"
@@ -559,16 +559,16 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
                 const char *sub = clearing->templarField ? "A escadaria está livre"
                     : clearing->boneland ? "Siga pela passagem ao norte" : e->progress.map == 2
                     ? "Ultimo registro: \"Sobrevivi, mas falhei em salva-los...\""
-                    : (e->progress.map == 1 ? "A saida a direita leva a Vila Lascada"
+                    : (e->progress.map == 1 ? "A saída à direita leva a Chã da Tristeza"
                                             : "O altar agora leva ao cemiterio");
                 BeginStagePresentation(&e->presentation, 0, sub, NULL);
                 e->presentation.announcement = clearing->templarField ? "Marechal Carmesim derrotado"
-                    : clearing->boneland ? "Terra dos Ossos limpa" : e->progress.map == 2 ? "VILA LASCADA LIMPA"
+                    : clearing->boneland ? "Terra dos Ossos limpa" : e->progress.map == 2 ? "CHÃ DA TRISTEZA LIMPA"
                     : (e->progress.map == 1 ? "CEMITERIO LIMPO" : "CLAREIRA LIMPA");
                 e->presentation.duration=e->presentation.remaining=2.5f;
                 if (clearing->boneland) QueueAreaUnlock(&e->presentation, "Campo de Batalha dos Templários");
                 else if (!clearing->templarField) QueueAreaUnlock(&e->presentation, e->progress.map == 2 ? "Capela do Anjo"
-                    : (e->progress.map == 1 ? "Vila Lascada" : "Cemitério das Raízes"));
+                    : (e->progress.map == 1 ? "Chã da Tristeza" : "Cemitério das Raízes"));
                 if (!e->practice) SaveClearingCheckpoint(&e->progress);
             } else {
                 e->phase=ENCOUNTER_REWARD; e->rerolled=false; RollRewards(e);
@@ -653,9 +653,9 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
     const char *mapLabel = e->progress.map == BONELAND_MAP ? "Terra dos Ossos" : e->progress.map == 5 ? "Capela Invertida"
         : (e->progress.map == 4 ? "Porão da Capela"
         : (e->progress.map == 3 ? "Capela do Anjo"
-        : (e->progress.map == 2 ? "Vila Lascada"
+        : (e->progress.map == 2 ? "Chã da Tristeza"
         : (e->progress.map == 1 ? "Cemitério" : "Clareira"))));
-    const char *clearLabel = e->progress.map == 2 ? "Vila Lascada limpa - siga pelo arco ao topo"
+    const char *clearLabel = e->progress.map == 2 ? "Chã da Tristeza limpa - siga pelo arco ao topo"
         : (e->progress.map == 1 ? "Cemitério limpo - siga pela saída à direita"
                                 : "Clareira limpa - altar liberado");
     const char *bossLabel = e->progress.map == NECROMANCER_MAP ? "Necromante" : e->progress.map == BONELAND_MAP ? boneLordName
@@ -877,7 +877,7 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         const char *ltitle = "Último Registro do Líder da Vila";
         DrawGameTextIn(ltitle, (Rectangle){(float)bx, (float)(by + 18), (float)bw, 34}, 28, GOLD, true);
         static const char *lines[] = {
-            "\"Quando a névoa rubra desceu sobre a Vila Lascada, nenhum",
+            "\"Quando a névoa rubra desceu sobre a Chã de Alegria, nenhum",
             "dos nossos conseguiu resistir à febre que tomou o vale.",
             "Enterramos dezenas no Cemitério das Raízes antes que os",
             "próprios mortos começassem a responder ao chamado do selo.",
