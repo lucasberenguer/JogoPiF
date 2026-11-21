@@ -27,6 +27,7 @@ typedef enum VillageAftermath { VILLAGE_DUEL, VILLAGE_SCENE_PENDING, VILLAGE_SCE
 typedef struct RunProgress {
     int map;
     int weapon;
+    int initialWeapon;
     int stage; /* 1..4: waves, 5: boss, 6: clearing sealed */
     int health, maxHealth;
     float damage, speed, bossPower;
@@ -51,7 +52,7 @@ static inline int WeaponBaseDamage(int weapon) {
 }
 
 static inline RunProgress NewRunProgress(int weapon) {
-    return (RunProgress){.weapon=weapon, .stage=1, .health=100, .maxHealth=100,
+    return (RunProgress){.weapon=weapon, .initialWeapon=weapon, .stage=1, .health=100, .maxHealth=100,
         .damage=1, .speed=240, .bossPower=1, .strongWeapon=-1, .epicDamageStacks=0};
 }
 #endif

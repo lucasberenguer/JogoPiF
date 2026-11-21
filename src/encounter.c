@@ -542,7 +542,9 @@ bool AnswerEncounterSeal(Encounter *e, EnemyGroup *enemies, int *health, int cho
             e->presentation.duration=e->presentation.remaining=3.5f;
             if (!e->practice) SaveClearingCheckpoint(&e->progress);
         } else if (finalAttempt) {
-            if (!e->practice) SaveMenuCheckpoint(e->progress.weapon);
+            int startWeapon = (e->progress.initialWeapon >= 0 && e->progress.initialWeapon < 3)
+                ? e->progress.initialWeapon : e->progress.weapon;
+            if (!e->practice) SaveMenuCheckpoint(startWeapon);
             e->phase=ENCOUNTER_DEFEAT;
             *health=0;
         } else {

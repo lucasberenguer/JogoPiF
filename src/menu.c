@@ -97,12 +97,17 @@ bool SaveMenuCheckpoint(int weapon) {
 }
 
 bool SaveClearingCheckpoint(const RunProgress *p) {
-    char data[256];
+    char data[320];
     int level = (p->weapon >= 0 && p->weapon < 3) ? p->weaponLevel[p->weapon] : p->weaponLevel[0];
+    int initWeapon = (p->initialWeapon >= 0 && p->initialWeapon < 3) ? p->initialWeapon : p->weapon;
     snprintf(data,sizeof(data),"PIF-RUN-8 %d %d %d %d %.6f %.6f %.6f %d %d %d %d %d %d %d %d\n",
         p->weapon,p->stage,p->health,p->maxHealth,p->damage,p->speed,p->bossPower,
         level,level,level,p->strongWeapon,p->map,p->guardianIntroSeen,
         p->guardianAftermath,p->epicDamageStacks);
+    if (initWeapon >= 0 && initWeapon < 3) {
+        size_t used=strlen(data);
+        snprintf(data+used,sizeof(data)-used,"initial_weapon=%d\n",initWeapon);
+    }
     if (p->villageAftermath!=VILLAGE_DUEL) {
         size_t used=strlen(data);
         snprintf(data+used,sizeof(data)-used,"village_aftermath=%d\n",p->villageAftermath);
@@ -190,8 +195,13 @@ bool LoadClearingCheckpoint(RunProgress *p) {
     const char *finalSeal=strstr(data,"\nfinal_seal_failures=");
     bool finalSealValid=!finalSeal || (sscanf(finalSeal+1,"final_seal_failures=%d",&loaded.finalSealFailures)==1 &&
         loaded.map==NECROMANCER_MAP && loaded.finalSealFailures>0 && loaded.finalSealFailures<3);
+    const char *initW=strstr(data,"\ninitial_weapon=");
+    int parsedInitWeapon=loaded.weapon;
+    bool initWeaponValid=!initW || (sscanf(initW+1,"initial_weapon=%d",&parsedInitWeapon)==1 &&
+        parsedInitWeapon>=0 && parsedInitWeapon<3);
+    loaded.initialWeapon=parsedInitWeapon;
     UnloadFileText(data);
-    bool valid=finalSealValid && angelValid && villageValid && (!currentFormat || seen==0 || seen==1) && loaded.map>=0 &&
+    bool valid=initWeaponValid && finalSealValid && angelValid && villageValid && (!currentFormat || seen==0 || seen==1) && loaded.map>=0 &&
         loaded.map<=(aftermathFormat ? NECROMANCER_MAP : BONELAND_MAP - 1) &&
         (loaded.map != BONELAND_MAP || loaded.stage <= BONELAND_WAVES || loaded.stage >= CLEARING_BOSS_STAGE) &&
         (loaded.map != NECROMANCER_MAP || loaded.stage >= CLEARING_BOSS_STAGE) &&

@@ -449,6 +449,7 @@ int main(void) {
                     .map = 2,
                     .stage = CLEARING_BOSS_STAGE,
                     .weapon = WEAPON_KATANA,
+                    .initialWeapon = WEAPON_KATANA,
                     .health = 140,
                     .maxHealth = 140,
                     .speed = 235.0f,
@@ -474,6 +475,7 @@ int main(void) {
                     .map = 3,
                     .stage = CLEARING_BOSS_STAGE,
                     .weapon = WEAPON_KATANA,
+                    .initialWeapon = WEAPON_KATANA,
                     .health = 140,
                     .maxHealth = 140,
                     .speed = 235.0f,
@@ -594,17 +596,37 @@ int main(void) {
             continue;
         }
         if (playerHealth <= 0) {
-            Rectangle retry = {GetScreenWidth()/2.0f-150,GetScreenHeight()/2.0f+25,300,65};
-            bool hover=CheckCollisionPointRec(GetMousePosition(),retry);
+            float sw = (float)GetScreenWidth();
+            float sh = (float)GetScreenHeight();
+            float centerX = sw / 2.0f;
+            float centerY = sh / 2.0f;
+            float btnGap = 24.0f;
+            float btnWidth = fminf(280.0f, (sw - 80.0f - btnGap) / 2.0f);
+            float btnHeight = 64.0f;
+            float btnY = centerY + 38.0f;
+            Rectangle retry = {centerX - btnWidth - btnGap * 0.5f, btnY, btnWidth, btnHeight};
+            Rectangle backToMenu = {centerX + btnGap * 0.5f, btnY, btnWidth, btnHeight};
+            bool hoverRetry = CheckCollisionPointRec(GetMousePosition(), retry);
+            bool hoverMenu = CheckCollisionPointRec(GetMousePosition(), backToMenu);
+            int initialWeapon = (encounter.progress.initialWeapon >= 0 && encounter.progress.initialWeapon < 3)
+                ? encounter.progress.initialWeapon
+                : ((currentWeapon >= 0 && currentWeapon < 3) ? currentWeapon : encounter.progress.weapon);
+            if (IsKeyPressed(KEY_ESCAPE) || (hoverMenu && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))) {
+                if (!encounter.practice && initialWeapon >= 0 && initialWeapon < 3) {
+                    SaveMenuCheckpoint(initialWeapon);
+                }
+                screen = 0;
+                continue;
+            }
             if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_R) ||
-                (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))) {
+                (hoverRetry && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))) {
                 bool practice=encounter.practice;
-                if (!practice && encounter.progress.map > 0) {
+                if (!practice && ClearingMapId(&clearing) != 0) {
                     UnloadClearing(&clearing);
                     clearing=(Clearing){0};
                     if (!InitClearing(&clearing)) break;
                 }
-                RunProgress progress=practice ? encounter.progress : NewRunProgress(currentWeapon);
+                RunProgress progress=practice ? encounter.progress : NewRunProgress(initialWeapon);
                 progress.health=progress.maxHealth;
                 if (practice) progress.guardianIntroSeen=true;
                 int retryForm=practice && clearing.necromancerArena ? enemies.list[0].necromancerForm : 0;
@@ -626,6 +648,7 @@ int main(void) {
                         enemies.list[0].stateTime=0;
                     }
                 } else SaveClearingCheckpoint(&progress);
+                currentWeapon=progress.weapon;
                 player=clearing.spawn;
                 playerHealth=playerMaxHealth=progress.maxHealth;
                 playerSpeed=progress.speed;
@@ -641,15 +664,23 @@ int main(void) {
             }
             BeginDrawing();
             ClearBackground((Color){16,10,22,255});
-            DrawGameTextIn("Fim da tentativa", (Rectangle){0,GetScreenHeight()/2-100,GetScreenWidth(),62},
-                           59, (Color){255,119,103,255}, true);
-            DrawGameText("Sua tentativa terminou.",(GetScreenWidth()-MeasureGameText("Sua tentativa terminou.",22))/2,
-                GetScreenHeight()/2-30,22,RAYWHITE);
-            DrawRectangleRec(retry,hover?MAROON:DARKGRAY);
+            DrawGameTextIn("Game Over", (Rectangle){0.0f, centerY - 190.0f, sw, 96.0f},
+                           92.0f, (Color){220, 45, 55, 255}, true);
+            DrawGameTextIn("Fim da tentativa", (Rectangle){0.0f, centerY - 82.0f, sw, 52.0f},
+                           48.0f, (Color){255,119,103,255}, true);
+            DrawGameTextIn("Sua tentativa terminou.", (Rectangle){0.0f, centerY - 18.0f, sw, 32.0f},
+                           22.0f, RAYWHITE, false);
+            DrawRectangleRec(retry,hoverRetry?MAROON:DARKGRAY);
             DrawRectangleLinesEx(retry,2,GOLD);
-            DrawGameTextIn("Repetir", retry, 34, RAYWHITE, true);
-            DrawGameText("Enter ou R: nova tentativa",(GetScreenWidth()-MeasureGameText("Enter ou R: nova tentativa",18))/2,
-                (int)retry.y+85,18,LIGHTGRAY);
+            DrawGameTextIn("Repetir", (Rectangle){retry.x + 12.0f, retry.y + 8.0f, retry.width - 24.0f, retry.height - 16.0f},
+                           32.0f, RAYWHITE, true);
+            DrawRectangleRec(backToMenu,hoverMenu?MAROON:DARKGRAY);
+            DrawRectangleLinesEx(backToMenu,2,GOLD);
+            DrawGameTextIn("Voltar ao Menu", (Rectangle){backToMenu.x + 12.0f, backToMenu.y + 8.0f, backToMenu.width - 24.0f, backToMenu.height - 16.0f},
+                           32.0f, RAYWHITE, true);
+            DrawGameTextIn("Enter ou R: nova tentativa  |  Esc: voltar ao menu",
+                           (Rectangle){0.0f, btnY + btnHeight + 24.0f, sw, 28.0f},
+                           18.0f, LIGHTGRAY, false);
             EndDrawing();
             continue;
         }
