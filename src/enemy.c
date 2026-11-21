@@ -397,7 +397,20 @@ bool InitEnemies(EnemyGroup *group) {
     group->villageBossWalk = LoadTexture("assets/lider_vila_walk.png");
     group->villageBossAttack = LoadTexture("assets/lider_vila_ataque.png");
     group->villageBossCharge = LoadTexture("assets/lider_vila_investida.png");
-    group->villageVillager = LoadTexture("assets/aldeoes_necroticos.png");
+    const char *villageZombieSheets[VILLAGE_ZOMBIE_ATLAS_COUNT] = {
+        [VILLAGE_ZOMBIE_IDLE] = "assets/zumbi_vila_idle.png",
+        [VILLAGE_ZOMBIE_EMERGE] = "assets/zumbi_vila_emerge.png",
+        [VILLAGE_ZOMBIE_WALK] = "assets/zumbi_vila_walk.png",
+        [VILLAGE_ZOMBIE_ATTACK] = "assets/zumbi_vila_attack.png"
+    };
+    for (int i = 0; i < VILLAGE_ZOMBIE_ATLAS_COUNT; i++) {
+        group->villageZombie[i] = LoadTexture(villageZombieSheets[i]);
+        if (!group->villageZombie[i].id) {
+            UnloadEnemies(group);
+            return false;
+        }
+        SetTextureFilter(group->villageZombie[i], TEXTURE_FILTER_POINT);
+    }
     if (!group->sprites.id || !group->backSprites.id || !group->frontSprites.id ||
         !group->bossSprites.id || !group->bossWalk.id || !group->bossAttack.id ||
         !group->guardianSpawn.id || !group->guardianDefeat.id ||
@@ -410,7 +423,7 @@ bool InitEnemies(EnemyGroup *group) {
         !group->roots.id || !group->rootWave.id || !group->curse.id || !group->guardianMelee.id ||
         !group->bossPortrait.id || !group->cemeteryPortrait.id || !group->boneLordPortrait.id || !group->marshalPortrait.id ||
         !group->villageBossWalk.id || !group->villageBossAttack.id ||
-        !group->villageBossCharge.id || !group->villageVillager.id) {
+        !group->villageBossCharge.id) {
         UnloadEnemies(group);
         return false;
     }
@@ -441,7 +454,6 @@ bool InitEnemies(EnemyGroup *group) {
     SetTextureFilter(group->villageBossWalk, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->villageBossAttack, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->villageBossCharge, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->villageVillager, TEXTURE_FILTER_POINT);
     group->villageLetter=LoadTexture("assets/cutscenes/village_aftermath/images/carta.png");
     if (group->villageLetter.id) SetTextureFilter(group->villageLetter,TEXTURE_FILTER_BILINEAR);
     return true;
@@ -491,7 +503,8 @@ void UnloadEnemies(EnemyGroup *group) {
     if (group->villageBossWalk.id) UnloadTexture(group->villageBossWalk);
     if (group->villageBossAttack.id) UnloadTexture(group->villageBossAttack);
     if (group->villageBossCharge.id) UnloadTexture(group->villageBossCharge);
-    if (group->villageVillager.id) UnloadTexture(group->villageVillager);
+    for (int i = 0; i < VILLAGE_ZOMBIE_ATLAS_COUNT; i++)
+        if (group->villageZombie[i].id) UnloadTexture(group->villageZombie[i]);
     if (group->villageLetter.id) UnloadTexture(group->villageLetter);
     *group = (EnemyGroup){0};
 }
@@ -1097,7 +1110,8 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         if (enemy->state == ENEMY_SPAWNING) {
             float duration = IsGuardianSpawn(group, enemy)
                 ? GUARDIAN_SPAWN_DURATION : enemy->templarRole == TEMPLAR_STANDARD ? templarArrivalTime + templarPlantTime
-                    : enemy->templarRole != TEMPLAR_NONE ? templarArrivalTime : 1.0f;
+                    : enemy->templarRole != TEMPLAR_NONE ? templarArrivalTime
+                    : group->village && enemy->type == ENEMY_COMMON_MELEE ? VILLAGE_ZOMBIE_EMERGE_TIME : 1.0f;
             if (enemy->stateTime >= duration) { enemy->state = ENEMY_IDLE; enemy->stateTime = 0; }
             continue;
         }
@@ -1189,7 +1203,8 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             bool ranged = enemy->type == ENEMY_COMMON_RANGED;
             bool mage = group->cemetery && ranged;
             bool cultist = group->boneland && ranged;
-            bool clearingMelee = !group->cemetery && enemy->type == ENEMY_COMMON_MELEE;
+            bool villageZombie = group->village && enemy->type == ENEMY_COMMON_MELEE;
+            bool clearingMelee = !group->cemetery && !villageZombie && enemy->type == ENEMY_COMMON_MELEE;
             bool crossbow = enemy->templarRole == TEMPLAR_CROSSBOW;
             bool shield = enemy->templarRole == TEMPLAR_SHIELD;
             if (shield) {
@@ -1199,6 +1214,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             }
             float release = crossbow ? crossbowRelease : shield ? shieldImpact :
                 cultist ? CULTIST_RELEASE_TIME : mage ? CEM_LANTERN_RELEASE_TIME :
+                villageZombie ? VILLAGE_ZOMBIE_HIT_TIME :
                 group->cemetery && enemy->type==ENEMY_COMMON_MELEE ? CEM_ZOMBIE_HIT_TIME : CLEARING_ARCHER_RELEASE_TIME;
             bool impact = clearingMelee && !shield ? ClearingEnemyFrame(enemy, group->boneland) >= CLEARING_MELEE_IMPACT_FRAME :
                           enemy->stateTime >= release;

@@ -43,6 +43,10 @@ typedef enum EnemyState {
     ENEMY_IDLE, ENEMY_WALK, ENEMY_ATTACK, ENEMY_HURT, ENEMY_DIE, ENEMY_GONE,
     ENEMY_SPAWNING, ENEMY_FALLEN
 } EnemyState;
+enum { VILLAGE_ZOMBIE_IDLE, VILLAGE_ZOMBIE_EMERGE, VILLAGE_ZOMBIE_WALK,
+       VILLAGE_ZOMBIE_ATTACK, VILLAGE_ZOMBIE_ATLAS_COUNT };
+#define VILLAGE_ZOMBIE_EMERGE_TIME 1.0f
+#define VILLAGE_ZOMBIE_HIT_TIME .31f
 typedef struct Enemy {
     Vector2 position; /* ponto dos pes */
     int health;
@@ -101,7 +105,8 @@ typedef struct EnemyGroup {
     float villageHordePower;
     int villageBossDeathWeapon;
     Texture2D villageLetter;
-    Texture2D villageBossWalk, villageBossAttack, villageBossCharge, villageVillager;
+    Texture2D villageBossWalk, villageBossAttack, villageBossCharge;
+    Texture2D villageZombie[VILLAGE_ZOMBIE_ATLAS_COUNT];
     Texture2D cemeteryZombie[3], cemeteryLantern[3], cemeterySpell;
     Texture2D coveiroWalk,boss[3],effects[3];
     EnemyImpact impacts[16], templarBlood;

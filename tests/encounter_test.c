@@ -31,6 +31,43 @@ static void Capture(const char *name, Encounter *encounter, EnemyGroup *enemies,
     UnloadRenderTexture(target);
 }
 
+static void CheckVillageZombies(Encounter *encounter, EnemyGroup *enemies, Clearing *map) {
+    StartVillageHorde(enemies, map, map->spawn, 1);
+    assert(EnemiesRemaining(enemies) == 31 && enemies->villageSpawnRemaining == 12);
+    for (int i = 0; i < 19; i++) {
+        const Enemy *zombie = &enemies->list[i];
+        assert(zombie->type == ENEMY_COMMON_MELEE && zombie->state == ENEMY_SPAWNING);
+        assert(!EnemyCanBeHit(zombie));
+    }
+    int health = 100;
+    UpdateEnemies(enemies, map, map->spawn, .66f, false, &health, 100);
+    assert(enemies->villageSpawnRemaining == 11 && health == 100);
+    assert(enemies->list[19].state == ENEMY_SPAWNING && !EnemyCanBeHit(&enemies->list[19]));
+    UpdateEnemies(enemies, map, map->spawn, .32f, false, &health, 100);
+    assert(enemies->list[0].state == ENEMY_SPAWNING);
+    UpdateEnemies(enemies, map, map->spawn, .03f, false, &health, 100);
+    assert(enemies->list[0].state == ENEMY_IDLE && EnemyCanBeHit(&enemies->list[0]));
+
+    Vector2 ground = enemies->list[0].position;
+    for (int i = 0; i < ENEMY_COUNT; i++) enemies->list[i] = (Enemy){.state=ENEMY_GONE};
+    enemies->villageSpawnRemaining = 0;
+    enemies->list[0] = (Enemy){.position=ground,.type=ENEMY_COMMON_MELEE,.state=ENEMY_ATTACK,
+        .stateTime=VILLAGE_ZOMBIE_HIT_TIME-.02f,.health=62,.maxHealth=62,.power=1};
+    UpdateEnemies(enemies, map, ground, .01f, false, &health, 100);
+    assert(health == 100);
+    UpdateEnemies(enemies, map, ground, .02f, false, &health, 100);
+    assert(health == 88 && enemies->list[0].attackConnected);
+
+    const EnemyState states[] = {ENEMY_IDLE, ENEMY_WALK, ENEMY_ATTACK, ENEMY_SPAWNING};
+    for (int row = 0; row < 4; row++) for (int face = 0; face < 4; face++) {
+        enemies->list[row*4+face] = (Enemy){.position={410+face*230,315+row*135},
+            .type=ENEMY_COMMON_MELEE,.state=states[row],.facing=face,.walkTime=.24f,
+            .stateTime=row == 3 ? .12f+.24f*face : VILLAGE_ZOMBIE_HIT_TIME,
+            .health=62,.maxHealth=62};
+    }
+    Capture("audit/village_zombie_directions.png",encounter,enemies,map,(Vector2){30,30});
+}
+
 static void CheckLegacyCheckpoints(void) {
     char path[1024];
     snprintf(path, sizeof(path), "%s/partida_pif.sav", GetApplicationDirectory());
@@ -730,6 +767,7 @@ int main(void) {
     assert(LoadClearingCheckpoint(&villageSaved) && villageSaved.villageAftermath==VILLAGE_SCENE_SEEN);
     BeginEncounter(&encounter,&enemies,&clearing,villageSaved,clearing.spawn);
     assert(encounter.phase==ENCOUNTER_LETTER && enemies.list[0].health==0);
+    CheckVillageZombies(&encounter,&enemies,&clearing);
     UnloadClearing(&clearing);
     assert(InitChapel(&clearing));
     BeginEncounter(&encounter,&enemies,&clearing,NewRunProgress(2),clearing.spawn);
