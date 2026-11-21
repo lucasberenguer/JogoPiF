@@ -39,10 +39,10 @@ Todo o cálculo é aditivo, acumulativo e sem teto. O dano final aplicado em cad
 | Base (N0) | Recarga base da esquiva | `5.0f s` | `dodgeRecovery` | `src/game.c` |
 | Nível 1 | Redução da recarga da esquiva ao acertar `>= 1` inimigo (1x por golpe) | `0.8f s` | `KATANA_L1_DODGE_REDUCTION` | `src/game.c` |
 | Nível 2 | Alcance ampliado | `105 -> 123.0f px` | `KATANA_L2_RANGE` | `src/game.c` |
-| Nível 2 | Recuperação reduzida *(a confirmar)* | `0.45 -> 0.40f s` | `KATANA_L2_RECOVERY` | `src/game.c` |
+| Nível 2 | Recuperação reduzida | `0.45 -> 0.40f s` | `KATANA_L2_RECOVERY` | `src/game.c` |
 | Nível 3 | Arco ampliado (`127° -> 145°`, `cos(72,5°)`) | `+0.3007f` | `KATANA_L3_ARC_DOT` | `src/game.c` |
 | Nível 3 | Recuo nos inimigos atingidos | `42.0f px` | `KATANA_L3_KNOCKBACK` | `src/game.c` |
-| Nível 4 | Onda de choque frontal — dano base *(a confirmar)* | `22` | `KATANA_SHOCKWAVE_DAMAGE` | `src/game.c` |
+| Nível 4 | Onda de choque frontal — dano base | `22` | `KATANA_SHOCKWAVE_DAMAGE` | `src/game.c` |
 | Nível 4 | Onda de choque — recarga / vel. / vida / raio | `2.5f s` / `620.0f` / `0.95f s` / `32.0f` | `KATANA_SHOCKWAVE_COOLDOWN`, `KATANA_SHOCKWAVE_SPEED`, `KATANA_SHOCKWAVE_LIFE`, `KATANA_SHOCKWAVE_RADIUS` | `src/game.c` |
 | Nível 5 | Onda tripla em leque (`-20°`, `0°`, `+20°`) | `20.0f°` (máx. `12` ondas) | `KATANA_L5_FAN_ANGLE_DEG`, `KATANA_MAX_SHOCKWAVES` | `src/game.c` |
 | Nível 5 | Recarga da onda tripla | `2.5 -> 1.8f s` | `KATANA_L5_SHOCKWAVE_COOLDOWN` | `src/game.c` |
@@ -70,7 +70,7 @@ Todo o cálculo é aditivo, acumulativo e sem teto. O dano final aplicado em cad
 | Base (N0) | Dano base do tiro | `5` | `WeaponBaseDamage(0)` / `SHOT_DAMAGE` | `src/run_progress.h` / `src/gun.c` |
 | Base (N0) | Intervalo e velocidade base (1 tiro) | `0.20f s` / `760.0f px/s` | `GUN_BASE_SHOT_INTERVAL`, `GUN_BASE_SHOT_SPEED` | `src/gun.h` |
 | Base (N0) | Inimigos atingidos por tiro (sem perfuração) | `1` | `GUN_BASE_MAX_HITS` | `src/gun.h` |
-| Nível 1 | Intervalo *(a confirmar)* e velocidade do tiro | `0.14f s` / `860.0f px/s` | `GUN_L1_SHOT_INTERVAL`, `GUN_L1_SHOT_SPEED` | `src/gun.h` |
+| Nível 1 | Intervalo e velocidade do tiro | `0.14f s` / `860.0f px/s` | `GUN_L1_SHOT_INTERVAL`, `GUN_L1_SHOT_SPEED` | `src/gun.h` |
 | Nível 2 | Bônus de dano da arma (`+25%`) | `+0.25f` | `GUN_L2_DAMAGE_BONUS` | `src/run_progress.h` |
 | Nível 3 | Cone de 2 tiros por disparo | `+-5.0f°` | `GUN_L3_SPREAD_DEG` | `src/gun.h` |
 | Nível 4 | Tiros perfurantes (atravessam 1 inimigo, acertam até 2 distintos com dano integral no 2º) | `2` acertos máx. | `GUN_L4_MAX_HITS` | `src/gun.h` |
@@ -95,9 +95,9 @@ Todo o cálculo é aditivo, acumulativo e sem teto. O dano final aplicado em cad
 | Pesos de sorteio | Comum / Raro / Épico | `70` / `25` / `5` | `RARITY_WEIGHT_COMMON`, `RARITY_WEIGHT_RARE`, `RARITY_WEIGHT_EPIC`, `mapRarityWeights` | `src/encounter.c` |
 
 - Todos os buffs são acumulativos e sem teto (exceto o nível `5` da arma).
-- **Telas normais (após ondas 1 a 3)**: `3` cartões. Para cada vaga, sorteia-se a raridade ponderada entre as raridades que ainda têm tipos livres naquela tela e, dentro dela, um tipo inédito na tela. Nunca aparecem dois cartões do mesmo `kind` na mesma tela; a mesma raridade pode repetir.
+- **Telas normais (após as ondas anteriores à última onda do mapa)**: `3` cartões. Para cada vaga, sorteia-se a raridade ponderada entre as raridades que ainda têm tipos livres naquela tela e, dentro dela, um tipo inédito na tela. Nunca aparecem dois cartões do mesmo `kind` na mesma tela; a mesma raridade pode repetir.
 - **Reroll por cartão (telas normais)**: `1` uso por tela; botão individual abaixo e fora de cada cartão (`RerollButtonRect`); renova só aquele cartão sem repetir nenhum tipo presente nem o anterior; depois do uso, os `3` botões ficam desativados. Removido o reroll geral da tecla `R`.
-- **Tela Épica (após a onda 4 / antes do chefe)**: `3` cartões épicos distintos entre os disponíveis, **sem reroll**. O checkpoint só é salvo após a escolha.
+- **Tela Épica (após a última onda do mapa / antes do chefe, via `IsEpicRewardStage` — onda 4 na Clareira/Cemitério, onda 3 na Terra dos Ossos e onda 2 no Campo dos Templários)**: `3` cartões épicos distintos entre os disponíveis, **sem reroll**. O checkpoint só é salvo após a escolha.
 
 ---
 
@@ -131,14 +131,14 @@ Quando as artes definitivas forem adicionadas em `assets/ui/`, o motor as carreg
 ## 6. Riscos de Balanceamento e Protocolo de Teste
 
 ### Estimativas teóricas de DPS contra 1 alvo (estimativas, não medidas em partida)
-Considerando `damage = 1.0` e `epicDamageStacks = 0`:
-- **Katana (Nível 0 -> Nível 5)**: `~44 DPS` (`20` dano / `0,45 s`) -> `~62 a 87 DPS` (corte de `40` dano a cada `0,40 s` = `100 DPS` corpo a corpo puro, ou `~62 a 87 DPS` considerando tempo de aproximação/janela de corte + onda de choque de `44` dano a cada `1,8 s`).
-- **Bíblia (Nível 0 -> Nível 5)**: `~12 DPS` (contato orbital sem boost) -> `~41 a 51 DPS` (`6` livros com `+115%` de dano = `26` por contato + ciclo de boost `1,65 s / 2,8 s` + poça de água benta causando `18` de dano a cada `0,45 s`).
-- **Arma de Fogo (Nível 0 -> Nível 5)**: `25 DPS` (`5` dano / `0,20 s`, `1` tiro) -> `~179 DPS` (`4` tiros por disparo a cada `0,14 s` caso os 4 projéteis acertem o mesmo alvo a curta/média distância, com `+125%` de dano = `12` por tiro, além de perfuração contra grupos).
+Base única para todas as armas: `damage = 1.0`, `epicDamageStacks = 0` (sem épicos de `+50%`) e no Nível 5 o multiplicador de `EncounterDamage` da própria arma (`1 + 0,2 * 5 + bonusDaArma` = `2,00x` na Katana, `2,15x` na Bíblia e `2,25x` na Arma de fogo):
+- **Katana (Nível 0 -> Nível 5)**: `~44 DPS` (`20` dano / `0,45 s` = `44,4 DPS`) -> `~62 a 87 DPS` (no N5, `EncounterDamage = 2,00x`: corte de `ceil(20 * 2,00) = 40` de dano com recuperação de `0,40 s` + onda de choque de `ceil(22 * 2,00) = 44` de dano a cada `1,8 s` = `24,4 DPS` da onda; considerando `~1,0 a 1,5` cortes efetivos/s na janela de aproximação + `1` onda da tríade atingindo o alvo).
+- **Bíblia (Nível 0 -> Nível 5)**: `~12 DPS` (`12` de dano de contato orbital base sem boost, `~1` acerto/s) -> `~41 a 51 DPS` (no N5, `EncounterDamage = 2,15x`: contato de `ceil(12 * 2,15) = 26` de dano com recarga de `0,45 s` por inimigo e ciclo de boost `1,65 s / 2,8 s` + poça de água benta causando `ceil(8 * 2,15) = 18` de dano a cada `0,45 s` = `40,0 DPS` da poça; variando conforme o tempo de permanência do alvo na poça e na órbita de `102 px`).
+- **Arma de Fogo (Nível 0 -> Nível 5)**: `25 DPS` (`5` dano / `0,20 s`, `1` tiro por disparo) -> `~179 DPS` (no N5, `EncounterDamage = 2,25x`: cada tiro causa `ceil(5 * 2,25) = 12` de dano a cada `0,14 s` = `7,14` disparos/s; acertando `2` tiros por disparo = `171,4 DPS`, ou na média `~2,1` dos `4` tiros por disparo contra um único alvo = `~179 DPS`, podendo chegar a `342,9 DPS` à queima-roupa se os `4` tiros acertarem o mesmo chefe largo).
 
 ### Principais pontos de atenção no balanceamento
 1. **Arma de fogo acima das outras no Nível 5**: o salto multiplicativo de cadência (`0,20 -> 0,14 s`), bônus próprio (`+25%`), cone duplo (`2` tiros no N3), perfuração (`2` alvos no N4) e pistolas duplas (`4` tiros no N5) coloca o teto de DPS da arma de fogo substancialmente acima da Katana e da Bíblia.
-2. **Bíblia sem empurrão no Nível 0**: como a Bíblia começa sem empurrão na base e o upgrade de arma agora é de raridade **Épica** (peso `5` nas ondas 1–3, ou garantido apenas na tela épica após a onda 4), o jogador de Bíblia pode passar toda a primeira área (ondas 1 a 4) sem repulsão de contato contra inimigos corpo a corpo rápidos.
+2. **Bíblia sem empurrão no Nível 0**: como a Bíblia começa sem empurrão na base e o upgrade de arma agora é de raridade **Épica** (peso `5` nas telas normais, ou garantido apenas na tela épica após a última onda do mapa), o jogador de Bíblia pode passar toda a primeira área até a última onda sem repulsão de contato contra inimigos corpo a corpo rápidos.
 
 ### Tabela de Registro de Testes Práticos (para preenchimento)
 
@@ -170,12 +170,10 @@ Considerando `damage = 1.0` e `epicDamageStacks = 0`:
 ### Decididos pelo dono do projeto
 - Pesos de raridade: **Comum `70` / Raro `25` / Épico `5`** (`RARITY_WEIGHT_COMMON`, `RARITY_WEIGHT_RARE`, `RARITY_WEIGHT_EPIC` em `src/encounter.c`).
 - Arma de fogo N4 (tiros perfurantes): **dano integral no 2º inimigo atingido** (`GunHitEnemyCircle` em `src/gun.c`).
-
-### A confirmar (usando valores provisórios configurados em constantes)
-- **Recuperação da Katana no Nível 2**: `0.45 -> 0.40 s` (`KATANA_L2_RECOVERY` em `src/game.c`).
-- **Intervalo da Arma de Fogo no Nível 1**: `0.20 -> 0.14 s` (`GUN_L1_SHOT_INTERVAL` em `src/gun.h`).
-- **Dano base da onda de choque da Katana (N4/N5)**: `22` de dano (`KATANA_SHOCKWAVE_DAMAGE` em `src/game.c`).
-- **Texto do cartão épico de +50% (`REWARD_EPIC_DAMAGE`)**: exibe apenas o dano do golpe principal `antes->depois` (`ceil(WeaponBaseDamage * EncounterDamage)` em `RewardText`, `src/encounter.c`).
+- Recuperação da Katana no Nível 2: **`0.45 -> 0.40 s`** (`KATANA_L2_RECOVERY` em `src/game.c`).
+- Intervalo da Arma de Fogo no Nível 1: **`0.20 -> 0.14 s`** (`GUN_L1_SHOT_INTERVAL` em `src/gun.h`).
+- Dano base da onda de choque da Katana (N4/N5): **`22` de dano** (`KATANA_SHOCKWAVE_DAMAGE` em `src/game.c`).
+- Texto do cartão épico de +50% (`REWARD_EPIC_DAMAGE`): **exibe apenas o dano do golpe principal `antes->depois`** (`ceil(WeaponBaseDamage * EncounterDamage)` em `RewardText`, `src/encounter.c`).
 
 ### Em espera
 - Aumento progressivo da chance de cartão Épico por mapa na tabela `mapRarityWeights` em `src/encounter.c`.

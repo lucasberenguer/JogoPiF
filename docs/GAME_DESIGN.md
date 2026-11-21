@@ -11,7 +11,7 @@ Jogo PIF é um roguelite de ação 2D com visão superior. O jogador atravessa u
 1. O menu oferece **Iniciar run**, **Continuar** e **Configurações**. Iniciar uma nova run avisa antes de substituir uma run inacabada.
 2. A nova run começa com uma cutscene que pode ser pulada. Dentro do jogo, o jogador escolhe a arma inicial: bíblia, katana ou arma de fogo.
 3. O jogador atravessa, nesta ordem, **clareira**, **ruínas da trilha** e **pátio profanado**. Cada área tem cinco ondas e um chefe. A quantidade de inimigos cresce gradualmente.
-4. Após as ondas 1 a 3 de cada área, o jogador escolhe um bônus entre três cartões sorteados por raridade (Comum, Raro ou Épico). Após a onda 4 (antes do chefe), a escolha normal é substituída por uma tela épica com três cartões épicos distintos e sem reroll. Em seguida começa o chefe.
+4. Após as ondas anteriores à última onda de cada área, o jogador escolhe um bônus entre três cartões sorteados por raridade (Comum, Raro ou Épico). Após a última onda do mapa (antes do chefe), a escolha normal é substituída por uma tela épica com três cartões épicos distintos e sem reroll. Em seguida começa o chefe.
 5. Selar o chefe concede o selo da área e abre a passagem seguinte. Os três selos abrem a passagem para o **santuário partido**.
 6. Antes do santuário, a **capela** oferece uma pausa narrativa sem combate.
 7. No santuário, o jogador enfrenta o necromante e resolve o selo final. Vitória ou derrota encerra a run.
@@ -56,12 +56,12 @@ Cadências, duração dos efeitos e comportamento da esquiva sem direção press
 
 ## Bônus e builds
 
-- Após cada uma das ondas 1 a 3, aparecem três cartões sorteados por raridade (pesos base: Comum 70, Raro 25, Épico 5), sem repetir o mesmo tipo de cartão na mesma tela:
+- Após cada uma das ondas anteriores à última onda do mapa, aparecem três cartões sorteados por raridade (pesos base: Comum 70, Raro 25, Épico 5), sem repetir o mesmo tipo de cartão na mesma tela:
   - **Comum:** dano (+15%), vida máxima (+20 e cura 20) ou velocidade (+15).
   - **Raro:** troca de arma (sempre para outra arma, mantendo o nível único) acompanhada de 2 buffs comuns aleatórios e distintos entre si, descritos no cartão.
   - **Épico:** upgrade da arma equipada (+1 nível, até o nível 5), poder das armas (+50% de dano aditivo acumulativo, mostrando o dano do golpe principal antes->depois), status (+30 a +60 de vida máxima em múltiplos de 10, +25% de dano e +25% de velocidade / +60) ou vida plena (+50 de vida máxima e cura completa).
 - Todos os bônus são aditivos, acumulativos e sem teto (exceto o nível 5 da arma).
-- Após a onda 4 (antes do chefe), aparece a **tela épica**: três cartões épicos distintos entre os disponíveis, sem reroll.
+- Após a última onda do mapa (antes do chefe), aparece a **tela épica**: três cartões épicos distintos entre os disponíveis, sem reroll.
 - Cada tela normal de bônus permite **um reroll gratuito por tela** através de um botão abaixo de cada cartão, que sorteia novamente apenas aquele cartão (sem repetir os tipos presentes nem o anterior) e depois desativa os três botões. A tela épica não possui reroll.
 - Consulte `PATCH_NOTES.md` para os valores exatos dos 5 níveis de cada arma e a fórmula completa de dano.
 
