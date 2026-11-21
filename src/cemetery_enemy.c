@@ -200,6 +200,8 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
 
         bool boss = enemy->type == ENEMY_BOSS;
         bool fallen = enemy->state == ENEMY_FALLEN;
+        float collapse = fallen ? 1.0f :
+            (boss && enemy->state == ENEMY_DIE ? Clamp(enemy->stateTime / .85f, 0.0f, 1.0f) : 0.0f);
         CemeteryPose pose=CemeteryAnimationPose(enemy);
         const Texture2D atlases[]={group->coveiroWalk,group->boss[0],group->boss[1],group->boss[2],
             group->cemeteryZombie[0],group->cemeteryZombie[1],group->cemeteryZombie[2],
@@ -207,8 +209,8 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
         Texture2D tex=atlases[pose.atlas];
         int frame=pose.frame,row=pose.row;
         float cw=(float)tex.width/pose.columns,ch=(float)tex.height/pose.rows;
-        float height=boss?190:96;
-        float width=height*cw/ch;
+        float height=(boss?190:96)*(1.0f-.22f*collapse);
+        float width=(boss?190:96)*cw/ch;
         float bob=0;
         float lean=0;
         if(boss && !fallen && enemy->state!=ENEMY_DIE) {
@@ -219,10 +221,12 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
                 lean=motion*(pose.flip?-5:5);
                 bob=-fabsf(sinf(t*9))*2;
             } else bob=sinf(enemy->stateTime*5)*1.2f;
+        } else if (boss && collapse > 0.0f) {
+            lean = (enemy->facing == 2 ? -1.0f : 1.0f) * 82.0f * collapse;
         }
         Color tint = enemy->state == ENEMY_HURT ? RED : WHITE;
         if (!boss && enemy->state==ENEMY_DIE) tint=Fade(tint,fmaxf(0,1-enemy->stateTime/.45f));
-        if (boss && (fallen || enemy->state == ENEMY_DIE)) tint = Fade(tint, .45f);
+        if (boss && (fallen || enemy->state == ENEMY_DIE)) tint = Fade((Color){215, 190, 225, 255}, .78f);
         if (boss && enemy->guardianPhase == GUARDIAN_PHASE_TRANSITION) {
             float radius = 50 + 120 * enemy->stateTime;
             DrawCircleV(enemy->position, radius, Fade(VIOLET, .30f * (1 - enemy->stateTime)));
@@ -231,6 +235,8 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
             DrawCircleV(enemy->position, 43, Fade(VIOLET, .26f));
         }
         if (boss && fallen) DrawBossGroundSeal(group->sealMarker, enemy->position);
+        if (boss && collapse > 0.0f)
+            DrawEllipse((int)enemy->position.x, (int)enemy->position.y - 8, 52.0f, 18.0f, Fade(BLACK, .38f));
         DrawTexturePro(tex, (Rectangle){frame*cw, row*ch, pose.flip?-cw:cw, ch},
             (Rectangle){enemy->position.x, enemy->position.y+bob, width, height},
             (Vector2){width/2,height*(boss?.94f:.914f)}, lean, tint);
