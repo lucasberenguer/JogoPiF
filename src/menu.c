@@ -582,10 +582,9 @@ void DrawPauseMenu(const Menu *menu) {
     DrawGameTextIn("Controles", PauseRect(canvas, (Rectangle){395, 198, 882, 80}),
                    65*canvas.width/1672.0f, buttonText, true);
     DrawPauseText(canvas, "WASD  ·  Mover", 331, 37, RAYWHITE);
-    DrawPauseText(canvas, "Espaço  ·  Esquivar com qualquer arma", 400, 37, RAYWHITE);
-    DrawPauseText(canvas, "Clique esquerdo  ·  Atacar com katana ou arma de fogo", 469, 30, RAYWHITE);
-    DrawPauseText(canvas, "Clique direito  ·  Acelerar a Bíblia ou esquivar", 531, 34, RAYWHITE);
-    DrawPauseText(canvas, "E  ·  Interagir e selar", 600, 37, RAYWHITE);
+    DrawPauseText(canvas, "Espaço / Clique direito  ·  Esquivar com qualquer arma", 400, 34, RAYWHITE);
+    DrawPauseText(canvas, "Clique esquerdo  ·  Atacar ou acelerar a Bíblia", 469, 34, RAYWHITE);
+    DrawPauseText(canvas, "E  ·  Interagir e selar", 538, 37, RAYWHITE);
 }
 
 MenuAction UpdateMenu(Menu *m) {

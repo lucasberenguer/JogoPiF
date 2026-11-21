@@ -33,14 +33,14 @@ Jogo PIF é um roguelite de ação 2D com visão superior. O jogador atravessa u
 | Ação | Controle | Regra |
 | --- | --- | --- |
 | Mover | WASD | Movimento livre na arena. |
-| Atacar | Botão esquerdo do mouse | Katana e arma de fogo atacam uma vez por clique, respeitando a cadência. |
-| Esquivar | Espaço ou botão direito do mouse | Impulso curto com recarga. Com a Bíblia, a esquiva usa Espaço. |
+| Atacar / Acelerar | Botão esquerdo do mouse | Katana e arma de fogo atacam uma vez por clique, respeitando a cadência. Com a Bíblia, acelera a rotação dos livros. |
+| Esquivar | Espaço ou botão direito do mouse | Impulso curto com recarga em qualquer arma. |
 | Ativar ultimate | Q | Disponível quando a barra estiver cheia. |
 | Interagir/selar | E | Usado perto de um corpo ou objeto interativo. |
 
 Uma única arma fica equipada por vez:
 
-- **Bíblia:** gira automaticamente ao redor do personagem. Um clique direito, quando a habilidade está pronta, acelera sua rotação por um período.
+- **Bíblia:** gira automaticamente ao redor do personagem. Um clique esquerdo, quando a habilidade está pronta, acelera sua rotação por um período.
 - **Katana:** golpe em área acionado pelo jogador.
 - **Arma de fogo:** tiros em linha reta na direção apontada pelo jogador.
 

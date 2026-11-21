@@ -895,12 +895,14 @@ int main(void) {
                     katanaShockwaves[s].life = 0.0f;
             }
         }
+        bool dodgePressed = !entering && (IsKeyPressed(KEY_SPACE) ||
+                            IsMouseButtonPressed(MOUSE_BUTTON_RIGHT));
         bool bibleActivationStarted = false;
         if (currentWeapon == WEAPON_BIBLE) {
             float previousActivation = bible.activationRemaining;
             UpdateBible(&bible, entering ? 0.0f : deltaTime,
-                        !entering && dodgeRemaining <= 0.0f && !IsKeyPressed(KEY_SPACE) &&
-                        IsMouseButtonPressed(MOUSE_BUTTON_RIGHT),
+                        !entering && dodgeRemaining <= 0.0f && !dodgePressed &&
+                        IsMouseButtonPressed(MOUSE_BUTTON_LEFT),
                         weaponLevel, !entering && EnemiesRemaining(&enemies) > 0, player);
             bibleActivationStarted = previousActivation <= 0.0f &&
                                      bible.activationRemaining > 0.0f;
@@ -910,8 +912,6 @@ int main(void) {
             entering ? 0.0f : (float) IsKeyDown(KEY_D) - (float) IsKeyDown(KEY_A),
             entering ? 0.0f : (float) IsKeyDown(KEY_S) - (float) IsKeyDown(KEY_W)
         };
-        bool dodgePressed = !entering && (IsKeyPressed(KEY_SPACE) ||
-                            (currentWeapon != WEAPON_BIBLE && IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)));
         Camera2D camera = FitClearing(&clearing);
         if (!entering && currentWeapon == WEAPON_KATANA &&
             IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
@@ -1261,8 +1261,7 @@ int main(void) {
 
             int hudOffset = EncounterBossVisible(&encounter, &enemies) ? ENCOUNTER_BOSS_HUD_HEIGHT : 0;
             DrawRectangle(12, 12 + hudOffset, 490, 130, Fade(BLACK, 0.72f));
-            DrawGameText(currentWeapon == WEAPON_BIBLE ? "WASD: mover  |  Espaço: esquiva" :
-                     "WASD: mover  |  Espaço/botão direito: esquiva", 24, 23 + hudOffset, 17, RAYWHITE);
+            DrawGameText("WASD: mover  |  Espaço/botão direito: esquiva", 24, 23 + hudOffset, 17, RAYWHITE);
             DrawGameText("F1: ferramentas | F3: colisão | Esc: pausa", 24, 76 + hudOffset, 17, RAYWHITE);
             DrawGameText("F4/F5: testar dano e cura", 24, 104 + hudOffset, 17, RAYWHITE);
             if (altarOpen) {
@@ -1296,7 +1295,7 @@ int main(void) {
                 DrawGameText("Clique esquerdo: corte de katana", 24, 176 + hudOffset, 18, RAYWHITE);
             if (currentWeapon == WEAPON_BIBLE)
                 DrawGameText(bible.boostCooldown <= 0.0f
-                             ? "Botão direito: acelerar órbitas"
+                             ? "Clique esquerdo: acelerar órbitas"
                              : TextFormat("Aceleração: %.1f s", bible.boostCooldown),
                          24, 176 + hudOffset, 18, RAYWHITE);
             if (currentWeapon == WEAPON_GUN)
