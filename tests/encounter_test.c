@@ -360,9 +360,23 @@ static void CheckLegacyCheckpoints(void) {
     rTest.rewards[0] = (Reward){.kind = REWARD_SWAP, .rarity = RARITY_RARE, .weapon = 2,
                                 .bonus = {REWARD_DAMAGE, REWARD_SPEED}};
     assert(ChooseEncounterReward(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth, 0));
-    assert(rTest.progress.weapon == 2 && rTest.progress.weaponLevel[2] == 3);
+    assert(rTest.progress.weapon == 2 && rTest.progress.initialWeapon == 0 && rTest.progress.weaponLevel[2] == 3);
     assert(fabsf(rTest.progress.damage - 1.30f) < 0.0001f && fabsf(rTest.progress.speed - 270.0f) < 0.0001f);
     assert(rTest.notice[0] == 0); /* Bônus surpresa antigo removido */
+    /* Persistência de initialWeapon no save e reset completo ao morrer/repetir (NewRunProgress(initialWeapon)) */
+    rTest.practice = false;
+    assert(SaveClearingCheckpoint(&rTest.progress));
+    RunProgress loadedSwap = {0};
+    assert(LoadClearingCheckpoint(&loadedSwap));
+    assert(loadedSwap.weapon == 2 && loadedSwap.initialWeapon == 0);
+    RunProgress resetAfterDeath = NewRunProgress(loadedSwap.initialWeapon);
+    assert(resetAfterDeath.weapon == 0 && resetAfterDeath.initialWeapon == 0);
+    assert(resetAfterDeath.stage == 1 && resetAfterDeath.map == 0);
+    assert(resetAfterDeath.health == 100 && resetAfterDeath.maxHealth == 100);
+    assert(fabsf(resetAfterDeath.damage - 1.0f) < 0.0001f && fabsf(resetAfterDeath.speed - 240.0f) < 0.0001f);
+    assert(resetAfterDeath.epicDamageStacks == 0 && resetAfterDeath.angelBlessingUses == 0);
+    assert(resetAfterDeath.weaponLevel[0] == 0 && resetAfterDeath.weaponLevel[1] == 0 && resetAfterDeath.weaponLevel[2] == 0);
+    rTest.practice = true;
     /* Épico (a): upgrade da arma equipada (+1 nível, até 5) */
     rTest.progress.stage = 1;
     rTest.phase = ENCOUNTER_REWARD;
@@ -420,6 +434,40 @@ static void CheckLegacyCheckpoints(void) {
     uiShot = LoadImageFromTexture(uiTarget.texture);
     ImageFlipVertical(&uiShot);
     assert(ExportImage(uiShot, "audit/rewards_rarities_rerolled.png"));
+    UnloadImage(uiShot);
+
+    /* Captura visual da tela de Game Over com botões lado a lado */
+    BeginTextureMode(uiTarget);
+    ClearBackground((Color){16, 10, 22, 255});
+    float sw = 1280.0f, sh = 720.0f;
+    float centerX = sw / 2.0f, centerY = sh / 2.0f;
+    float btnGap = 24.0f;
+    float btnWidth = fminf(280.0f, (sw - 80.0f - btnGap) / 2.0f);
+    float btnHeight = 64.0f;
+    float btnY = centerY + 38.0f;
+    Rectangle retry = {centerX - btnWidth - btnGap * 0.5f, btnY, btnWidth, btnHeight};
+    Rectangle backToMenu = {centerX + btnGap * 0.5f, btnY, btnWidth, btnHeight};
+    DrawGameTextIn("Game Over", (Rectangle){0.0f, centerY - 190.0f, sw, 96.0f},
+                   92.0f, (Color){220, 45, 55, 255}, true);
+    DrawGameTextIn("Fim da tentativa", (Rectangle){0.0f, centerY - 82.0f, sw, 52.0f},
+                   48.0f, (Color){255, 119, 103, 255}, true);
+    DrawGameTextIn("Sua tentativa terminou.", (Rectangle){0.0f, centerY - 18.0f, sw, 32.0f},
+                   22.0f, RAYWHITE, false);
+    DrawRectangleRec(retry, DARKGRAY);
+    DrawRectangleLinesEx(retry, 2, GOLD);
+    DrawGameTextIn("Repetir", (Rectangle){retry.x + 12.0f, retry.y + 8.0f, retry.width - 24.0f, retry.height - 16.0f},
+                   32.0f, RAYWHITE, true);
+    DrawRectangleRec(backToMenu, DARKGRAY);
+    DrawRectangleLinesEx(backToMenu, 2, GOLD);
+    DrawGameTextIn("Voltar ao Menu", (Rectangle){backToMenu.x + 12.0f, backToMenu.y + 8.0f, backToMenu.width - 24.0f, backToMenu.height - 16.0f},
+                   32.0f, RAYWHITE, true);
+    DrawGameTextIn("Enter ou R: nova tentativa  |  Esc: voltar ao menu",
+                   (Rectangle){0.0f, btnY + btnHeight + 24.0f, sw, 28.0f},
+                   18.0f, LIGHTGRAY, false);
+    EndTextureMode();
+    uiShot = LoadImageFromTexture(uiTarget.texture);
+    ImageFlipVertical(&uiShot);
+    assert(ExportImage(uiShot, "audit/game_over_side_by_side.png"));
     UnloadImage(uiShot);
     UnloadRenderTexture(uiTarget);
 }
