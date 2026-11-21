@@ -33,14 +33,14 @@ Todo o cálculo é aditivo, acumulativo e sem teto. O dano final aplicado em cad
 | Nível | Efeito / Regra | Valor | Constante / Identificador | Arquivo |
 | --- | --- | --- | --- | --- |
 | Base (N0) | Dano base do golpe | `20` (era `25`, `-20%`) | `WeaponBaseDamage(WEAPON_KATANA)` | `src/run_progress.h` / `src/game.c` |
-| Base (N0) | Arco de corte (`170°`, `cos(85°)`) | `+0.0872f` | `KATANA_BASE_ARC_DOT` | `src/game.c` |
+| Base (N0) | Arco de corte (`127°`, `cos(63,5°)`) | `+0.4462f` | `KATANA_BASE_ARC_DOT` | `src/game.c` |
 | Base (N0) | Alcance base | `105.0f px` | `KATANA_BASE_RANGE` | `src/game.c` |
 | Base (N0) | Recuperação entre golpes | `0.45f s` | `KATANA_BASE_RECOVERY` | `src/game.c` |
 | Base (N0) | Recarga base da esquiva | `5.0f s` | `dodgeRecovery` | `src/game.c` |
 | Nível 1 | Redução da recarga da esquiva ao acertar `>= 1` inimigo (1x por golpe) | `0.8f s` | `KATANA_L1_DODGE_REDUCTION` | `src/game.c` |
 | Nível 2 | Alcance ampliado | `105 -> 123.0f px` | `KATANA_L2_RANGE` | `src/game.c` |
 | Nível 2 | Recuperação reduzida *(a confirmar)* | `0.45 -> 0.40f s` | `KATANA_L2_RECOVERY` | `src/game.c` |
-| Nível 3 | Arco ampliado (`170° -> 194°`) | `-0.12f` | `KATANA_L3_ARC_DOT` | `src/game.c` |
+| Nível 3 | Arco ampliado (`127° -> 145°`, `cos(72,5°)`) | `+0.3007f` | `KATANA_L3_ARC_DOT` | `src/game.c` |
 | Nível 3 | Recuo nos inimigos atingidos | `42.0f px` | `KATANA_L3_KNOCKBACK` | `src/game.c` |
 | Nível 4 | Onda de choque frontal — dano base *(a confirmar)* | `22` | `KATANA_SHOCKWAVE_DAMAGE` | `src/game.c` |
 | Nível 4 | Onda de choque — recarga / vel. / vida / raio | `2.5f s` / `620.0f` / `0.95f s` / `32.0f` | `KATANA_SHOCKWAVE_COOLDOWN`, `KATANA_SHOCKWAVE_SPEED`, `KATANA_SHOCKWAVE_LIFE`, `KATANA_SHOCKWAVE_RADIUS` | `src/game.c` |

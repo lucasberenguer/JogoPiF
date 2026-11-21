@@ -51,8 +51,8 @@ static Vector2 RotateVector2(Vector2 dir, float radians) {
 #define KATANA_L2_RANGE 123.0f
 #define KATANA_BASE_RECOVERY 0.45f
 #define KATANA_L2_RECOVERY 0.40f
-#define KATANA_BASE_ARC_DOT 0.0872f
-#define KATANA_L3_ARC_DOT -0.12f
+#define KATANA_BASE_ARC_DOT 0.4462f
+#define KATANA_L3_ARC_DOT 0.3007f
 #define KATANA_L3_KNOCKBACK 42.0f
 #define KATANA_L1_DODGE_REDUCTION 0.8f
 #define KATANA_MAX_SHOCKWAVES 12
