@@ -32,7 +32,7 @@ typedef struct RunProgress {
     int health, maxHealth;
     float damage, speed, bossPower;
     int weaponLevel[3];
-    int strongWeapon;
+    int strongWeapon; /* Legado: mantido apenas para leitura e migração de saves antigos. */
     int epicDamageStacks;
     bool guardianIntroSeen;
     bool angelSceneCompleted;

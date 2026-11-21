@@ -86,7 +86,13 @@ static const SealQuestion finalQuestions[] = {
 };
 
 static const char *WeaponTitle(int weapon) {
-    return weapon == 0 ? "Arma de fogo" : weapon == 1 ? "Biblia" : "Katana";
+    return weapon == 0 ? "Arma de fogo" : weapon == 1 ? "Bíblia" : "Katana";
+}
+
+static bool IsEpicRewardStage(const Encounter *e) {
+    int lastWave = e->progress.map == TEMPLAR_FIELD_MAP ? TEMPLAR_FIELD_WAVES
+                 : (e->progress.map == BONELAND_MAP ? BONELAND_WAVES : CLEARING_WAVES);
+    return e->progress.stage == lastWave;
 }
 
 static void StartStage(Encounter *e, EnemyGroup *enemies, const Clearing *clearing, Vector2 player) {
@@ -380,7 +386,7 @@ static Reward RollSingleNormalReward(const Encounter *e, const bool used[REWARD_
 
 static void RollRewards(Encounter *e) {
     e->rewardCount=3;
-    if (e->progress.stage == CLEARING_WAVES) {
+    if (IsEpicRewardStage(e)) {
         int epicPool[4] = {0};
         int epicCount = 0;
         if (CurrentRunWeaponLevel(e) < MAX_WEAPON_LEVEL)
@@ -417,7 +423,7 @@ static Rectangle RerollButtonRect(int index, int count) {
 }
 
 bool RerollEncounterReward(Encounter *e, int slot) {
-    if (e->phase != ENCOUNTER_REWARD || e->progress.stage == CLEARING_WAVES ||
+    if (e->phase != ENCOUNTER_REWARD || IsEpicRewardStage(e) ||
         e->rerolled || slot < 0 || slot >= e->rewardCount) return false;
     bool used[REWARD_KIND_COUNT] = {false};
     for (int i = 0; i < e->rewardCount; i++) {
@@ -768,7 +774,7 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
             return true;
         }
     } else if (e->phase==ENCOUNTER_REWARD) {
-        if (e->progress.stage != CLEARING_WAVES && !e->rerolled &&
+        if (!IsEpicRewardStage(e) && !e->rerolled &&
             IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             Vector2 mouse = GetMousePosition();
             for (int i = 0; i < e->rewardCount; i++) {
@@ -792,7 +798,7 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
 
 static const char *CommonBuffShortText(int kind) {
     if (kind == REWARD_DAMAGE) return "Dano +15%";
-    if (kind == REWARD_HEALTH) return "Vida max +20 (cura 20)";
+    if (kind == REWARD_HEALTH) return "Vida máx. +20 (cura 20)";
     return "Velocidade +15";
 }
 
@@ -805,7 +811,7 @@ static const char *RarityLabel(int rarity) {
 static const char *RewardText(const Encounter *e, Reward reward) {
     switch (reward.kind) {
         case REWARD_DAMAGE: return "Dano\n+15% de dano base";
-        case REWARD_HEALTH: return "Vida maxima\n+20 de vida e cura 20";
+        case REWARD_HEALTH: return "Vida máxima\n+20 de vida e cura 20";
         case REWARD_SPEED: return "Velocidade\n+15 de velocidade";
         case REWARD_SWAP:
             return TextFormat("Trocar por %s\n- %s\n- %s",
@@ -816,20 +822,20 @@ static const char *RewardText(const Encounter *e, Reward reward) {
             int nextLevel = CurrentRunWeaponLevel(e) + 1;
             const char *perk = "Dano +20%";
             if (reward.weapon == 0) {
-                if (nextLevel == 1) perk = "Intervalo 0,20->0,14 s, vel 760->860 px/s";
+                if (nextLevel == 1) perk = "Intervalo 0,20->0,14 s, vel. 760->860 px/s";
                 else if (nextLevel == 2) perk = "Dano da arma +25% adicional";
                 else if (nextLevel == 3) perk = "2 tiros por disparo (+-5 graus)";
-                else if (nextLevel == 4) perk = "Tiros perfurantes (ate 2 inimigos)";
+                else if (nextLevel == 4) perk = "Tiros perfurantes (até 2 inimigos)";
                 else if (nextLevel == 5) perk = "Duas pistolas (4 tiros, +-13 px)";
             } else if (reward.weapon == 1) {
-                if (nextLevel == 1) perk = "Empurrao 36 px, dano +15% adicional";
-                else if (nextLevel == 2) perk = "Livros 4->5, orbita 90->102 px";
+                if (nextLevel == 1) perk = "Empurrão 36 px, dano +15% adicional";
+                else if (nextLevel == 2) perk = "Livros 4->5, órbita 90->102 px";
                 else if (nextLevel == 3) perk = "Boost 1,25->1,65 s, recarga 4,0->2,8 s";
                 else if (nextLevel == 4) perk = "Livros 5->6, bloqueia tiros no boost";
-                else if (nextLevel == 5) perk = "Pocas de agua benta (8 dano/0,45 s)";
+                else if (nextLevel == 5) perk = "Poças de água benta (8 dano/0,45 s)";
             } else if (reward.weapon == 2) {
                 if (nextLevel == 1) perk = "Acerto reduz recarga da esquiva em 0,8 s";
-                else if (nextLevel == 2) perk = "Alcance 105->123 px, recuperacao 0,45->0,40 s";
+                else if (nextLevel == 2) perk = "Alcance 105->123 px, recuperação 0,45->0,40 s";
                 else if (nextLevel == 3) perk = "Arco 127->145 graus, recuo 42 px";
                 else if (nextLevel == 4) perk = "Onda de choque (22 dano, recarga 2,5 s)";
                 else if (nextLevel == 5) perk = "Onda tripla (+-20 graus, recarga 1,8 s)";
@@ -849,7 +855,7 @@ static const char *RewardText(const Encounter *e, Reward reward) {
         case REWARD_EPIC_STATUS:
             return TextFormat("Status\nVida +%d / dano +25%%\nVelocidade +25%%", reward.amount);
         case REWARD_EPIC_FULL_HEAL:
-            return "Vida plena\nCura toda a vida\nVida maxima +50";
+            return "Vida plena\nCura toda a vida\nVida máxima +50";
         default:
             return "";
     }
@@ -1281,7 +1287,7 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
             const char *label = RewardText(e, e->rewards[i]);
             Rectangle textArea = {box.x + 14.0f, box.y + 30.0f, box.width - 28.0f, box.height - 40.0f};
             DrawMultilineCardText(TextFormat("%d. %s", i + 1, label), textArea, 18.0f, RAYWHITE);
-            if (e->progress.stage != CLEARING_WAVES) {
+            if (!IsEpicRewardStage(e)) {
                 Rectangle btn = RerollButtonRect(i, count);
                 bool btnHover = !e->rerolled && CheckCollisionPointRec(GetMousePosition(), btn);
                 DrawRerollButton(btn, e->rerolled, btnHover);

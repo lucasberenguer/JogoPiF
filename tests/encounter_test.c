@@ -295,25 +295,40 @@ static void CheckLegacyCheckpoints(void) {
                rTest.rewards[slot].kind != before[2].kind);
     }
 
-    /* Tela épica (após onda 4 = CLEARING_WAVES): 3 cartões épicos distintos, sem reroll */
-    for (int trial = 0; trial < 100; trial++) {
-        rTest.progress.stage = CLEARING_WAVES;
-        SetRunWeaponLevel(&rTest.progress, trial < 50 ? 2 : MAX_WEAPON_LEVEL);
+    /* Tela épica (após a última onda de cada mapa: Clareira/Cemitério = 4, Terra dos Ossos = 3, Campo dos Templários = 2):
+       3 cartões épicos distintos, sem reroll. E nas ondas anteriores desses mapas, tela normal com reroll permitido. */
+    static const int epicMapIds[3] = {0, BONELAND_MAP, TEMPLAR_FIELD_MAP};
+    static const int epicMapLastWaves[3] = {CLEARING_WAVES, BONELAND_WAVES, TEMPLAR_FIELD_WAVES};
+    for (int m = 0; m < 3; m++) {
+        rTest.progress.map = epicMapIds[m];
+        int lastWave = epicMapLastWaves[m];
+        /* Onda anterior à última: tela normal com reroll habilitado */
+        rTest.progress.stage = lastWave - 1;
+        SetRunWeaponLevel(&rTest.progress, 2);
         rTest.phase = ENCOUNTER_FIGHT;
         UpdateEncounter(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth);
-        assert(rTest.phase == ENCOUNTER_REWARD && rTest.rewardCount == 3);
-        /* Reroll desativado na tela épica */
-        assert(!RerollEncounterReward(&rTest, 0));
-        for (int i = 0; i < 3; i++) {
-            assert(rTest.rewards[i].rarity == RARITY_EPIC);
-            assert(rTest.rewards[i].kind >= REWARD_WEAPON_UPGRADE &&
-                   rTest.rewards[i].kind <= REWARD_EPIC_FULL_HEAL);
-            if (trial >= 50) assert(rTest.rewards[i].kind != REWARD_WEAPON_UPGRADE);
-            for (int j = i + 1; j < 3; j++) {
-                assert(rTest.rewards[i].kind != rTest.rewards[j].kind);
+        assert(rTest.phase == ENCOUNTER_REWARD && rTest.rewardCount == 3 && !rTest.rerolled);
+        assert(RerollEncounterReward(&rTest, 0) && rTest.rerolled);
+        /* Última onda do mapa: tela épica (3 épicos distintos, sem reroll) */
+        for (int trial = 0; trial < 40; trial++) {
+            rTest.progress.stage = lastWave;
+            SetRunWeaponLevel(&rTest.progress, trial < 20 ? 2 : MAX_WEAPON_LEVEL);
+            rTest.phase = ENCOUNTER_FIGHT;
+            UpdateEncounter(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth);
+            assert(rTest.phase == ENCOUNTER_REWARD && rTest.rewardCount == 3);
+            assert(!RerollEncounterReward(&rTest, 0));
+            for (int i = 0; i < 3; i++) {
+                assert(rTest.rewards[i].rarity == RARITY_EPIC);
+                assert(rTest.rewards[i].kind >= REWARD_WEAPON_UPGRADE &&
+                       rTest.rewards[i].kind <= REWARD_EPIC_FULL_HEAL);
+                if (trial >= 20) assert(rTest.rewards[i].kind != REWARD_WEAPON_UPGRADE);
+                for (int j = i + 1; j < 3; j++) {
+                    assert(rTest.rewards[i].kind != rTest.rewards[j].kind);
+                }
             }
         }
     }
+    rTest.progress.map = 0;
 
     /* 2. Ao chegar no nível 5, o upgrade de arma sai do sorteio */
     for (int trial = 0; trial < 300; trial++) {
@@ -434,6 +449,22 @@ static void CheckLegacyCheckpoints(void) {
     uiShot = LoadImageFromTexture(uiTarget.texture);
     ImageFlipVertical(&uiShot);
     assert(ExportImage(uiShot, "audit/rewards_rarities_rerolled.png"));
+    UnloadImage(uiShot);
+
+    /* Captura adicional com acentos nos textos novos (Bíblia Empurrão/órbita/Poças, Arma de fogo até 2 inimigos, Vida máxima) */
+    rTest.rerolled = false;
+    SetRunWeaponLevel(&rTest.progress, 0);
+    rTest.progress.weapon = 1;
+    rTest.rewards[0] = (Reward){.kind = REWARD_HEALTH, .rarity = RARITY_COMMON};
+    rTest.rewards[1] = (Reward){.kind = REWARD_WEAPON_UPGRADE, .rarity = RARITY_EPIC, .weapon = 1};
+    rTest.rewards[2] = (Reward){.kind = REWARD_EPIC_FULL_HEAL, .rarity = RARITY_EPIC};
+    BeginTextureMode(uiTarget);
+    ClearBackground(BLACK);
+    DrawEncounter(&rTest, &dummyEnemies);
+    EndTextureMode();
+    uiShot = LoadImageFromTexture(uiTarget.texture);
+    ImageFlipVertical(&uiShot);
+    assert(ExportImage(uiShot, "audit/rewards_accented_cards.png"));
     UnloadImage(uiShot);
 
     /* Captura visual da tela de Game Over com botões lado a lado */
