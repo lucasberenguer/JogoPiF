@@ -2,6 +2,8 @@
 #include "game_text.h"
 #include "menu.h"
 #include "dev_tools.h"
+#include "bible.h"
+#include "gun.h"
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -65,6 +67,324 @@ static void CheckLegacyCheckpoints(void) {
         RunProgress restored={0};
         assert(LoadClearingCheckpoint(&restored) && restored.guardianAftermath==state);
     }
+    /* Fase 1: Migração PIF-RUN-7 -> PIF-RUN-8, nível único, strongWeapon -> epicDamageStacks, EncounterDamage e WeaponBaseDamage */
+    assert(WeaponBaseDamage(0) == 5 && WeaponBaseDamage(1) == 12 && WeaponBaseDamage(2) == 20);
+    assert(SaveFileText(path, "PIF-RUN-7 1 3 80 120 1.3 255 1 1 4 2 1 1 0 4\n"));
+    RunProgress mig7 = {0};
+    assert(LoadClearingCheckpoint(&mig7));
+    assert(mig7.epicDamageStacks == 1);
+    assert(mig7.weapon == 1);
+    assert(mig7.weaponLevel[0] == 4 && mig7.weaponLevel[1] == 4 && mig7.weaponLevel[2] == 4);
+    assert(SaveFileText(path, "PIF-RUN-7 2 2 90 100 1.0 240 1 0 1 5 -1 0 0 0\n"));
+    assert(LoadClearingCheckpoint(&mig7));
+    assert(mig7.epicDamageStacks == 0);
+    assert(mig7.weapon == 2);
+    assert(mig7.weaponLevel[0] == 5 && mig7.weaponLevel[1] == 5 && mig7.weaponLevel[2] == 5);
+    mig7.epicDamageStacks = 3;
+    assert(SaveClearingCheckpoint(&mig7));
+    RunProgress mig8 = {0};
+    assert(LoadClearingCheckpoint(&mig8));
+    assert(mig8.epicDamageStacks == 3 && mig8.weaponLevel[0] == 5 && mig8.weaponLevel[1] == 5 && mig8.weaponLevel[2] == 5);
+
+    Encounter dmgTest = {.progress = NewRunProgress(2)};
+    dmgTest.progress.damage = 1.2f;
+    SetRunWeaponLevel(&dmgTest.progress, 3);
+    dmgTest.progress.epicDamageStacks = 2;
+    /* Katana (2): 1.2 * (1 + 0.2*3 + 0.5*2 + 0) = 1.2 * 2.6 = 3.12 */
+    assert(fabsf(EncounterDamage(&dmgTest) - 3.12f) < 0.0001f);
+    /* Bíblia (1) N>=1: +0.15 => 1.2 * (1 + 0.6 + 1.0 + 0.15) = 1.2 * 2.75 = 3.30 */
+    dmgTest.progress.weapon = 1;
+    assert(fabsf(EncounterDamage(&dmgTest) - 3.30f) < 0.0001f);
+    SetRunWeaponLevel(&dmgTest.progress, 0);
+    /* Bíblia (1) N=0: +0 => 1.2 * (1 + 0 + 1.0 + 0) = 2.40 */
+    assert(fabsf(EncounterDamage(&dmgTest) - 2.40f) < 0.0001f);
+    /* Arma de fogo (0) N=1: +0 => 1.2 * (1 + 0.2 + 1.0 + 0) = 2.64 */
+    dmgTest.progress.weapon = 0;
+    SetRunWeaponLevel(&dmgTest.progress, 1);
+    assert(fabsf(EncounterDamage(&dmgTest) - 2.64f) < 0.0001f);
+    /* Arma de fogo (0) N=2: +0.25 => 1.2 * (1 + 0.4 + 1.0 + 0.25) = 1.2 * 2.65 = 3.18 */
+    SetRunWeaponLevel(&dmgTest.progress, 2);
+    assert(fabsf(EncounterDamage(&dmgTest) - 3.18f) < 0.0001f);
+
+    /* Fase 2: Testes de upgrades das armas (Bíblia e Arma de fogo) */
+    Bible bTest = {0};
+    ResetBible(&bTest);
+    Vector2 pPos = {500.0f, 500.0f};
+    /* Base (N0) e N1: 4 livros, órbita 90 px, boost 1.25 s, recarga 4.0 s, não bloqueia projéteis, sem poças */
+    UpdateBible(&bTest, 0.0f, true, 0, true, pPos);
+    assert(fabsf(bTest.boostRemaining - 1.25f) < 0.001f && fabsf(bTest.boostCooldown - 4.0f) < 0.001f);
+    assert(BibleTouchesCircle(&bTest, pPos, (Vector2){590.0f, 466.0f}, 1.0f));
+    /* Em 90 px + 17 (BIBLE_HIT_RADIUS) + 1 = 108 px (x=608); x=612 está fora em 90 px mas dentro em 102 px (102+18=120 -> x=620) */
+    assert(!BibleTouchesCircle(&bTest, pPos, (Vector2){612.0f, 466.0f}, 1.0f));
+    assert(!BibleBlocksCircle(&bTest, pPos, (Vector2){590.0f, 466.0f}, 6.0f));
+    /* N2: 5 livros, órbita 102 px */
+    ResetBible(&bTest);
+    UpdateBible(&bTest, 0.0f, false, 2, true, pPos);
+    assert(BibleTouchesCircle(&bTest, pPos, (Vector2){612.0f, 466.0f}, 1.0f));
+    /* N3: boost 1.65 s, recarga 2.8 s, ainda não bloqueia projéteis */
+    ResetBible(&bTest);
+    UpdateBible(&bTest, 0.0f, true, 3, true, pPos);
+    assert(fabsf(bTest.boostRemaining - 1.65f) < 0.001f && fabsf(bTest.boostCooldown - 2.8f) < 0.001f);
+    assert(!BibleBlocksCircle(&bTest, pPos, (Vector2){602.0f, 466.0f}, 6.0f));
+    /* N4: 6 livros e bloqueia projéteis durante o boost, mas sem poças de água benta */
+    ResetBible(&bTest);
+    UpdateBible(&bTest, 0.7f, true, 4, true, pPos);
+    assert(BibleBlocksCircle(&bTest, pPos, (Vector2){pPos.x + cosf(bTest.angle)*102.0f, pPos.y - 34.0f + sinf(bTest.angle)*102.0f}, 6.0f));
+    assert(bTest.pools[0].remaining <= 0.0f);
+    /* N5: poças de água benta a cada 3.5 s em combate */
+    ResetBible(&bTest);
+    UpdateBible(&bTest, 0.7f, false, 5, true, pPos);
+    assert(bTest.pools[0].remaining > 0.0f && bTest.pools[0].tickReady);
+    assert(BibleHolyWaterHits(&bTest, pPos, 10.0f));
+
+    /* Arma de fogo: N0..N5 */
+    Clearing gunMap = {0};
+    Gun gTest = {0};
+    ResetGun(&gTest);
+    Vector2 aimPos = {600.0f, 465.0f};
+    /* N0: 1 tiro, intervalo 0.20 s, hitsRemaining = 1 */
+    UpdateGun(&gTest, &gunMap, pPos, aimPos, 0.0f, true, 0);
+    assert(fabsf(gTest.shotCooldown - 0.20f) < 0.001f);
+    int shotCount = 0;
+    for (int i = 0; i < GUN_MAX_SHOTS; i++) if (gTest.shots[i].life > 0.0f) shotCount++;
+    assert(shotCount == 1 && gTest.shots[0].hitsRemaining == 1);
+    gTest.shots[0].delay = 0.0f;
+    assert(GunHitEnemyCircle(&gTest, 0, gTest.shots[0].position, 10.0f) == WeaponBaseDamage(0));
+    assert(gTest.shots[0].life <= 0.0f);
+    /* N1: intervalo 0.14 s, 1 tiro */
+    ResetGun(&gTest);
+    UpdateGun(&gTest, &gunMap, pPos, aimPos, 0.0f, true, 1);
+    assert(fabsf(gTest.shotCooldown - 0.14f) < 0.001f);
+    /* N3: 2 tiros (+-5 graus), não perfura */
+    ResetGun(&gTest);
+    UpdateGun(&gTest, &gunMap, pPos, aimPos, 0.0f, true, 3);
+    shotCount = 0;
+    for (int i = 0; i < GUN_MAX_SHOTS; i++) if (gTest.shots[i].life > 0.0f) shotCount++;
+    assert(shotCount == 2 && gTest.shots[0].hitsRemaining == 1);
+    /* N4: tiros perfurantes (acertam até 2 inimigos distintos, nunca o mesmo duas vezes) */
+    ResetGun(&gTest);
+    UpdateGun(&gTest, &gunMap, pPos, aimPos, 0.0f, true, 4);
+    assert(gTest.shots[0].hitsRemaining == 2);
+    gTest.shots[0].delay = 0.0f;
+    Vector2 sPos = gTest.shots[0].position;
+    gTest.shots[1].life = 0.0f; /* Isola 1 tiro para testar perfuração */
+    assert(GunHitEnemyCircle(&gTest, 3, sPos, 10.0f) == WeaponBaseDamage(0));
+    assert(gTest.shots[0].life > 0.0f && gTest.shots[0].hitsRemaining == 1);
+    /* Mesmo inimigo (índice 3) não leva segundo acerto do mesmo tiro */
+    assert(GunHitEnemyCircle(&gTest, 3, sPos, 10.0f) == 0);
+    assert(gTest.shots[0].life > 0.0f);
+    /* Segundo inimigo (índice 4) leva dano integral e encerra o tiro */
+    assert(GunHitEnemyCircle(&gTest, 4, sPos, 10.0f) == WeaponBaseDamage(0));
+    assert(gTest.shots[0].life <= 0.0f);
+    /* N5: duas pistolas = 4 tiros por disparo */
+    ResetGun(&gTest);
+    UpdateGun(&gTest, &gunMap, pPos, aimPos, 0.0f, true, 5);
+    shotCount = 0;
+    for (int i = 0; i < GUN_MAX_SHOTS; i++) if (gTest.shots[i].life > 0.0f) shotCount++;
+    assert(shotCount == 4);
+
+    /* Fase 3a: Testes de raridades, sorteio normal, remoção do nível 5 do pool e aplicação de efeitos */
+    Clearing rewardMap = {0};
+    EnemyGroup dummyEnemies = {0};
+    for (int i = 0; i < ENEMY_COUNT; i++) dummyEnemies.list[i] = (Enemy){.state = ENEMY_GONE};
+    Encounter rTest = {.progress = NewRunProgress(1), .practice = true};
+    int rHealth = 100;
+    int rarityCounts[RARITY_COUNT] = {0};
+    /* 1. Sorteio normal e teste estatístico dos pesos (1000 telas = 3000 vagas, pesos 70/25/5) */
+    int firstSlotRarity[RARITY_COUNT] = {0};
+    for (int trial = 0; trial < 1000; trial++) {
+        rTest.progress.stage = 1;
+        rTest.progress.weapon = 1;
+        SetRunWeaponLevel(&rTest.progress, 2);
+        rTest.phase = ENCOUNTER_FIGHT;
+        UpdateEncounter(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth);
+        assert(rTest.phase == ENCOUNTER_REWARD && rTest.rewardCount == 3);
+        firstSlotRarity[rTest.rewards[0].rarity]++;
+        for (int i = 0; i < 3; i++) {
+            Reward rw = rTest.rewards[i];
+            assert(rw.rarity >= RARITY_COMMON && rw.rarity <= RARITY_EPIC);
+            rarityCounts[rw.rarity]++;
+            /* Nunca dois cartões do mesmo tipo na mesma tela */
+            for (int j = i + 1; j < 3; j++) {
+                assert(rw.kind != rTest.rewards[j].kind);
+            }
+            if (rw.rarity == RARITY_COMMON) {
+                assert(rw.kind == REWARD_DAMAGE || rw.kind == REWARD_HEALTH || rw.kind == REWARD_SPEED);
+            } else if (rw.rarity == RARITY_RARE) {
+                assert(rw.kind == REWARD_SWAP);
+                assert(rw.weapon != rTest.progress.weapon && rw.weapon >= 0 && rw.weapon < 3);
+                assert(rw.bonus[0] >= REWARD_DAMAGE && rw.bonus[0] <= REWARD_SPEED);
+                assert(rw.bonus[1] >= REWARD_DAMAGE && rw.bonus[1] <= REWARD_SPEED);
+                assert(rw.bonus[0] != rw.bonus[1]);
+            } else if (rw.rarity == RARITY_EPIC) {
+                assert(rw.kind >= REWARD_WEAPON_UPGRADE && rw.kind <= REWARD_EPIC_FULL_HEAL);
+                if (rw.kind == REWARD_EPIC_STATUS) {
+                    assert(rw.amount >= 30 && rw.amount <= 60 && (rw.amount % 10) == 0);
+                }
+            }
+        }
+    }
+    /* Na 1ª vaga de cada tela (1000 amostras independentes sem esgotamento do raro),
+       espera-se ~700 comuns (70%), ~250 raros (25%), ~50 épicos (5%).
+       E no total de 3000 vagas (onde o raro tem teto de 1 por tela), comum domina > raro > épico. */
+    assert(firstSlotRarity[RARITY_COMMON] >= 620 && firstSlotRarity[RARITY_COMMON] <= 780);
+    assert(firstSlotRarity[RARITY_RARE] >= 180 && firstSlotRarity[RARITY_RARE] <= 320);
+    assert(firstSlotRarity[RARITY_EPIC] >= 20 && firstSlotRarity[RARITY_EPIC] <= 90);
+    assert(rarityCounts[RARITY_COMMON] > rarityCounts[RARITY_RARE] &&
+           rarityCounts[RARITY_RARE] > rarityCounts[RARITY_EPIC] &&
+           rarityCounts[RARITY_EPIC] >= 60);
+
+    /* Fase 3b: Testes de reroll por cartão e da tela épica (onda 4, 3 cartões épicos distintos, sem reroll) */
+    for (int trial = 0; trial < 200; trial++) {
+        rTest.progress.stage = 1;
+        SetRunWeaponLevel(&rTest.progress, 2);
+        rTest.phase = ENCOUNTER_FIGHT;
+        UpdateEncounter(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth);
+        assert(rTest.phase == ENCOUNTER_REWARD && !rTest.rerolled);
+        int slot = trial % 3;
+        Reward before[3] = {rTest.rewards[0], rTest.rewards[1], rTest.rewards[2]};
+        assert(!RerollEncounterReward(&rTest, -1) && !RerollEncounterReward(&rTest, 3));
+        assert(RerollEncounterReward(&rTest, slot));
+        assert(rTest.rerolled);
+        /* O segundo reroll na mesma tela é recusado */
+        assert(!RerollEncounterReward(&rTest, (slot + 1) % 3));
+        /* Os outros 2 cartões permanecem intactos */
+        for (int i = 0; i < 3; i++) {
+            if (i != slot) assert(rTest.rewards[i].kind == before[i].kind);
+        }
+        /* O cartão renovado não repete o tipo anterior nem os outros dois presentes na tela */
+        assert(rTest.rewards[slot].kind != before[0].kind &&
+               rTest.rewards[slot].kind != before[1].kind &&
+               rTest.rewards[slot].kind != before[2].kind);
+    }
+
+    /* Tela épica (após onda 4 = CLEARING_WAVES): 3 cartões épicos distintos, sem reroll */
+    for (int trial = 0; trial < 100; trial++) {
+        rTest.progress.stage = CLEARING_WAVES;
+        SetRunWeaponLevel(&rTest.progress, trial < 50 ? 2 : MAX_WEAPON_LEVEL);
+        rTest.phase = ENCOUNTER_FIGHT;
+        UpdateEncounter(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth);
+        assert(rTest.phase == ENCOUNTER_REWARD && rTest.rewardCount == 3);
+        /* Reroll desativado na tela épica */
+        assert(!RerollEncounterReward(&rTest, 0));
+        for (int i = 0; i < 3; i++) {
+            assert(rTest.rewards[i].rarity == RARITY_EPIC);
+            assert(rTest.rewards[i].kind >= REWARD_WEAPON_UPGRADE &&
+                   rTest.rewards[i].kind <= REWARD_EPIC_FULL_HEAL);
+            if (trial >= 50) assert(rTest.rewards[i].kind != REWARD_WEAPON_UPGRADE);
+            for (int j = i + 1; j < 3; j++) {
+                assert(rTest.rewards[i].kind != rTest.rewards[j].kind);
+            }
+        }
+    }
+
+    /* 2. Ao chegar no nível 5, o upgrade de arma sai do sorteio */
+    for (int trial = 0; trial < 300; trial++) {
+        rTest.progress.stage = 1;
+        SetRunWeaponLevel(&rTest.progress, MAX_WEAPON_LEVEL);
+        rTest.phase = ENCOUNTER_FIGHT;
+        UpdateEncounter(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth);
+        assert(rTest.phase == ENCOUNTER_REWARD && rTest.rewardCount == 3);
+        for (int i = 0; i < 3; i++) {
+            assert(rTest.rewards[i].kind != REWARD_WEAPON_UPGRADE);
+        }
+    }
+
+    /* 3. Aplicação de todos os tipos de cartão */
+    /* Comum: Dano +0.15 */
+    rTest.progress = NewRunProgress(0);
+    rTest.practice = true;
+    rHealth = 80;
+    rTest.progress.stage = 1;
+    rTest.phase = ENCOUNTER_REWARD;
+    rTest.rewardCount = 1;
+    rTest.rewards[0] = (Reward){.kind = REWARD_DAMAGE, .rarity = RARITY_COMMON};
+    assert(ChooseEncounterReward(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth, 0));
+    assert(fabsf(rTest.progress.damage - 1.15f) < 0.0001f);
+    /* Comum: Vida máxima +20 e cura 20 */
+    rTest.progress.stage = 1;
+    rTest.phase = ENCOUNTER_REWARD;
+    rTest.rewardCount = 1;
+    rTest.rewards[0] = (Reward){.kind = REWARD_HEALTH, .rarity = RARITY_COMMON};
+    assert(ChooseEncounterReward(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth, 0));
+    assert(rTest.progress.maxHealth == 120 && rHealth == 100);
+    /* Comum: Velocidade +15 */
+    rTest.progress.stage = 1;
+    rTest.phase = ENCOUNTER_REWARD;
+    rTest.rewardCount = 1;
+    rTest.rewards[0] = (Reward){.kind = REWARD_SPEED, .rarity = RARITY_COMMON};
+    assert(ChooseEncounterReward(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth, 0));
+    assert(fabsf(rTest.progress.speed - 255.0f) < 0.0001f);
+    /* Raro: troca de arma mantendo o nível e concedendo 2 buffs comuns distintos */
+    SetRunWeaponLevel(&rTest.progress, 3);
+    rTest.progress.stage = 1;
+    rTest.phase = ENCOUNTER_REWARD;
+    rTest.rewardCount = 1;
+    rTest.rewards[0] = (Reward){.kind = REWARD_SWAP, .rarity = RARITY_RARE, .weapon = 2,
+                                .bonus = {REWARD_DAMAGE, REWARD_SPEED}};
+    assert(ChooseEncounterReward(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth, 0));
+    assert(rTest.progress.weapon == 2 && rTest.progress.weaponLevel[2] == 3);
+    assert(fabsf(rTest.progress.damage - 1.30f) < 0.0001f && fabsf(rTest.progress.speed - 270.0f) < 0.0001f);
+    assert(rTest.notice[0] == 0); /* Bônus surpresa antigo removido */
+    /* Épico (a): upgrade da arma equipada (+1 nível, até 5) */
+    rTest.progress.stage = 1;
+    rTest.phase = ENCOUNTER_REWARD;
+    rTest.rewardCount = 1;
+    rTest.rewards[0] = (Reward){.kind = REWARD_WEAPON_UPGRADE, .rarity = RARITY_EPIC, .weapon = 2};
+    assert(ChooseEncounterReward(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth, 0));
+    assert(rTest.progress.weaponLevel[0] == 4 && rTest.progress.weaponLevel[1] == 4 && rTest.progress.weaponLevel[2] == 4);
+    /* Épico (b): dano das armas +50% (epicDamageStacks++) */
+    rTest.progress.stage = 1;
+    rTest.phase = ENCOUNTER_REWARD;
+    rTest.rewardCount = 1;
+    rTest.rewards[0] = (Reward){.kind = REWARD_EPIC_DAMAGE, .rarity = RARITY_EPIC, .weapon = 2};
+    assert(ChooseEncounterReward(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth, 0));
+    assert(rTest.progress.epicDamageStacks == 1);
+    /* Épico (c): status (+30..60 vida máx e cura, +0.20 dano, +15 velocidade) */
+    rHealth = 50;
+    rTest.progress.stage = 1;
+    rTest.phase = ENCOUNTER_REWARD;
+    rTest.rewardCount = 1;
+    rTest.rewards[0] = (Reward){.kind = REWARD_EPIC_STATUS, .rarity = RARITY_EPIC, .amount = 40};
+    assert(ChooseEncounterReward(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth, 0));
+    assert(rTest.progress.maxHealth == 160 && rHealth == 90);
+    assert(fabsf(rTest.progress.damage - 1.50f) < 0.0001f && fabsf(rTest.progress.speed - 285.0f) < 0.0001f);
+    /* Épico (d): vida plena (+50 de vida máxima e cura toda a vida) */
+    rHealth = 35;
+    rTest.progress.stage = 1;
+    rTest.phase = ENCOUNTER_REWARD;
+    rTest.rewardCount = 1;
+    rTest.rewards[0] = (Reward){.kind = REWARD_EPIC_FULL_HEAL, .rarity = RARITY_EPIC};
+    assert(ChooseEncounterReward(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth, 0));
+    assert(rTest.progress.maxHealth == 210 && rHealth == 210);
+
+    /* Fase 4: Renderização visual das 3 raridades (comum, raro com 2 buffs, épico de +50% antes->depois) e reroll ativo/desativado */
+    rTest = (Encounter){.progress = NewRunProgress(2), .phase = ENCOUNTER_REWARD, .rewardCount = 3, .sealEnemy = -1};
+    SetRunWeaponLevel(&rTest.progress, 1); /* N1: mult = 1.2 => ceil(20 * 1.2) = 24; após +50% => mult = 1.7 => ceil(20 * 1.7) = 34 */
+    rTest.progress.stage = 2;
+    rTest.rewards[0] = (Reward){.kind = REWARD_DAMAGE, .rarity = RARITY_COMMON};
+    rTest.rewards[1] = (Reward){.kind = REWARD_SWAP, .rarity = RARITY_RARE, .weapon = 1, .bonus = {REWARD_HEALTH, REWARD_SPEED}};
+    rTest.rewards[2] = (Reward){.kind = REWARD_EPIC_DAMAGE, .rarity = RARITY_EPIC, .weapon = 2};
+    RenderTexture2D uiTarget = LoadRenderTexture(1280, 720);
+    BeginTextureMode(uiTarget);
+    ClearBackground(BLACK);
+    DrawEncounter(&rTest, &dummyEnemies);
+    EndTextureMode();
+    Image uiShot = LoadImageFromTexture(uiTarget.texture);
+    ImageFlipVertical(&uiShot);
+    assert(ExportImage(uiShot, "audit/rewards_rarities_active.png"));
+    UnloadImage(uiShot);
+    rTest.rerolled = true;
+    rTest.rewards[0] = (Reward){.kind = REWARD_WEAPON_UPGRADE, .rarity = RARITY_EPIC, .weapon = 2};
+    BeginTextureMode(uiTarget);
+    ClearBackground(BLACK);
+    DrawEncounter(&rTest, &dummyEnemies);
+    EndTextureMode();
+    uiShot = LoadImageFromTexture(uiTarget.texture);
+    ImageFlipVertical(&uiShot);
+    assert(ExportImage(uiShot, "audit/rewards_rarities_rerolled.png"));
+    UnloadImage(uiShot);
+    UnloadRenderTexture(uiTarget);
 }
 
 static void CheckDevTools(Encounter *e, EnemyGroup *enemies, Clearing *map) {
@@ -112,6 +432,22 @@ static void CheckDevTools(Encounter *e, EnemyGroup *enemies, Clearing *map) {
     assert(e->practice && map->cemetery && e->progress.map==1);
     assert(e->progress.guardianAftermath==GUARDIAN_PASSAGE_COMPLETE);
     assert(!CompleteGuardianPassage(e,enemies,map,&player,health));
+    /* Fase 5: Usar DevTools para colocar cada arma (0, 1, 2) em cada nível (1 a 5) e verificar estado, dano e cartões */
+    tools.map = 0;
+    tools.wave = 1;
+    for (int w = 0; w < 3; w++) {
+        tools.weapon = w;
+        for (int lvl = 1; lvl <= MAX_WEAPON_LEVEL; lvl++) {
+            tools.weaponLevel = lvl;
+            assert(StartDevEncounter(&tools, DEV_STAGE, e, enemies, map, &player, &health));
+            assert(e->practice && e->progress.weapon == w);
+            for (int k = 0; k < 3; k++) assert(e->progress.weaponLevel[k] == lvl);
+            float expectedBonus = (w == 1 && lvl >= 1) ? BIBLE_L1_DAMAGE_BONUS
+                                : (w == 0 && lvl >= 2) ? GUN_L2_DAMAGE_BONUS : 0.0f;
+            float expectedMult = 1.0f + WEAPON_LEVEL_DAMAGE_BONUS * lvl + expectedBonus;
+            assert(fabsf(EncounterDamage(e) - expectedMult) < 0.0001f);
+        }
+    }
     RunProgress unchanged={0};
     assert(LoadClearingCheckpoint(&unchanged));
     assert(unchanged.stage==3 && unchanged.weapon==1 && unchanged.health==75 &&
@@ -273,8 +609,9 @@ int main(void) {
         assert(EnemiesRemaining(&enemies)==0);
         UpdateEncounter(&encounter,&enemies,&clearing,player,&health);
         assert(encounter.phase==ENCOUNTER_REWARD);
-        assert(encounter.rewardCount==(wave==CLEARING_WAVES?2:3));
+        assert(encounter.rewardCount==3);
         if (wave==1) Capture("audit/rewards.png",&encounter,&enemies,&clearing,player);
+        if (wave==CLEARING_WAVES) Capture("audit/rewards_epic_wave4.png",&encounter,&enemies,&clearing,player);
         assert(!ChooseEncounterReward(&encounter,&enemies,&clearing,player,&health,9));
         assert(ChooseEncounterReward(&encounter,&enemies,&clearing,player,&health,0));
         RunProgress saved={0};
@@ -678,13 +1015,16 @@ int main(void) {
         "PIF-RUN-5 0 1 100 100 1 inf 1 0 0 0 -1 0",
         "PIF-RUN-5 0 1 101 100 1 240 1 0 0 0 -1 0",
         "PIF-RUN-5 0 1 100 100 1 240 1 0 0 0 -1 6",
-        "PIF-RUN-5 0 1 100 100 1 240 1 5 0 0 -1 0",
+        "PIF-RUN-5 0 1 100 100 1 240 1 6 0 0 -1 0",
         "PIF-RUN-6 0 5 100 100 1 240 1 0 0 0 -1 0 2",
         "PIF-RUN-6 0 5 100 100 1 240 1 0 0 0 -1 0",
         "PIF-RUN-7 0 6 100 100 1 240 1 0 0 0 -1 0 1",
         "PIF-RUN-7 0 6 100 100 1 240 1 0 0 0 -1 0 1 9",
         "PIF-RUN-7 0 6 100 100 1 240 1 0 0 0 -1 1 1 1",
-        "PIF-RUN-7 0 5 100 100 1 240 1 0 0 0 -1 0 1 2"
+        "PIF-RUN-7 0 5 100 100 1 240 1 0 0 0 -1 0 1 2",
+        "PIF-RUN-8 0 1 100 100 1 240 1 0 0 0 -1 0 0 0",
+        "PIF-RUN-8 0 1 100 100 1 240 1 0 0 0 -1 0 0 0 -1",
+        "PIF-RUN-8 0 1 100 100 1 240 1 6 0 0 -1 0 0 0 0"
     };
     for (unsigned i=0;i<sizeof(invalidSaves)/sizeof(invalidSaves[0]);i++) {
         assert(SaveFileText(saveFile,(char *)invalidSaves[i]));
