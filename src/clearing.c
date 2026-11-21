@@ -271,6 +271,15 @@ bool InitTemplarField(Clearing *map) {
     return true;
 }
 
+static bool InitNecromancerArena(Clearing *map) {
+    if (!LoadMapWithCollision(map, "assets/arena_necromante.png",
+                             "assets/arena_necromante_collision.png")) return false;
+    map->necromancerArena = true;
+    map->spawn = (Vector2){836, 861};
+    map->pedestal = (Vector2){836, 480};
+    return true;
+}
+
 bool InitCampaignMap(Clearing *map, int mapId) {
     switch (mapId) {
         case 0: return InitClearing(map);
@@ -281,11 +290,13 @@ bool InitCampaignMap(Clearing *map, int mapId) {
         case 5: return InitInvertedChapel(map);
         case BONELAND_MAP: return InitBoneland(map);
         case TEMPLAR_FIELD_MAP: return InitTemplarField(map);
+        case NECROMANCER_MAP: return InitNecromancerArena(map);
         default: return false;
     }
 }
 
 int ClearingMapId(const Clearing *map) {
+    if (map->necromancerArena) return NECROMANCER_MAP;
     if (map->templarField) return TEMPLAR_FIELD_MAP;
     if (map->boneland) return BONELAND_MAP;
     if (map->invertedChapel) return 5;

@@ -6,14 +6,23 @@
 
 enum { REWARD_DAMAGE, REWARD_HEALTH, REWARD_SPEED, REWARD_WEAPON, REWARD_SWAP };
 static const char boneLordName[] = "Rasga-Ossos";
-static const struct {
+typedef struct SealQuestion {
     const char *expression;
     const char *choices[3]; /* correct first; the slot is shuffled */
-} bossQuestions[] = {
+} SealQuestion;
+
+static const SealQuestion bossQuestions[] = {
     {"P e (Q ou nao Q)", {"P", "nao P", "Q"}},
     {"nao (P ou Q)", {"nao P e nao Q", "nao P ou nao Q", "P e Q"}},
     {"(P e Q) ou (nao P e Q)", {"Q", "P", "P ou Q"}},
     {"nao (P e Q)", {"nao P ou nao Q", "nao P e nao Q", "P ou Q"}},
+};
+
+static const SealQuestion finalQuestions[] = {
+    {"(P ou Q) e (P ou não Q)", {"P", "Q", "P ou Q"}},
+    {"não (P e (Q ou R))", {"não P ou (não Q e não R)", "não P e (não Q ou não R)", "não P ou não Q ou não R"}},
+    {"(P e Q) ou (P e não Q) ou (não P e R)", {"P ou R", "P e R", "Q ou R"}},
+    {"(P e Q) ou (não P e não Q)", {"P e Q têm o mesmo valor", "P e Q têm valores diferentes", "P ou Q"}},
 };
 
 static const char *WeaponTitle(int weapon) {
@@ -24,25 +33,32 @@ static void StartStage(Encounter *e, EnemyGroup *enemies, const Clearing *cleari
     if (e->progress.stage == CLEARING_COMPLETE_STAGE) {
         for (int i=0; i<ENEMY_COUNT; i++) enemies->list[i] = (Enemy){.state=ENEMY_GONE};
         ClearEnemyAttacks(enemies);
+        if (clearing->necromancerArena) enemies->list[0].necromancerForm=3;
         e->phase = ENCOUNTER_CLEAR;
     } else {
         e->phase = ENCOUNTER_FIGHT;
-        const char *areaTitle = clearing->templarField ? "Campo de Batalha dos Templários"
+        const char *areaTitle = clearing->necromancerArena ? "Topo do Palácio" :
+            clearing->templarField ? "Campo de Batalha dos Templários"
             : clearing->boneland ? "Terra dos Ossos" : clearing->invertedChapel ? "Capela Invertida"
             : (clearing->basement ? "Porão da Capela"
             : (clearing->chapel ? "Capela do Anjo"
             : (clearing->village ? "Vila Lascada"
             : (clearing->cemetery ? "Cemitério das Raízes" : "Clareira do Selo"))));
-        const char *bossTitle = clearing->templarField ? "Marechal Carmesim"
+        const char *bossTitle = clearing->necromancerArena ? "Necromante" :
+            clearing->templarField ? "Marechal Carmesim"
             : clearing->boneland ? boneLordName : (clearing->village || clearing->chapel || clearing->basement || clearing->invertedChapel) ? NULL
             : (clearing->cemetery ? "Coveiro das Raízes" : "Guardião da Clareira");
         int wave = e->progress.stage;
-        if (clearing->village || clearing->chapel || clearing->basement || clearing->invertedChapel)
+        if (clearing->necromancerArena || clearing->village || clearing->chapel || clearing->basement || clearing->invertedChapel)
             wave = 0;
         else if ((clearing->boneland || clearing->templarField) && wave == CLEARING_BOSS_STAGE)
             wave = (clearing->boneland ? BONELAND_WAVES : TEMPLAR_FIELD_WAVES) + 1;
         BeginStagePresentation(&e->presentation, wave, areaTitle,
             e->progress.stage==CLEARING_BOSS_STAGE ? bossTitle : NULL);
+        if (clearing->necromancerArena) {
+            e->presentation.areaSubtitle = "O Grande Selo Profano";
+            e->presentation.portraitCenterX = .72f;
+        }
         if (clearing->boneland) {
             e->presentation.waveTotal = BONELAND_WAVES + 1;
             e->presentation.portraitCenterX = .74f;
@@ -317,7 +333,10 @@ bool OpenEncounterSeal(Encounter *e, const EnemyGroup *enemies, Vector2 player) 
     if (e->phase!=ENCOUNTER_FIGHT || e->presentation.remaining>0) return false;
     for (int i=0;i<ENEMY_COUNT;i++) if (enemies->list[i].state==ENEMY_FALLEN &&
         Vector2Distance(enemies->list[i].position,player)<95) {
-        e->sealEnemy=i; e->question=GetRandomValue(0,3); e->answer=GetRandomValue(0,2);
+        e->sealEnemy=i;
+        e->question=e->progress.map==NECROMANCER_MAP ?
+            e->progress.finalSealFailures % 4 : GetRandomValue(0,3);
+        e->answer=GetRandomValue(0,2);
         e->phase=ENCOUNTER_SEAL;
         return true;
     }
@@ -331,6 +350,36 @@ bool AnswerEncounterSeal(Encounter *e, EnemyGroup *enemies, int *health, int cho
     if (choice<0 || choice>=count) return false;
     int correct=enemy->type==ENEMY_BOSS?e->answer:(e->question==0 || e->question==3?0:1);
     ClearEnemyAttacks(enemies);
+    if (e->progress.map==NECROMANCER_MAP) {
+        if (choice!=correct) e->progress.finalSealFailures++;
+        bool finalAttempt=e->progress.finalSealFailures>=3;
+        bool savedByAngel=choice!=correct && finalAttempt && e->progress.angelBlessingUses>0;
+        if (savedByAngel) e->progress.angelBlessingUses--;
+        if (choice==correct || savedByAngel) {
+            enemy->state=ENEMY_GONE;
+            e->progress.stage=CLEARING_COMPLETE_STAGE;
+            e->progress.finalSealFailures=0;
+            e->progress.health=*health;
+            e->phase=ENCOUNTER_CLEAR;
+            BeginStagePresentation(&e->presentation,0,
+                savedByAngel?"O Anjo completou o selo final":"O Grande Selo Profano foi restaurado",NULL);
+            e->presentation.announcement="O Necromante foi selado";
+            e->presentation.duration=e->presentation.remaining=3.5f;
+            if (!e->practice) SaveClearingCheckpoint(&e->progress);
+        } else if (finalAttempt) {
+            if (!e->practice) SaveMenuCheckpoint(e->progress.weapon);
+            e->phase=ENCOUNTER_DEFEAT;
+            *health=0;
+        } else {
+            e->progress.bossPower=fminf(100,e->progress.bossPower*1.2f);
+            e->progress.health=*health;
+            StartNecromancer(enemies,e->progress.bossPower);
+            e->phase=ENCOUNTER_FIGHT;
+            snprintf(e->notice,sizeof(e->notice),"Selo incorreto. O Necromante voltou mais forte.");
+            if (!e->practice) SaveClearingCheckpoint(&e->progress);
+        }
+        return true;
+    }
     bool protectedSeal=choice!=correct && e->progress.angelBlessingUses>0 &&
         *health<=e->progress.maxHealth/3;
     if (protectedSeal) {
@@ -590,10 +639,12 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
             : e->progress.map == 2 ? enemies->villageBossWalk
             : (e->progress.map == 1 ? enemies->cemeteryPortrait : enemies->bossPortrait);
         if (e->progress.map == TEMPLAR_FIELD_MAP) bossSprite = enemies->marshalPortrait;
+        if (e->progress.map == NECROMANCER_MAP) bossSprite = enemies->necromancerPortrait;
         bool animatedPortrait = e->progress.map == 2;
         int cols = animatedPortrait ? 6 : 1;
-        int rows = animatedPortrait ? 4 : 1;
-        bool gothic = e->progress.map == BONELAND_MAP || e->progress.map == TEMPLAR_FIELD_MAP;
+        int rows = cols > 1 ? 4 : 1;
+        bool gothic = e->progress.map == BONELAND_MAP || e->progress.map == TEMPLAR_FIELD_MAP ||
+                      e->progress.map == NECROMANCER_MAP;
         DrawStagePresentation(&e->presentation, bossSprite, cols, rows, gothic);
         return;
     }
@@ -607,11 +658,18 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
     const char *clearLabel = e->progress.map == 2 ? "Vila Lascada limpa - siga pelo arco ao topo"
         : (e->progress.map == 1 ? "Cemitério limpo - siga pela saída à direita"
                                 : "Clareira limpa - altar liberado");
-    const char *bossLabel = e->progress.map == BONELAND_MAP ? boneLordName
+    const char *bossLabel = e->progress.map == NECROMANCER_MAP ? "Necromante" : e->progress.map == BONELAND_MAP ? boneLordName
         : e->progress.map == TEMPLAR_FIELD_MAP ? "Marechal Carmesim"
         : e->progress.map == 2 ? "Líder da Vila"
         : (e->progress.map == 1 ? "Coveiro das Raízes" : "Guardião da Clareira");
-    if (e->progress.map == TEMPLAR_FIELD_MAP) {
+    if (e->progress.map == NECROMANCER_MAP) {
+        static const char *forms[]={"Forma esquelética","Forma humanoide","Anjo caído"};
+        int form=enemies->list[0].necromancerForm;
+        const char *status=e->phase==ENCOUNTER_CLEAR ? "Vitória • Enter para voltar ao menu" :
+            enemies->list[0].state==ENEMY_FALLEN ? "Aproxime-se do selo central e pressione E" :
+            form>0 ? TextFormat("Fase %d/3 • %s",form,forms[form-1]) : "Topo do Palácio";
+        DrawGameText(status,24,statusY,20,GOLD);
+    } else if (e->progress.map == TEMPLAR_FIELD_MAP) {
         const char *status = e->phase == ENCOUNTER_CLEAR ? "Marechal derrotado"
             : e->progress.stage == CLEARING_BOSS_STAGE ? "Encontro 3/3 - Marechal Carmesim"
             : TextFormat("Encontro %d/3 | Restantes: %d", e->progress.stage, EnemiesRemaining(enemies));
@@ -648,11 +706,18 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         bool phaseTwo = boss->guardianPhase != GUARDIAN_PHASE_ONE;
         const char *phase = boss->guardianPhase == GUARDIAN_PHASE_TRANSITION ? "Despertando..." :
                             phaseTwo ? "Fase 2/2" : "Fase 1/2";
+        if(boss->necromancerForm && boss->guardianPhase!=GUARDIAN_PHASE_TRANSITION)
+            phase=TextFormat("Fase %d/3",boss->necromancerForm);
+        Color healthColor=boss->necromancerForm==3 ? (Color){211,48,92,255} :
+            boss->necromancerForm==2 || phaseTwo ? PURPLE : MAROON;
         int w=(int)fminf(600,GetScreenWidth()*.5f), x=(GetScreenWidth()-w)/2;
         DrawRectangle(x-8,8,w+16,46,Fade(BLACK,.78f));
         DrawRectangle(x,31,w,16,DARKGRAY);
-        DrawRectangle(x,31,w*boss->health/boss->maxHealth,16,phaseTwo ? PURPLE : MAROON);
-        DrawRectangle(x+w/2,31,2,16,Fade(GOLD,.65f));
+        DrawRectangle(x,31,w*boss->health/boss->maxHealth,16,healthColor);
+        if(boss->necromancerForm) {
+            DrawRectangle(x+w*70/100,31,2,16,Fade(GOLD,.72f));
+            DrawRectangle(x+w*35/100,31,2,16,Fade(GOLD,.72f));
+        } else DrawRectangle(x+w/2,31,2,16,Fade(GOLD,.65f));
         const char *label = TextFormat("%s  %d/%d  |  %s",bossLabel,
                                        boss->health,boss->maxHealth,phase);
         DrawGameText(label,(GetScreenWidth()-MeasureGameText(label,18))/2,10,18,GOLD);
@@ -830,7 +895,8 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
     }
     int titleY=(int)(GetScreenHeight()/2-160);
     const char *title=e->phase==ENCOUNTER_REWARD ? "Escolha seu bônus" :
-                      e->phase==ENCOUNTER_SEAL ? "Selo - combate pausado" : "Fim da tentativa";
+                      e->phase==ENCOUNTER_SEAL ? (e->progress.map==NECROMANCER_MAP ?
+                        "Grande Selo Profano" : "Selo - combate pausado") : "Fim da tentativa";
     DrawGameTextIn(title,(Rectangle){0,titleY,GetScreenWidth(),49},42,GOLD,true);
     if (e->phase==ENCOUNTER_DEFEAT) {
         DrawGameText("Esc: menu | Continuar reinicia esta onda ou boss",GetScreenWidth()/2-270,titleY+80,20,RAYWHITE);
@@ -839,10 +905,15 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
     int count=e->phase==ENCOUNTER_REWARD ? e->rewardCount :
               enemies->list[e->sealEnemy].type==ENEMY_BOSS ? 3 : 2;
     static const char *questions[]={"V e V = V", "V e F = V", "nao V = V", "V ou F = V"};
+    const SealQuestion *sealQuestions=e->progress.map==NECROMANCER_MAP ? finalQuestions : bossQuestions;
     if (e->phase==ENCOUNTER_SEAL) {
-        const char *prompt=count==3 ? TextFormat("Qual expressão equivale a: %s ?",bossQuestions[e->question].expression)
+        const char *prompt=count==3 ? TextFormat("Qual expressão equivale a: %s ?",sealQuestions[e->question].expression)
                                     : questions[e->question];
-        DrawGameText(prompt,(GetScreenWidth()-MeasureGameText(prompt,22))/2,titleY+60,22,RAYWHITE);
+        if (e->progress.map==NECROMANCER_MAP) {
+            DrawGameTextIn(prompt,(Rectangle){18,titleY+46,GetScreenWidth()-36,35},22,RAYWHITE,false);
+            DrawGameTextIn(TextFormat("Tentativa %d/3",e->progress.finalSealFailures+1),
+                (Rectangle){18,titleY+81,GetScreenWidth()-36,27},18,GOLD,false);
+        } else DrawGameText(prompt,(GetScreenWidth()-MeasureGameText(prompt,22))/2,titleY+60,22,RAYWHITE);
     }
     for (int i=0;i<count;i++) {
         Rectangle box=ChoiceRect(i,count);
@@ -851,8 +922,11 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         const char *label;
         if (e->phase==ENCOUNTER_REWARD) label=RewardText(e,e->rewards[i]);
         else if (count==2) label=i==0?"Verdadeiro":"Falso";
-        else label=bossQuestions[e->question].choices[(i+3-e->answer)%3];
-        DrawGameText(TextFormat("%d. %s",i+1,label),(int)box.x+14,(int)box.y+20,19,RAYWHITE);
+        else label=sealQuestions[e->question].choices[(i+3-e->answer)%3];
+        if (e->phase==ENCOUNTER_SEAL && e->progress.map==NECROMANCER_MAP)
+            DrawGameTextIn(TextFormat("%d. %s",i+1,label),
+                (Rectangle){box.x+8,box.y+6,box.width-16,box.height-12},19,RAYWHITE,false);
+        else DrawGameText(TextFormat("%d. %s",i+1,label),(int)box.x+14,(int)box.y+20,19,RAYWHITE);
     }
     if (e->phase==ENCOUNTER_REWARD) DrawGameText(e->rerolled?"Novo sorteio utilizado":"R: sortear novamente (1 gratuito)",
         GetScreenWidth()/2-180,GetScreenHeight()/2+145,20,GOLD);

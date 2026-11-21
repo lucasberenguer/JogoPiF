@@ -3,7 +3,7 @@
 #include <math.h>
 #include <stdio.h>
 
-static const int practiceMaps[] = {0, 1, BONELAND_MAP, TEMPLAR_FIELD_MAP};
+static const int practiceMaps[] = {0, 1, BONELAND_MAP, TEMPLAR_FIELD_MAP, NECROMANCER_MAP};
 
 static int PracticeMapIndex(int map) {
     for (int i = 0; i < (int)(sizeof(practiceMaps) / sizeof(practiceMaps[0])); i++)
@@ -12,6 +12,7 @@ static int PracticeMapIndex(int map) {
 }
 
 static int PracticeWaves(int map) {
+    if (map == NECROMANCER_MAP) return 2;
     if (map == TEMPLAR_FIELD_MAP) return TEMPLAR_FIELD_WAVES;
     return map == BONELAND_MAP ? BONELAND_WAVES : CLEARING_WAVES;
 }
@@ -41,7 +42,7 @@ static void AdjustField(DevTools *tools, int index, int direction) {
         case 0: {
             int count = (int)(sizeof(practiceMaps) / sizeof(practiceMaps[0]));
             tools->map = practiceMaps[(PracticeMapIndex(tools->map) + direction + count) % count];
-            if (tools->map == TEMPLAR_FIELD_MAP ||
+            if (tools->map == TEMPLAR_FIELD_MAP || tools->map == NECROMANCER_MAP ||
                 (tools->wave != CLEARING_BOSS_STAGE && tools->wave > PracticeWaves(tools->map)))
                 tools->wave = 1;
             break;
@@ -112,15 +113,18 @@ void DrawDevTools(const DevTools *tools, bool inPractice) {
     const char *weapons[]={"Arma de fogo","Bíblia","Katana"};
     char waveText[24],levelText[24];
     int waves = PracticeWaves(tools->map);
-    if (tools->map == TEMPLAR_FIELD_MAP)
+    if (tools->map==NECROMANCER_MAP)
+        snprintf(waveText,sizeof(waveText),"Fase %d / 3",tools->wave==CLEARING_BOSS_STAGE?3:tools->wave);
+    else if (tools->map == TEMPLAR_FIELD_MAP)
         snprintf(waveText,sizeof(waveText),"%d / %d",tools->wave == CLEARING_BOSS_STAGE ? waves + 1 : tools->wave,
                  waves + 1);
     else
         snprintf(waveText,sizeof(waveText),"%d / %d",tools->wave,waves);
     snprintf(levelText,sizeof(levelText),"%d / 3",tools->weaponLevel);
-    static const char *mapNames[] = {"Clareira", "Cemitério", "Terra dos Ossos", "Campo dos Templários"};
+    static const char *mapNames[] = {"Clareira", "Cemitério", "Terra dos Ossos", "Campo dos Templários", "Topo do Palácio"};
     const char *values[]={mapNames[PracticeMapIndex(tools->map)],
-        tools->wave==CLEARING_BOSS_STAGE && tools->map != TEMPLAR_FIELD_MAP ? "Chefe" : waveText,weapons[tools->weapon],
+        tools->wave==CLEARING_BOSS_STAGE && tools->map != TEMPLAR_FIELD_MAP &&
+            tools->map != NECROMANCER_MAP ? "Chefe" : waveText,weapons[tools->weapon],
         levelText,tools->invincible ? "Ligada" : "Desligada",
         tools->collision ? "Visíveis" : "Ocultas"};
     for (int i=0; i<6; i++) {
@@ -172,7 +176,7 @@ bool StartDevEncounter(const DevTools *tools, DevAction action, Encounter *e,
         *map=next;
     }
     RunProgress progress=NewRunProgress(tools->weapon);
-    progress.stage=action==DEV_STAGE ? tools->wave : CLEARING_BOSS_STAGE;
+    progress.stage=action==DEV_STAGE && mapId!=NECROMANCER_MAP ? tools->wave : CLEARING_BOSS_STAGE;
     progress.weaponLevel[tools->weapon]=tools->weaponLevel;
     progress.guardianIntroSeen=action!=DEV_GUARDIAN;
     if (aftermath) {
@@ -185,9 +189,17 @@ bool StartDevEncounter(const DevTools *tools, DevAction action, Encounter *e,
     e->practice=true;
     if (action==DEV_STAGE && map->cemetery && progress.stage==CLEARING_BOSS_STAGE)
         e->guardianIntroPending=true;
-    if ((!map->boneland && !map->templarField) || action == DEV_SEAL)
+    if ((!map->boneland && !map->templarField && !map->necromancerArena) || action == DEV_SEAL)
         e->presentation=(StagePresentation){0};
-    if (action==DEV_BOSS_TWO) {
+    if (map->necromancerArena && (action==DEV_STAGE || action==DEV_BOSS_TWO) &&
+        (tools->wave!=1 || action==DEV_BOSS_TWO)) {
+        Enemy *boss=&enemies->list[0];
+        boss->necromancerForm=action==DEV_BOSS_TWO || tools->wave==2 ? 2 : 3;
+        boss->health=boss->maxHealth*(boss->necromancerForm==2?70:35)/100;
+        boss->state=ENEMY_IDLE;
+        boss->position=(Vector2){836,480};
+        e->presentation=(StagePresentation){0};
+    } else if (action==DEV_BOSS_TWO) {
         Enemy *boss=&enemies->list[0];
         boss->guardianPhase=GUARDIAN_PHASE_TWO;
         boss->health=boss->maxHealth/2;
@@ -197,6 +209,10 @@ bool StartDevEncounter(const DevTools *tools, DevAction action, Encounter *e,
         Enemy *boss=&enemies->list[0];
         boss->guardianPhase=GUARDIAN_PHASE_TWO;
         boss->health=0;
+        if (map->necromancerArena) {
+            boss->necromancerForm=3;
+            boss->position=map->pedestal;
+        }
         boss->state=ENEMY_FALLEN;
         boss->stateTime=0;
         *player=boss->position;

@@ -669,6 +669,71 @@ int main(void) {
     assert(LoadClearingCheckpoint(&fieldProgress) && fieldProgress.stage == CLEARING_COMPLETE_STAGE);
     UnloadClearing(&field);
 
+    Clearing palace = {0};
+    assert(InitCampaignMap(&palace, NECROMANCER_MAP));
+    assert(enemies.necromancerPortrait.id);
+    assert(MapHasClearPath(&palace, palace.spawn, palace.pedestal));
+    assert(!IsMapActorBlocked(&palace, (Vector2){836,260}));
+    assert(IsMapActorBlocked(&palace, (Vector2){836,180}));
+    assert(IsMapActorBlocked(&palace, (Vector2){20,470}));
+    Encounter final;
+    RunProgress finalProgress=NewRunProgress(2);
+    finalProgress.map=NECROMANCER_MAP;
+    finalProgress.stage=CLEARING_BOSS_STAGE;
+    finalProgress.angelSceneCompleted=true;
+    finalProgress.angelBlessingUses=1;
+    int finalHealth=100;
+    BeginEncounter(&final,&enemies,&palace,finalProgress,palace.spawn);
+    Enemy *necromancer=&enemies.list[0];
+    assert(necromancer->necromancerForm==1 && !EnemyCanBeHit(necromancer));
+    assert(final.presentation.areaEntry && final.presentation.wave==0);
+    final.presentation=(StagePresentation){0};
+    int seenSkills=0;
+    for (int form=1;form<=3;form++) {
+        assert(necromancer->necromancerForm==form);
+        for (int tick=0;tick<530;tick++) {
+            UpdateEnemies(&enemies,&palace,palace.pedestal,.035f,true,&finalHealth,100);
+            if (necromancer->state==ENEMY_ATTACK) seenSkills|=1<<necromancer->bossAttack;
+        }
+        assert(finalHealth==100);
+        DamageEnemy(necromancer,necromancer->maxHealth*2);
+        if (form<3) {
+            assert(necromancer->health==necromancer->maxHealth*(form==1?70:35)/100);
+            assert(!EnemyCanBeHit(necromancer));
+            enemies.necromancer.shots[0].life=1;
+        }
+        UpdateEnemies(&enemies,&palace,palace.pedestal,1.3f,true,&finalHealth,100);
+        assert(enemies.necromancer.shots[0].life==0);
+    }
+    assert(seenSkills==(1<<10)-1 && necromancer->state==ENEMY_FALLEN);
+    for (int miss=0;miss<3;miss++) {
+        float power=final.progress.bossPower;
+        necromancer->state=ENEMY_FALLEN;
+        necromancer->position=palace.pedestal;
+        assert(OpenEncounterSeal(&final,&enemies,palace.pedestal));
+        assert(AnswerEncounterSeal(&final,&enemies,&finalHealth,(final.answer+1)%3));
+        RunProgress savedFinal;
+        assert(LoadClearingCheckpoint(&savedFinal) && savedFinal.map==NECROMANCER_MAP);
+        if(miss<2) {
+            assert(final.phase==ENCOUNTER_FIGHT && final.progress.bossPower>power);
+            assert(savedFinal.finalSealFailures==miss+1 && necromancer->necromancerForm==1);
+        } else {
+            assert(final.phase==ENCOUNTER_CLEAR && savedFinal.stage==CLEARING_COMPLETE_STAGE);
+            assert(savedFinal.angelBlessingUses==0 && finalHealth==100);
+        }
+    }
+    final.practice=true;
+    final.phase=ENCOUNTER_FIGHT;
+    final.presentation=(StagePresentation){0};
+    final.progress.finalSealFailures=2;
+    necromancer->state=ENEMY_FALLEN;
+    necromancer->position=palace.pedestal;
+    assert(OpenEncounterSeal(&final,&enemies,palace.pedestal));
+    assert(AnswerEncounterSeal(&final,&enemies,&finalHealth,(final.answer+1)%3));
+    assert(finalHealth==0 && final.phase==ENCOUNTER_DEFEAT);
+    UnloadClearing(&palace);
+
+
     /* Audit only the test executable's checkpoint, never the player's save. */
     const char *saveFile=TextFormat("%s/partida_pif.sav",GetApplicationDirectory());
     const char *invalidSaves[]={

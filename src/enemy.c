@@ -298,6 +298,7 @@ static const struct {
 
 bool InitEnemies(EnemyGroup *group) {
     *group = (EnemyGroup){0};
+    if (!LoadNecromancerSprites(group)) { UnloadNecromancerSprites(group); return false; }
     group->sprites = LoadTexture("assets/inimigo_encapuzado.png");
     group->backSprites = LoadTexture("assets/inimigo_encapuzado_costas.png");
     group->frontSprites = LoadTexture("assets/inimigo_encapuzado_frente.png");
@@ -441,6 +442,7 @@ bool InitEnemies(EnemyGroup *group) {
 }
 
 void UnloadEnemies(EnemyGroup *group) {
+    UnloadNecromancerSprites(group);
     if (group->skeleton.id) UnloadTexture(group->skeleton);
     if (group->mage.id) UnloadTexture(group->mage);
     if (group->skeletonFront.id) UnloadTexture(group->skeletonFront);
@@ -497,6 +499,7 @@ void ResetEnemies(EnemyGroup *group, const Clearing *clearing) {
 
 void ClearEnemyAttacks(EnemyGroup *group) {
     group->templarBlood.remaining = 0;
+    memset(group->necromancer.shots,0,sizeof(group->necromancer.shots));
     memset(group->projectiles, 0, sizeof(group->projectiles));
     memset(group->cemeteryProjectiles,0,sizeof(group->cemeteryProjectiles));
     memset(group->rootAttacks, 0, sizeof(group->rootAttacks));
@@ -661,6 +664,7 @@ void StartArenaBoss(EnemyGroup *group, const Clearing *clearing, Vector2 player,
     }
     for (int i=0; i<ENEMY_COUNT; i++) group->list[i] = (Enemy){.state = ENEMY_GONE};
     Enemy *boss = &group->list[0];
+    if (clearing->necromancerArena) { StartNecromancer(group,power); return; }
     int baseHealth = clearing->templarField ? 3000 : clearing->boneland ? 2800
         : clearing->village ? 500 : (clearing->cemetery ? CEMETERY_BOSS_BASE_HEALTH : ARENA_BOSS_BASE_HEALTH);
     Vector2 bossPos = clearing->templarField ? (Vector2){835, 290} : clearing->village
@@ -707,6 +711,7 @@ void DamageEnemy(Enemy *enemy, int damage) {
 
 void DamageEnemyFrom(Enemy *enemy, int damage, Vector2 source) {
     if (!EnemyCanBeHit(enemy) || damage<=0) return;
+    if (enemy->necromancerForm) { DamageNecromancer(enemy,damage); return; }
     static const Vector2 guardDirection[] = {{0,1}, {0,-1}, {-1,0}, {1,0}};
     Vector2 incoming = Vector2Subtract(source, enemy->position);
     if (enemy->templarRole == TEMPLAR_SHIELD &&
@@ -1049,6 +1054,10 @@ static void UpdateMarshal(EnemyGroup *group, const Clearing *map, Enemy *boss, V
 void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                    Vector2 player, float dt, bool playerDodging,
                    int *playerHealth, int playerMaxHealth) {
+    if (clearing->necromancerArena) {
+        UpdateNecromancer(group,clearing,player,dt,playerDodging,playerHealth);
+        return;
+    }
     group->playerHitCooldown = fmaxf(0.0f, group->playerHitCooldown-dt);
     group->templarBlood.remaining = fmaxf(0, group->templarBlood.remaining - dt);
     for (int i=0;i<16;i++) group->impacts[i].remaining=fmaxf(0,group->impacts[i].remaining-dt);
@@ -1984,6 +1993,10 @@ static void DrawBoneLord(const EnemyGroup *group, const Enemy *boss) {
 }
 
 void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
+    if (group->list[0].necromancerForm) {
+        DrawNecromancer(group,player,foreground);
+        return;
+    }
     if (group->village) {
         VillageDrawEnemies(group, player, foreground);
         return;

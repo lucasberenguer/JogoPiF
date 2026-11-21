@@ -29,6 +29,7 @@ typedef struct Clearing {
     bool invertedChapel;
     bool boneland;
     bool templarField;
+    bool necromancerArena;
     bool exitLocked;
     Rectangle obstacles[20];
     int obstacleCount;
