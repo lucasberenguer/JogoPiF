@@ -68,7 +68,7 @@ static bool TestClose(void) {return ++frames>1200 || transported>0;}
 static bool TestKey(int key) {return key==KEY_E && liberated>0;}
 static bool TestKeyDown(int key) {
     return mode >= 2 && key == KEY_W &&
-           (!active || mode == 3 || active->progress.map == BONELAND_MAP);
+           (!active || mode >= 3 || active->progress.map == BONELAND_MAP);
 }
 static MenuAction TestMenu(Menu *menu) {
     activeAudio=&menu->audio;
@@ -88,7 +88,14 @@ static MenuAction TestMenu(Menu *menu) {
 static bool TestEncounter(Encounter *e,EnemyGroup *enemies,const Clearing *map,Vector2 p,int *health) {
     active=e;
     if (mode >= 2) {
-        if (map->templarField && (mode == 2 || p.y < map->exit.height - 15)) {
+        if (mode==4 && map->necromancerArena) {
+            RunProgress saved={0};
+            assert(LoadClearingCheckpoint(&saved) && saved.map==NECROMANCER_MAP);
+            assert(saved.stage==CLEARING_BOSS_STAGE && saved.health==83 && saved.weaponLevel[2]==2);
+            assert(enemies->list[0].necromancerForm==1 && p.y==map->spawn.y);
+            transported++;
+        }
+        if (map->templarField && (mode == 2 || (mode==3 && p.y < map->exit.height - 15))) {
             RunProgress saved = {0};
             assert(*health == 83 && e->progress.weaponLevel[2] == 2);
             assert(LoadClearingCheckpoint(&saved) && saved.map == TEMPLAR_FIELD_MAP);
@@ -169,12 +176,12 @@ int main(void) {
         assert(liberated==1 && transported==1 && cinematicFrames>=2);
         printf("Real story loop: %s reached cemetery after %d frames.\n",mode ? "complete":"skip",frames);
     }
-    for (mode=2;mode<4;mode++) {
+    for (mode=2;mode<5;mode++) {
         frames=liberated=transported=0;
         active=NULL;
         assert(ActualGameMain()==0);
         assert(transported==1);
     }
-    puts("The campaign entered the Templar Field and resumed with the stairs open.");
+    puts("The campaign entered the Templar Field and reached the Necromancer arena.");
     return 0;
 }

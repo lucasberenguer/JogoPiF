@@ -7,6 +7,7 @@
 #define BONELAND_WAVES 3
 #define BONELAND_MAP 6
 #define TEMPLAR_FIELD_MAP 7
+#define NECROMANCER_MAP 8
 #define TEMPLAR_FIELD_WAVES 2
 #define CLEARING_BOSS_STAGE 5
 #define CLEARING_COMPLETE_STAGE 6
@@ -35,6 +36,7 @@ typedef struct RunProgress {
     bool guardianIntroSeen;
     bool angelSceneCompleted;
     int angelBlessingUses;
+    int finalSealFailures;
     VillageAftermath villageAftermath;
     GuardianAftermathState guardianAftermath;
 } RunProgress;

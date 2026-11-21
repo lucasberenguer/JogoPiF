@@ -33,6 +33,43 @@ static void Capture(const char *name, Encounter *encounter, EnemyGroup *enemies,
     UnloadRenderTexture(target);
 }
 
+static void CheckVillageZombies(Encounter *encounter, EnemyGroup *enemies, Clearing *map) {
+    StartVillageHorde(enemies, map, map->spawn, 1);
+    assert(EnemiesRemaining(enemies) == 31 && enemies->villageSpawnRemaining == 12);
+    for (int i = 0; i < 19; i++) {
+        const Enemy *zombie = &enemies->list[i];
+        assert(zombie->type == ENEMY_COMMON_MELEE && zombie->state == ENEMY_SPAWNING);
+        assert(!EnemyCanBeHit(zombie));
+    }
+    int health = 100;
+    UpdateEnemies(enemies, map, map->spawn, .66f, false, &health, 100);
+    assert(enemies->villageSpawnRemaining == 11 && health == 100);
+    assert(enemies->list[19].state == ENEMY_SPAWNING && !EnemyCanBeHit(&enemies->list[19]));
+    UpdateEnemies(enemies, map, map->spawn, .32f, false, &health, 100);
+    assert(enemies->list[0].state == ENEMY_SPAWNING);
+    UpdateEnemies(enemies, map, map->spawn, .03f, false, &health, 100);
+    assert(enemies->list[0].state == ENEMY_IDLE && EnemyCanBeHit(&enemies->list[0]));
+
+    Vector2 ground = enemies->list[0].position;
+    for (int i = 0; i < ENEMY_COUNT; i++) enemies->list[i] = (Enemy){.state=ENEMY_GONE};
+    enemies->villageSpawnRemaining = 0;
+    enemies->list[0] = (Enemy){.position=ground,.type=ENEMY_COMMON_MELEE,.state=ENEMY_ATTACK,
+        .stateTime=VILLAGE_ZOMBIE_HIT_TIME-.02f,.health=62,.maxHealth=62,.power=1};
+    UpdateEnemies(enemies, map, ground, .01f, false, &health, 100);
+    assert(health == 100);
+    UpdateEnemies(enemies, map, ground, .02f, false, &health, 100);
+    assert(health == 88 && enemies->list[0].attackConnected);
+
+    const EnemyState states[] = {ENEMY_IDLE, ENEMY_WALK, ENEMY_ATTACK, ENEMY_SPAWNING};
+    for (int row = 0; row < 4; row++) for (int face = 0; face < 4; face++) {
+        enemies->list[row*4+face] = (Enemy){.position={410+face*230,315+row*135},
+            .type=ENEMY_COMMON_MELEE,.state=states[row],.facing=face,.walkTime=.24f,
+            .stateTime=row == 3 ? .12f+.24f*face : VILLAGE_ZOMBIE_HIT_TIME,
+            .health=62,.maxHealth=62};
+    }
+    Capture("audit/village_zombie_directions.png",encounter,enemies,map,(Vector2){30,30});
+}
+
 static void CheckLegacyCheckpoints(void) {
     char path[1024];
     snprintf(path, sizeof(path), "%s/partida_pif.sav", GetApplicationDirectory());
@@ -766,6 +803,15 @@ int main(void) {
     encounter.presentation.remaining=0;
     Capture("audit/cemetery_directions_v3.png",&encounter,&enemies,&clearing,(Vector2){30,30});
     for(int i=0;i<ENEMY_COUNT;i++) enemies.list[i]=(Enemy){.state=ENEMY_GONE};
+    for (int face=0;face<4;face++) {
+        enemies.list[face]=(Enemy){.position={380+face*270,520},.type=ENEMY_COMMON_RANGED,
+            .state=ENEMY_ATTACK,.stateTime=CEM_LANTERN_RELEASE_TIME,.facing=face,.health=50,.maxHealth=50};
+    }
+    enemies.projectiles[0]=(EnemyProjectile){{800,455},{1,0},3.76f,10};
+    enemies.impacts[0]=(EnemyImpact){.position={920,450},.remaining=.27f,.direction={1,0}};
+    Capture("audit/cemetery_lantern_cast.png",&encounter,&enemies,&clearing,(Vector2){30,30});
+    ClearEnemyAttacks(&enemies);
+    for(int i=0;i<ENEMY_COUNT;i++) enemies.list[i]=(Enemy){.state=ENEMY_GONE};
     for(int attack=0;attack<3;attack++) for(int beat=0;beat<4;beat++) {
         enemies.list[attack*4+beat]=(Enemy){.position={380+beat*270,300+attack*185},
             .type=ENEMY_BOSS,.state=ENEMY_ATTACK,.bossAttack=attack,
@@ -1006,6 +1052,71 @@ int main(void) {
     assert(LoadClearingCheckpoint(&fieldProgress) && fieldProgress.stage == CLEARING_COMPLETE_STAGE);
     UnloadClearing(&field);
 
+    Clearing palace = {0};
+    assert(InitCampaignMap(&palace, NECROMANCER_MAP));
+    assert(enemies.necromancerPortrait.id);
+    assert(MapHasClearPath(&palace, palace.spawn, palace.pedestal));
+    assert(!IsMapActorBlocked(&palace, (Vector2){836,260}));
+    assert(IsMapActorBlocked(&palace, (Vector2){836,180}));
+    assert(IsMapActorBlocked(&palace, (Vector2){20,470}));
+    Encounter final;
+    RunProgress finalProgress=NewRunProgress(2);
+    finalProgress.map=NECROMANCER_MAP;
+    finalProgress.stage=CLEARING_BOSS_STAGE;
+    finalProgress.angelSceneCompleted=true;
+    finalProgress.angelBlessingUses=1;
+    int finalHealth=100;
+    BeginEncounter(&final,&enemies,&palace,finalProgress,palace.spawn);
+    Enemy *necromancer=&enemies.list[0];
+    assert(necromancer->necromancerForm==1 && !EnemyCanBeHit(necromancer));
+    assert(final.presentation.areaEntry && final.presentation.wave==0);
+    final.presentation=(StagePresentation){0};
+    int seenSkills=0;
+    for (int form=1;form<=3;form++) {
+        assert(necromancer->necromancerForm==form);
+        for (int tick=0;tick<530;tick++) {
+            UpdateEnemies(&enemies,&palace,palace.pedestal,.035f,true,&finalHealth,100);
+            if (necromancer->state==ENEMY_ATTACK) seenSkills|=1<<necromancer->bossAttack;
+        }
+        assert(finalHealth==100);
+        DamageEnemy(necromancer,necromancer->maxHealth*2);
+        if (form<3) {
+            assert(necromancer->health==necromancer->maxHealth*(form==1?70:35)/100);
+            assert(!EnemyCanBeHit(necromancer));
+            enemies.necromancer.shots[0].life=1;
+        }
+        UpdateEnemies(&enemies,&palace,palace.pedestal,1.3f,true,&finalHealth,100);
+        assert(enemies.necromancer.shots[0].life==0);
+    }
+    assert(seenSkills==(1<<10)-1 && necromancer->state==ENEMY_FALLEN);
+    for (int miss=0;miss<3;miss++) {
+        float power=final.progress.bossPower;
+        necromancer->state=ENEMY_FALLEN;
+        necromancer->position=palace.pedestal;
+        assert(OpenEncounterSeal(&final,&enemies,palace.pedestal));
+        assert(AnswerEncounterSeal(&final,&enemies,&finalHealth,(final.answer+1)%3));
+        RunProgress savedFinal;
+        assert(LoadClearingCheckpoint(&savedFinal) && savedFinal.map==NECROMANCER_MAP);
+        if(miss<2) {
+            assert(final.phase==ENCOUNTER_FIGHT && final.progress.bossPower>power);
+            assert(savedFinal.finalSealFailures==miss+1 && necromancer->necromancerForm==1);
+        } else {
+            assert(final.phase==ENCOUNTER_CLEAR && savedFinal.stage==CLEARING_COMPLETE_STAGE);
+            assert(savedFinal.angelBlessingUses==0 && finalHealth==100);
+        }
+    }
+    final.practice=true;
+    final.phase=ENCOUNTER_FIGHT;
+    final.presentation=(StagePresentation){0};
+    final.progress.finalSealFailures=2;
+    necromancer->state=ENEMY_FALLEN;
+    necromancer->position=palace.pedestal;
+    assert(OpenEncounterSeal(&final,&enemies,palace.pedestal));
+    assert(AnswerEncounterSeal(&final,&enemies,&finalHealth,(final.answer+1)%3));
+    assert(finalHealth==0 && final.phase==ENCOUNTER_DEFEAT);
+    UnloadClearing(&palace);
+
+
     /* Audit only the test executable's checkpoint, never the player's save. */
     const char *saveFile=TextFormat("%s/partida_pif.sav",GetApplicationDirectory());
     const char *invalidSaves[]={
@@ -1061,6 +1172,7 @@ int main(void) {
     assert(LoadClearingCheckpoint(&villageSaved) && villageSaved.villageAftermath==VILLAGE_SCENE_SEEN);
     BeginEncounter(&encounter,&enemies,&clearing,villageSaved,clearing.spawn);
     assert(encounter.phase==ENCOUNTER_LETTER && enemies.list[0].health==0);
+    CheckVillageZombies(&encounter,&enemies,&clearing);
     UnloadClearing(&clearing);
     assert(InitChapel(&clearing));
     BeginEncounter(&encounter,&enemies,&clearing,NewRunProgress(2),clearing.spawn);

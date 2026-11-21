@@ -111,6 +111,10 @@ bool SaveClearingCheckpoint(const RunProgress *p) {
         size_t used=strlen(data);
         snprintf(data+used,sizeof(data)-used,"angel_blessing=%d\n",p->angelBlessingUses);
     }
+    if (p->finalSealFailures > 0) {
+        size_t used=strlen(data);
+        snprintf(data+used,sizeof(data)-used,"final_seal_failures=%d\n",p->finalSealFailures);
+    }
     return SaveFileText(SavePath(), data);
 }
 
@@ -183,10 +187,14 @@ bool LoadClearingCheckpoint(RunProgress *p) {
     bool angelValid=!angel || (sscanf(angel+1,"angel_blessing=%d",&loaded.angelBlessingUses)==1 &&
         loaded.angelBlessingUses>=0 && loaded.angelBlessingUses<=3);
     loaded.angelSceneCompleted=angel!=NULL;
+    const char *finalSeal=strstr(data,"\nfinal_seal_failures=");
+    bool finalSealValid=!finalSeal || (sscanf(finalSeal+1,"final_seal_failures=%d",&loaded.finalSealFailures)==1 &&
+        loaded.map==NECROMANCER_MAP && loaded.finalSealFailures>0 && loaded.finalSealFailures<3);
     UnloadFileText(data);
-    bool valid=angelValid && villageValid && (!currentFormat || seen==0 || seen==1) && loaded.map>=0 &&
-        loaded.map<=(aftermathFormat ? TEMPLAR_FIELD_MAP : BONELAND_MAP - 1) &&
+    bool valid=finalSealValid && angelValid && villageValid && (!currentFormat || seen==0 || seen==1) && loaded.map>=0 &&
+        loaded.map<=(aftermathFormat ? NECROMANCER_MAP : BONELAND_MAP - 1) &&
         (loaded.map != BONELAND_MAP || loaded.stage <= BONELAND_WAVES || loaded.stage >= CLEARING_BOSS_STAGE) &&
+        (loaded.map != NECROMANCER_MAP || loaded.stage >= CLEARING_BOSS_STAGE) &&
         (loaded.map != TEMPLAR_FIELD_MAP || loaded.stage <= TEMPLAR_FIELD_WAVES || loaded.stage >= CLEARING_BOSS_STAGE) &&
         loaded.weapon>=0 && loaded.weapon<3 && loaded.stage>=1 && loaded.stage<=CLEARING_COMPLETE_STAGE &&
         loaded.health>0 && loaded.health<=loaded.maxHealth && loaded.maxHealth<=10000 &&

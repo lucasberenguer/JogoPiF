@@ -111,7 +111,7 @@ void DrawStagePresentation(const StagePresentation *p,Texture2D sprite,int colum
                 (Vector2){0},0,Fade(WHITE,alpha));
         }
         float textX=w*.13f-offset;
-        if (!p->separateBossWave)
+        if (!p->separateBossWave && p->wave>0)
             DrawGameTextEx(TextFormat("%s - %s",waveTitle,gothic?"Chefe":"MINI-BOSS"),(Vector2){textX,h*.37f},
                            gothic?27:24,Fade(headline,alpha),gothic);
         float bossSize=fminf(gothic?56:48, w*.42f/MeasureGameTextEx(p->bossName,1,gothic).x);

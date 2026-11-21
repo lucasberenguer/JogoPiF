@@ -320,34 +320,41 @@ void VillageDrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground
             continue;
         }
 
-        /* Necrotic villager (6x4: row 0 emerge, row 1 down, row 2 right, row 3 attack) */
-        Texture2D vtex = group->villageVillager;
-        float cw = (float)vtex.width / 6.0f;
-        float ch = (float)vtex.height / 4.0f;
-        int row = 1, frame = 0;
-        bool flip = false;
+        const int facingRows[] = {0, 2, 3, 1};
+        int atlas = VILLAGE_ZOMBIE_IDLE;
+        int columns = 4, rows = 4;
+        int row = facingRows[enemy->facing], frame = 0;
         if (enemy->state == ENEMY_SPAWNING) {
-            row = 0;
-            frame = (int)fminf(enemy->stateTime * 6.0f, 5.0f);
+            if (enemy->stateTime < 0) continue;
+            atlas = VILLAGE_ZOMBIE_EMERGE;
+            columns = 7;
+            rows = 2;
+            int step = (int)fminf(enemy->stateTime * 14 / VILLAGE_ZOMBIE_EMERGE_TIME, 13);
+            row = step / columns;
+            frame = step % columns;
         } else if (enemy->state == ENEMY_ATTACK) {
-            row = 3;
-            flip = (enemy->facing == 2);
-            frame = (int)fminf(enemy->stateTime * 10.0f, 5.0f);
-        } else if (enemy->facing == 0 || enemy->facing == 1) {
-            row = 1;
-            frame = enemy->state == ENEMY_WALK ? ((int)(enemy->walkTime * 9.0f) % 6) : 0;
-        } else {
-            row = 2;
-            flip = (enemy->facing == 2);
-            frame = enemy->state == ENEMY_WALK ? ((int)(enemy->walkTime * 9.0f) % 6) : 0;
+            atlas = VILLAGE_ZOMBIE_ATTACK;
+            columns = 6;
+            float t = enemy->stateTime;
+            frame = t < VILLAGE_ZOMBIE_HIT_TIME
+                ? (int)fminf(t * 4 / VILLAGE_ZOMBIE_HIT_TIME, 3) : t < .46f ? 4 : 5;
+        } else if (enemy->state == ENEMY_WALK) {
+            atlas = VILLAGE_ZOMBIE_WALK;
+            columns = 6;
+            frame = (int)(enemy->walkTime * 9.0f) % columns;
+        } else if (enemy->state == ENEMY_IDLE) {
+            frame = (int)(enemy->stateTime * 5.0f) % columns;
         }
-        Rectangle src = {frame * cw, row * ch, flip ? -cw : cw, ch};
-        float drawW = 78.0f, drawH = 78.0f * (ch / cw);
+        Texture2D texture = group->villageZombie[atlas];
+        float cw = (float)texture.width / columns;
+        float ch = (float)texture.height / rows;
+        Rectangle src = {frame * cw, row * ch, cw, ch};
+        float drawW = 98.0f, drawH = drawW * (ch / cw);
         Rectangle dst = {enemy->position.x - drawW * 0.5f,
-                         enemy->position.y - drawH * 0.88f, drawW, drawH};
+                         enemy->position.y - drawH * 0.90f, drawW, drawH};
         Color tint = enemy->state == ENEMY_HURT ? (Color){255, 165, 165, 255}
             : (enemy->state == ENEMY_DIE ? Fade(WHITE, fmaxf(0.0f, 1.0f - enemy->stateTime / 0.45f)) : WHITE);
-        DrawTexturePro(vtex, src, dst, (Vector2){0}, 0.0f, tint);
+        DrawTexturePro(texture, src, dst, (Vector2){0}, 0.0f, tint);
         if (EnemyCanBeHit(enemy) && enemy->health < enemy->maxHealth) {
             int healthY = (int)enemy->position.y - 85;
             DrawRectangle((int)enemy->position.x - 24, healthY, 48, 5, DARKGRAY);

@@ -366,11 +366,37 @@ int main(void) {
     assert(IsClearingBlocked(&grave,(Vector2){300,560}));
     assert(!IsMapActorBlocked(&grave,(Vector2){1560,490}));
     Enemy poseEnemy={.type=ENEMY_COMMON_MELEE,.state=ENEMY_WALK,.walkTime=.25f};
-    poseEnemy.facing=2;assert(CemeteryAnimationPose(&poseEnemy).flip);
-    poseEnemy.facing=3;assert(!CemeteryAnimationPose(&poseEnemy).flip);
+    const int zombieRows[]={0,2,3,1};
+    for (int facing=0;facing<4;facing++) {
+        poseEnemy.facing=facing;
+        poseEnemy.state=ENEMY_WALK;
+        CemeteryPose walk=CemeteryAnimationPose(&poseEnemy);
+        assert(walk.atlas==CEM_ZOMBIE_WALK && walk.row==zombieRows[facing] && !walk.flip);
+        poseEnemy.state=ENEMY_IDLE;
+        assert(CemeteryAnimationPose(&poseEnemy).atlas==CEM_ZOMBIE_IDLE);
+        poseEnemy.state=ENEMY_ATTACK;
+        poseEnemy.stateTime=CEM_ZOMBIE_HIT_TIME;
+        CemeteryPose strike=CemeteryAnimationPose(&poseEnemy);
+        assert(strike.atlas==CEM_ZOMBIE_ATTACK && strike.frame==4 && strike.row==zombieRows[facing]);
+    }
     poseEnemy.type=ENEMY_COMMON_RANGED;
-    const int mageRows[]={0,1,3,2};
-    for(int face=0;face<4;face++) {poseEnemy.facing=face;assert(CemeteryAnimationPose(&poseEnemy).row==mageRows[face]);}
+    for (int facing=0;facing<4;facing++) {
+        poseEnemy.facing=facing;
+        poseEnemy.state=ENEMY_IDLE;
+        CemeteryPose idle=CemeteryAnimationPose(&poseEnemy);
+        assert(idle.atlas==CEM_LANTERN_IDLE && idle.columns==4 && idle.row==zombieRows[facing] && !idle.flip);
+        poseEnemy.state=ENEMY_WALK;
+        CemeteryPose walk=CemeteryAnimationPose(&poseEnemy);
+        assert(walk.atlas==CEM_LANTERN_WALK && walk.columns==6 && walk.row==zombieRows[facing]);
+        poseEnemy.state=ENEMY_ATTACK;
+        poseEnemy.stateTime=CEM_LANTERN_RELEASE_TIME-.01f;
+        assert(CemeteryAnimationPose(&poseEnemy).frame==3);
+        poseEnemy.stateTime=CEM_LANTERN_RELEASE_TIME;
+        CemeteryPose release=CemeteryAnimationPose(&poseEnemy);
+        assert(release.atlas==CEM_LANTERN_ATTACK && release.frame==4 && release.row==zombieRows[facing]);
+        poseEnemy.stateTime=.9f;
+        assert(CemeteryAnimationPose(&poseEnemy).frame==5);
+    }
     poseEnemy.type=ENEMY_BOSS;poseEnemy.state=ENEMY_ATTACK;
     for(int attack=0;attack<3;attack++) for(int face=0;face<4;face++) for(int f=0;f<220;f++) {
         poseEnemy.bossAttack=attack;poseEnemy.facing=face;poseEnemy.stateTime=f*.01f;
@@ -383,8 +409,35 @@ int main(void) {
     int normalHealth[ENEMY_COUNT];
     for(int i=0;i<ENEMY_COUNT;i++) normalHealth[i]=group.list[i].maxHealth;
     SetRandomSeed(321);StartEnemyWave(&group,&map,1,target,1);
-    for(int i=0;i<ENEMY_COUNT;i++) if(normalHealth[i]) assert(group.list[i].maxHealth==(int)ceilf(normalHealth[i]*1.10f));
+    for (int i=0;i<ENEMY_COUNT;i++) if (normalHealth[i]) {
+        int baseHealth=normalHealth[i]==100?45:normalHealth[i];
+        assert(group.list[i].maxHealth==(int)ceilf(baseHealth*1.10f));
+    }
+    for (int wave=1;wave<=4;wave++) {
+        StartEnemyWave(&group,&map,wave,target,1);
+        int melee=0, ranged=0;
+        for (int i=0;i<ENEMY_COUNT;i++) {
+            if (group.list[i].state==ENEMY_GONE) continue;
+            if (group.list[i].type==ENEMY_COMMON_MELEE) melee++;
+            if (group.list[i].type==ENEMY_COMMON_RANGED) ranged++;
+        }
+        assert(melee>0 && ranged>0 && melee+ranged==7+(wave-1)*4);
+    }
     StartArenaBoss(&group,&map,target,1);assert(group.list[0].maxHealth==2420);
+    for (int i=0;i<ENEMY_COUNT;i++) group.list[i]=(Enemy){.state=ENEMY_GONE};
+    ClearEnemyAttacks(&group);
+    Enemy *lantern=&group.list[0];
+    *lantern=(Enemy){.position={target.x-120,target.y},.type=ENEMY_COMMON_RANGED,
+        .state=ENEMY_ATTACK,.health=50,.maxHealth=50,.power=1,.facing=3,
+        .attackDirection={1,0},.stateTime=CEM_LANTERN_RELEASE_TIME-.025f};
+    health=100;
+    UpdateEnemies(&group,&map,target,.01f,false,&health,100);
+    assert(group.projectiles[0].remaining==0 && !lantern->attackConnected);
+    UpdateEnemies(&group,&map,target,.02f,false,&health,100);
+    assert(group.projectiles[0].remaining>0 && lantern->attackConnected);
+    assert(CemeteryAnimationPose(lantern).frame==4);
+    UpdateEnemies(&group,&map,target,.02f,false,&health,100);
+    assert(group.projectiles[1].remaining==0);
     for(int scenario=0;scenario<3;scenario++) {
         for(int i=0;i<ENEMY_COUNT;i++) group.list[i]=(Enemy){.state=ENEMY_GONE};
         ClearEnemyAttacks(&group);group.cemetery=true;group.playerHitCooldown=scenario==2?.5f:0;

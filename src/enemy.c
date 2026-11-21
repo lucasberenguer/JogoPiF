@@ -298,34 +298,42 @@ static const struct {
 
 bool InitEnemies(EnemyGroup *group) {
     *group = (EnemyGroup){0};
+    if (!LoadNecromancerSprites(group)) { UnloadNecromancerSprites(group); return false; }
     group->sprites = LoadTexture("assets/inimigo_encapuzado.png");
     group->backSprites = LoadTexture("assets/inimigo_encapuzado_costas.png");
     group->frontSprites = LoadTexture("assets/inimigo_encapuzado_frente.png");
-    group->skeleton = LoadTexture("assets/esqueleto.png");
-    group->mage = LoadTexture("assets/esqueleto_mago.png");
-    group->skeletonFront=LoadTexture("assets/esqueleto_frente.png");
-    group->skeletonBack=LoadTexture("assets/esqueleto_costas.png");
+    const char *zombieSheets[]={
+        "assets/zumbi_cemiterio_idle.png", "assets/zumbi_cemiterio_walk.png",
+        "assets/zumbi_cemiterio_attack.png"
+    };
+    const char *lanternSheets[]={
+        "assets/zumbi_lanterna_idle.png", "assets/zumbi_lanterna_walk.png",
+        "assets/zumbi_lanterna_attack.png"
+    };
+    for (int i=0;i<3;i++) {
+        group->cemeteryZombie[i]=LoadTexture(zombieSheets[i]);
+        if (group->cemeteryZombie[i].id) SetTextureFilter(group->cemeteryZombie[i],TEXTURE_FILTER_POINT);
+        group->cemeteryLantern[i]=LoadTexture(lanternSheets[i]);
+        if (group->cemeteryLantern[i].id) SetTextureFilter(group->cemeteryLantern[i],TEXTURE_FILTER_POINT);
+    }
     group->coveiroWalk=LoadTexture("assets/coveiro_walk_v4.png");
-    group->greenFire=LoadTexture("assets/mago_fogo_v2.png");
+    group->cemeterySpell=LoadTexture("assets/zumbi_lanterna_projetil.png");
     group->boss[0] = LoadTexture("assets/coveiro_slam_v3.png");
     group->boss[1] = LoadTexture("assets/coveiro_throw_v4.png");
     group->boss[2] = LoadTexture("assets/coveiro_charge_v3.png");
     group->effects[0]=LoadTexture("assets/coveiro_efeito_raizes.png");
     group->effects[1]=LoadTexture("assets/coveiro_pa_vento_v4.png");
     group->effects[2]=LoadTexture("assets/coveiro_efeito_investida.png");
-    if (!group->skeletonFront.id || !group->skeletonBack.id || !group->coveiroWalk.id || !group->greenFire.id ||
-        !group->skeleton.id || !group->mage.id || !group->boss[0].id ||
+    if (!group->cemeteryZombie[0].id || !group->cemeteryZombie[1].id || !group->cemeteryZombie[2].id ||
+        !group->cemeteryLantern[0].id || !group->cemeteryLantern[1].id || !group->cemeteryLantern[2].id ||
+        !group->coveiroWalk.id || !group->cemeterySpell.id || !group->boss[0].id ||
         !group->boss[1].id || !group->boss[2].id || !group->effects[0].id ||
         !group->effects[1].id || !group->effects[2].id) {
         UnloadEnemies(group);
         return false;
     }
-    SetTextureFilter(group->skeleton, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->mage, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->skeletonFront,TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->skeletonBack,TEXTURE_FILTER_POINT);
     SetTextureFilter(group->coveiroWalk,TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->greenFire,TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->cemeterySpell,TEXTURE_FILTER_POINT);
     for (int i=0;i<3;i++) SetTextureFilter(group->boss[i], TEXTURE_FILTER_POINT);
     for (int i=0;i<3;i++) SetTextureFilter(group->effects[i], TEXTURE_FILTER_POINT);
     group->clearingMelee[0] = LoadTexture("assets/clareira_melee_idle.png");
@@ -390,7 +398,20 @@ bool InitEnemies(EnemyGroup *group) {
     group->villageBossWalk = LoadTexture("assets/lider_vila_walk.png");
     group->villageBossAttack = LoadTexture("assets/lider_vila_ataque.png");
     group->villageBossCharge = LoadTexture("assets/lider_vila_investida.png");
-    group->villageVillager = LoadTexture("assets/aldeoes_necroticos.png");
+    const char *villageZombieSheets[VILLAGE_ZOMBIE_ATLAS_COUNT] = {
+        [VILLAGE_ZOMBIE_IDLE] = "assets/zumbi_vila_idle.png",
+        [VILLAGE_ZOMBIE_EMERGE] = "assets/zumbi_vila_emerge.png",
+        [VILLAGE_ZOMBIE_WALK] = "assets/zumbi_vila_walk.png",
+        [VILLAGE_ZOMBIE_ATTACK] = "assets/zumbi_vila_attack.png"
+    };
+    for (int i = 0; i < VILLAGE_ZOMBIE_ATLAS_COUNT; i++) {
+        group->villageZombie[i] = LoadTexture(villageZombieSheets[i]);
+        if (!group->villageZombie[i].id) {
+            UnloadEnemies(group);
+            return false;
+        }
+        SetTextureFilter(group->villageZombie[i], TEXTURE_FILTER_POINT);
+    }
     if (!group->sprites.id || !group->backSprites.id || !group->frontSprites.id ||
         !group->bossSprites.id || !group->bossWalk.id || !group->bossAttack.id ||
         !group->guardianSpawn.id || !group->guardianDefeat.id ||
@@ -403,7 +424,7 @@ bool InitEnemies(EnemyGroup *group) {
         !group->roots.id || !group->rootWave.id || !group->curse.id || !group->guardianMelee.id ||
         !group->bossPortrait.id || !group->cemeteryPortrait.id || !group->boneLordPortrait.id || !group->marshalPortrait.id ||
         !group->villageBossWalk.id || !group->villageBossAttack.id ||
-        !group->villageBossCharge.id || !group->villageVillager.id) {
+        !group->villageBossCharge.id) {
         UnloadEnemies(group);
         return false;
     }
@@ -434,19 +455,17 @@ bool InitEnemies(EnemyGroup *group) {
     SetTextureFilter(group->villageBossWalk, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->villageBossAttack, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->villageBossCharge, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->villageVillager, TEXTURE_FILTER_POINT);
     group->villageLetter=LoadTexture("assets/cutscenes/village_aftermath/images/carta.png");
     if (group->villageLetter.id) SetTextureFilter(group->villageLetter,TEXTURE_FILTER_BILINEAR);
     return true;
 }
 
 void UnloadEnemies(EnemyGroup *group) {
-    if (group->skeleton.id) UnloadTexture(group->skeleton);
-    if (group->mage.id) UnloadTexture(group->mage);
-    if (group->skeletonFront.id) UnloadTexture(group->skeletonFront);
-    if (group->skeletonBack.id) UnloadTexture(group->skeletonBack);
+    UnloadNecromancerSprites(group);
+    for (int i=0;i<3;i++) if (group->cemeteryZombie[i].id) UnloadTexture(group->cemeteryZombie[i]);
+    for (int i=0;i<3;i++) if (group->cemeteryLantern[i].id) UnloadTexture(group->cemeteryLantern[i]);
     if (group->coveiroWalk.id) UnloadTexture(group->coveiroWalk);
-    if (group->greenFire.id) UnloadTexture(group->greenFire);
+    if (group->cemeterySpell.id) UnloadTexture(group->cemeterySpell);
     for (int i=0;i<3;i++) if (group->boss[i].id) UnloadTexture(group->boss[i]);
     for (int i=0;i<3;i++) if (group->effects[i].id) UnloadTexture(group->effects[i]);
 
@@ -486,7 +505,8 @@ void UnloadEnemies(EnemyGroup *group) {
     if (group->villageBossWalk.id) UnloadTexture(group->villageBossWalk);
     if (group->villageBossAttack.id) UnloadTexture(group->villageBossAttack);
     if (group->villageBossCharge.id) UnloadTexture(group->villageBossCharge);
-    if (group->villageVillager.id) UnloadTexture(group->villageVillager);
+    for (int i = 0; i < VILLAGE_ZOMBIE_ATLAS_COUNT; i++)
+        if (group->villageZombie[i].id) UnloadTexture(group->villageZombie[i]);
     if (group->villageLetter.id) UnloadTexture(group->villageLetter);
     *group = (EnemyGroup){0};
 }
@@ -497,6 +517,7 @@ void ResetEnemies(EnemyGroup *group, const Clearing *clearing) {
 
 void ClearEnemyAttacks(EnemyGroup *group) {
     group->templarBlood.remaining = 0;
+    memset(group->necromancer.shots,0,sizeof(group->necromancer.shots));
     memset(group->projectiles, 0, sizeof(group->projectiles));
     memset(group->cemeteryProjectiles,0,sizeof(group->cemeteryProjectiles));
     memset(group->rootAttacks, 0, sizeof(group->rootAttacks));
@@ -630,7 +651,10 @@ void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
         *enemy = (Enemy){.state = ENEMY_GONE};
         if (i >= total) continue;
         enemy->position = SpawnPosition(clearing, player);
-        enemy->type = i < specials ? ENEMY_SPECIAL : i%3 == 0 ? ENEMY_COMMON_RANGED : ENEMY_COMMON_MELEE;
+        if (i < specials)
+            enemy->type = clearing->cemetery ? ENEMY_COMMON_MELEE : ENEMY_SPECIAL;
+        else
+            enemy->type = i%3 == 0 ? ENEMY_COMMON_RANGED : ENEMY_COMMON_MELEE;
         float adjustment = 1.0f + fminf(.15f, fmaxf(0, playerPower - 1.0f) * .05f);
         enemy->maxHealth = (int)((enemy->type == ENEMY_SPECIAL ? 100 : 45) *
                                 (1.0f + (wave-1)*.12f) * adjustment);
@@ -661,6 +685,7 @@ void StartArenaBoss(EnemyGroup *group, const Clearing *clearing, Vector2 player,
     }
     for (int i=0; i<ENEMY_COUNT; i++) group->list[i] = (Enemy){.state = ENEMY_GONE};
     Enemy *boss = &group->list[0];
+    if (clearing->necromancerArena) { StartNecromancer(group,power); return; }
     int baseHealth = clearing->templarField ? 3000 : clearing->boneland ? 2800
         : clearing->village ? 500 : (clearing->cemetery ? CEMETERY_BOSS_BASE_HEALTH : ARENA_BOSS_BASE_HEALTH);
     Vector2 bossPos = clearing->templarField ? (Vector2){835, 290} : clearing->village
@@ -707,6 +732,7 @@ void DamageEnemy(Enemy *enemy, int damage) {
 
 void DamageEnemyFrom(Enemy *enemy, int damage, Vector2 source) {
     if (!EnemyCanBeHit(enemy) || damage<=0) return;
+    if (enemy->necromancerForm) { DamageNecromancer(enemy,damage); return; }
     static const Vector2 guardDirection[] = {{0,1}, {0,-1}, {-1,0}, {1,0}};
     Vector2 incoming = Vector2Subtract(source, enemy->position);
     if (enemy->templarRole == TEMPLAR_SHIELD &&
@@ -767,6 +793,8 @@ static float EnemyAttackPower(const EnemyGroup *group, const Enemy *enemy) {
     return enemy->power;
 }
 
+#define CEMETERY_SPELL_LIFETIME 4.0f
+
 static void FireRangedProjectile(EnemyGroup *group, const Enemy *enemy, Vector2 player) {
     Vector2 origin = EnemyCenter(enemy);
     Vector2 toward = Vector2Subtract((Vector2){player.x,player.y-35},origin);
@@ -776,7 +804,7 @@ static void FireRangedProjectile(EnemyGroup *group, const Enemy *enemy, Vector2 
     for (int i = 0; i < ENEMY_PROJECTILE_COUNT; i++) {
         if (group->projectiles[i].remaining <= 0.0f) {
             group->projectiles[i] = (EnemyProjectile){origin, Vector2Normalize(toward),
-                group->cemetery ? 4.0f : 1.5f,
+                group->cemetery ? CEMETERY_SPELL_LIFETIME : 1.5f,
                 (int)((group->cemetery ? 10 : ENEMY_ATTACK_DAMAGE)*EnemyAttackPower(group, enemy))};
             return;
         }
@@ -851,9 +879,9 @@ static void UpdateGuardianMelee(EnemyGroup *group, const Clearing *clearing, Ene
     }
 }
 
-static void AddEnemyImpact(EnemyGroup *group,Vector2 position) {
+static void AddEnemyImpact(EnemyGroup *group,Vector2 position,Vector2 direction) {
     for(int i=0;i<16;i++) if(group->impacts[i].remaining<=0) {
-        group->impacts[i]=(EnemyImpact){position,.32f};return;
+        group->impacts[i]=(EnemyImpact){position,.32f,direction};return;
     }
 }
 
@@ -973,7 +1001,7 @@ static void HurtByTemplar(EnemyGroup *group, Vector2 player, int *health, bool d
         return;
     *health = damage < *health ? *health - damage : 0;
     group->playerHitCooldown = .65f;
-    group->templarBlood = (EnemyImpact){{player.x, player.y - 36}, .36f};
+    group->templarBlood = (EnemyImpact){.position={player.x, player.y - 36}, .remaining=.36f};
 }
 
 static void StartMarshalSkill(Enemy *boss, int skill, Vector2 direction) {
@@ -1049,6 +1077,10 @@ static void UpdateMarshal(EnemyGroup *group, const Clearing *map, Enemy *boss, V
 void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                    Vector2 player, float dt, bool playerDodging,
                    int *playerHealth, int playerMaxHealth) {
+    if (clearing->necromancerArena) {
+        UpdateNecromancer(group,clearing,player,dt,playerDodging,playerHealth);
+        return;
+    }
     group->playerHitCooldown = fmaxf(0.0f, group->playerHitCooldown-dt);
     group->templarBlood.remaining = fmaxf(0, group->templarBlood.remaining - dt);
     for (int i=0;i<16;i++) group->impacts[i].remaining=fmaxf(0,group->impacts[i].remaining-dt);
@@ -1087,7 +1119,8 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         if (enemy->state == ENEMY_SPAWNING) {
             float duration = IsGuardianSpawn(group, enemy)
                 ? GUARDIAN_SPAWN_DURATION : enemy->templarRole == TEMPLAR_STANDARD ? templarArrivalTime + templarPlantTime
-                    : enemy->templarRole != TEMPLAR_NONE ? templarArrivalTime : 1.0f;
+                    : enemy->templarRole != TEMPLAR_NONE ? templarArrivalTime
+                    : group->village && enemy->type == ENEMY_COMMON_MELEE ? VILLAGE_ZOMBIE_EMERGE_TIME : 1.0f;
             if (enemy->stateTime >= duration) { enemy->state = ENEMY_IDLE; enemy->stateTime = 0; }
             continue;
         }
@@ -1179,7 +1212,8 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             bool ranged = enemy->type == ENEMY_COMMON_RANGED;
             bool mage = group->cemetery && ranged;
             bool cultist = group->boneland && ranged;
-            bool clearingMelee = !group->cemetery && enemy->type == ENEMY_COMMON_MELEE;
+            bool villageZombie = group->village && enemy->type == ENEMY_COMMON_MELEE;
+            bool clearingMelee = !group->cemetery && !villageZombie && enemy->type == ENEMY_COMMON_MELEE;
             bool crossbow = enemy->templarRole == TEMPLAR_CROSSBOW;
             bool shield = enemy->templarRole == TEMPLAR_SHIELD;
             if (shield) {
@@ -1188,7 +1222,9 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 MoveEnemy(clearing, enemy, Vector2Scale(enemy->attackDirection, step * 180));
             }
             float release = crossbow ? crossbowRelease : shield ? shieldImpact :
-                cultist ? CULTIST_RELEASE_TIME : mage ? .55f : CLEARING_ARCHER_RELEASE_TIME;
+                cultist ? CULTIST_RELEASE_TIME : mage ? CEM_LANTERN_RELEASE_TIME :
+                villageZombie ? VILLAGE_ZOMBIE_HIT_TIME :
+                group->cemetery && enemy->type==ENEMY_COMMON_MELEE ? CEM_ZOMBIE_HIT_TIME : CLEARING_ARCHER_RELEASE_TIME;
             bool impact = clearingMelee && !shield ? ClearingEnemyFrame(enemy, group->boneland) >= CLEARING_MELEE_IMPACT_FRAME :
                           enemy->stateTime >= release;
             if (!enemy->attackConnected && impact) {
@@ -1307,14 +1343,14 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             Vector2 collisionPoint=next;
             if (group->cemetery || group->boneland) collisionPoint.y+=35;
             if (IsClearingBlocked(clearing, collisionPoint)) {
-                if (group->cemetery || group->boneland) AddEnemyImpact(group,next);
+                if (group->cemetery || group->boneland) AddEnemyImpact(group,next,shot->direction);
                 shot->remaining = 0.0f;
             } else {
                 shot->position = next;
                 Vector2 playerCenter = {player.x, player.y - 35.0f};
                 float radius = group->cemetery ? 30 : 24;
                 if (Vector2DistanceSqr(next, playerCenter) <= radius * radius) {
-                    if (group->cemetery || group->boneland) AddEnemyImpact(group,next);
+                    if (group->cemetery || group->boneland) AddEnemyImpact(group,next,shot->direction);
                     if (clearing->templarField)
                         HurtByTemplar(group, player, playerHealth, playerDodging, shot->damage);
                     else if (!playerDodging && group->playerHitCooldown <= 0.0f && *playerHealth > 0) {
@@ -1326,7 +1362,11 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 }
             }
         }
-        if (shot->remaining > 0.0f) shot->remaining = fmaxf(0.0f, shot->remaining - dt);
+        if (shot->remaining > 0.0f) {
+            shot->remaining = fmaxf(0.0f, shot->remaining - dt);
+            if (group->cemetery && shot->remaining == 0.0f)
+                AddEnemyImpact(group,shot->position,shot->direction);
+        }
     }
 }
 
@@ -1379,6 +1419,17 @@ static void DrawEmberBurst(Vector2 point, float progress) {
     DrawCircleV(point, 9 * alpha, Fade((Color){255, 224, 151, 255}, alpha * .85f));
 }
 
+static void DrawCemeterySpell(Texture2D texture, Vector2 position, Vector2 direction, int frame, Color tint) {
+    float cellWidth=texture.width/8.0f;
+    float width=108.0f, height=width*texture.height/cellWidth;
+    float angle=atan2f(direction.y,direction.x)*RAD2DEG;
+    BeginBlendMode(BLEND_ADDITIVE);
+    DrawTexturePro(texture,(Rectangle){frame*cellWidth,0,cellWidth,texture.height},
+        (Rectangle){position.x,position.y,width,height},
+        (Vector2){width*.75f,height*.53f},angle,tint);
+    EndBlendMode();
+}
+
 static void DrawRangedProjectiles(const EnemyGroup *group) {
     if (group->boneland) for (int i = 0; i < 16; i++) {
         const EnemyImpact *impact = &group->impacts[i];
@@ -1388,21 +1439,17 @@ static void DrawRangedProjectiles(const EnemyGroup *group) {
     if (group->cemetery) for(int i=0;i<16;i++) {
         const EnemyImpact *impact=&group->impacts[i];
         if (impact->remaining<=0) continue;
-        Texture2D tex=group->greenFire;float cw=tex.width/4.0f,ch=tex.height/2.0f;
-        int frame=(int)((.32f-impact->remaining)/.08f);if(frame>3)frame=3;
-        DrawTexturePro(tex,(Rectangle){frame*cw,ch,cw,ch},
-            (Rectangle){impact->position.x-35,impact->position.y-35,70,70},(Vector2){0},0,WHITE);
+        int frame=impact->remaining>.21f?6:7;
+        DrawCemeterySpell(group->cemeterySpell,impact->position,impact->direction,frame,
+            Fade(WHITE,fminf(1,impact->remaining/.13f)));
     }
     for (int i = 0; i < ENEMY_PROJECTILE_COUNT; i++) {
         const EnemyProjectile *shot = &group->projectiles[i];
         if (shot->remaining <= 0.0f) continue;
         if (group->cemetery) {
-            Texture2D tex=group->greenFire;
-            float cw=tex.width/4.0f,ch=tex.height/2.0f;
-            int frame=(int)(GetTime()*12)%4;
-            float angle=atan2f(shot->direction.y,shot->direction.x)*RAD2DEG;
-            DrawTexturePro(tex,(Rectangle){frame*cw,0,cw,ch},
-                (Rectangle){shot->position.x,shot->position.y,64,48},(Vector2){45,24},angle,WHITE);
+            int step=(int)((CEMETERY_SPELL_LIFETIME-shot->remaining)*16);
+            int frame=step<2?step:2+(step-2)%4;
+            DrawCemeterySpell(group->cemeterySpell,shot->position,shot->direction,frame,WHITE);
             continue;
         }
         if (group->boneland) {
@@ -1984,6 +2031,10 @@ static void DrawBoneLord(const EnemyGroup *group, const Enemy *boss) {
 }
 
 void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
+    if (group->list[0].necromancerForm) {
+        DrawNecromancer(group,player,foreground);
+        return;
+    }
     if (group->village) {
         VillageDrawEnemies(group, player, foreground);
         return;
