@@ -226,4 +226,19 @@ Na entrega do pós-boss de 18/11, build em `out/review` concluído e seis testes
 
 - Validação local em out/review: os seis testes passaram, com reexecução isolada do teste de encontro após uma falha inicial ao iniciar o executável. A apresentação e a descida da escolta foram conferidas em capturas do renderizador.
 
+## Sistema de Recompensas, Raridades e Armas com 5 Níveis (21/11/2026)
+
+- **Implementado:**
+  - **Nível único de arma (`0..5`, `MAX_WEAPON_LEVEL = 5`) e dano aditivo (`EncounterDamage`):** ao trocar de arma, a nova arma assume o nível atual (`SetRunWeaponLevel` mantém as 3 posições de `weaponLevel` sincronizadas). Novo campo `epicDamageStacks` em `RunProgress`. Fórmula aditiva: `damage * (1 + 0,2*nivel + 0,5*epicDamageStacks + bonusDaArma)`, com `bonusDaArma = +0,15` (Bíblia `N>=1`) ou `+0,25` (Arma de fogo `N>=2`). Função única `WeaponBaseDamage`: Arma de fogo `5`, Bíblia `12`, Katana `20`.
+  - **Save `PIF-RUN-8`:** persiste `epicDamageStacks` e migra saves antigos (`PIF-RUN-7` e anteriores) convertendo `strongWeapon >= 0` em `epicDamageStacks = 1` e unificando o nível pela arma equipada.
+  - **5 níveis por arma:**
+    - **Katana:** Base 20 dano, arco 170° (`arcDot +0,0872`), alcance 105 px, recup. 0,45 s, sem recuo; N1 `-0,8 s` na recarga da esquiva ao acertar; N2 alcance `105->123 px` e recup. `0,45->0,40 s`; N3 arco `170->194°` (`arcDot -0,12`) e recuo `42 px`; N4 onda de choque (`22` dano, recarga `2,5 s`); N5 onda tripla (`-20°/0°/+20°`, recarga `1,8 s`).
+    - **Bíblia:** Base 4 livros, órbita 90 px, contato 12, recarga 0,45 s, sem empurrão; N1 empurrão 36 px e `+15%` dano; N2 5 livros e órbita 102 px; N3 boost `1,25->1,65 s` e recarga `4,0->2,8 s`; N4 6 livros e bloqueio de projéteis no boost; N5 poças de água benta (`3,5 s`, raio 62 px, dura 3 s, 8 dano/0,45 s, máx. 4).
+    - **Arma de fogo:** Base tiro 5, intervalo 0,20 s, vel. 760 px/s, 1 tiro; N1 intervalo 0,14 s e vel. 860 px/s; N2 `+25%` dano; N3 2 tiros (`+-5°`); N4 tiros perfurantes (até 2 inimigos distintos por tiro com dano integral no 2º); N5 duas pistolas (`+-13 px`, 4 tiros por disparo).
+  - **Raridades, sorteio e reroll por cartão:** Comum (70), Raro (25: troca de arma + 2 buffs comuns distintos), Épico (5: upgrade de arma até N5, dano das armas +50% mostrando golpe principal `antes->depois`, status `+30..60` vida/`+20%` dano/`+15` vel., ou cura total + `50` vida máx.). Ao chegar no nível 5, o upgrade sai do pool. Botão individual de reroll abaixo de cada cartão nas telas normais (1 uso por tela, renova só aquele cartão sem repetir tipos presentes nem o anterior; removido reroll na tecla `R`). Tela épica após a onda 4 com 3 cartões épicos distintos e sem reroll.
+  - **Interface e documentação:** molduras por raridade (cinza/azul/roxo com rótulo e gema/ornamento dourado no topo, suporte a 9-slice em `assets/ui/` com fallback procedural), `PATCH_NOTES.md` criado e `docs/GAME_DESIGN.md` atualizado. Painel F1 (`src/dev_tools.c`) atualizado para níveis `0..5`.
+- **A confirmar pelo usuário:** recuperação da katana no N2 (`0,45->0,40 s`), intervalo de `0,14 s` da arma de fogo no N1, onda de choque com `22` de dano e cartão do `+50%` exibindo apenas o golpe principal.
+- **Confirmado para o futuro (em espera):** progressão dos pesos de raridade por mapa em `mapRarityWeights`.
+- **Validação:** compilado e aprovado com 6/6 testes em `build` e `out/review`, incluindo testes unitários e estatísticos em `tests/encounter_test.c` e capturas de tela da nova UI.
+
 - **21/11 — Cutscene da vila revisada:** abre no flashback de Chã de Alegria, passa pela febre e pela tentativa do Líder de mexer no selo, depois volta ao presente para as duas falas do Líder e o fade para a carta. O antigo quadro do protagonista chorando saiu da sequência.
