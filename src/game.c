@@ -1195,7 +1195,7 @@ int main(void) {
             } else {
                 DrawGameText(nearExit
                     ? (clearing.boneland ? "Passagem para o Campo dos Templários"
-                        : clearing.village ? "Entrar na Capela do Anjo" : "Saída para a Vila Lascada")
+                        : clearing.village ? "Entrar na Capela do Anjo" : "Saída para Chã da Tristeza")
                     : (clearing.templarField ? (clearing.exitLocked ? "Derrote o Marechal para liberar a escadaria"
                         : "Escadaria liberada") : clearing.boneland ? "Terra dos Ossos"
                         : clearing.invertedChapel ? "Capela Invertida - saída ao sul"
@@ -1203,7 +1203,7 @@ int main(void) {
                         : (clearing.chapel ? (encounter.chapelAltarDone
                             ? "Capela do Anjo - porta superior esquerda aberta para o Porão"
                             : "Capela do Anjo (E perto do altar / estátuas / trono)")
-                        : (clearing.village ? "Vila Lascada"
+                        : (clearing.village ? "Chã da Tristeza"
                         : (clearing.cemetery ? "Cemitério das Raízes" : "Explore a clareira"))))),
                     24, 53 + hudOffset, 18, RAYWHITE);
             }
