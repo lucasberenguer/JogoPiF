@@ -204,36 +204,49 @@ void CemeteryUpdateSpecial(EnemyGroup *group, const Clearing *map, Enemy *enemy,
 
 CemeteryPose CemeteryAnimationPose(const Enemy *enemy) {
     CemeteryPose p;
-    if(enemy->type==ENEMY_BOSS) {
-        p=(CemeteryPose){CEM_BOSS_WALK,12,4,enemy->facing,0,false};
-        /* Lateral assets are authored facing right; mirror them explicitly. */
-        if(enemy->facing==2) {p.row=3;p.flip=true;}
-        if(enemy->state==ENEMY_WALK) p.frame=(int)(enemy->walkTime*18)%12;
-        else if(enemy->state==ENEMY_IDLE) p.frame=(int)(enemy->stateTime*5)%2;
-        if(enemy->state==ENEMY_ATTACK) {
-            if (enemy->guardianMelee) {
-                p.atlas = CEM_BOSS_MELEE;
-                p.columns = 6;
-                float t = enemy->stateTime;
-                if (t < COVEIRO_MELEE_WINDUP) p.frame = (int)fminf(t / COVEIRO_MELEE_WINDUP * 3.0f, 2.0f);
-                else if (t < COVEIRO_MELEE_WINDUP + .16f) p.frame = 3;
-                else if (t < COVEIRO_MELEE_WINDUP + .30f) p.frame = 4;
-                else p.frame = 5;
-                return p;
+    if (enemy->type == ENEMY_BOSS) {
+        const int basicRows[] = {0, 2, 3, 1};
+        const int emergeRows[] = {2, 3, 1, 0};
+        p = (CemeteryPose){CEM_BOSS_IDLE, 4, 4, basicRows[enemy->facing], 0, false};
+        float t = enemy->stateTime;
+        if (enemy->state == ENEMY_SPAWNING) {
+            int frames = enemy->facing < 2 ? 8 : 9;
+            p = (CemeteryPose){CEM_BOSS_EMERGE, 14, 4, emergeRows[enemy->facing],
+                               5 + (int)Clamp(t * frames, 0, frames - 1), false};
+        } else if (enemy->state == ENEMY_DIE || enemy->state == ENEMY_FALLEN) {
+            int frame = enemy->state == ENEMY_FALLEN ? 6 : (int)Clamp(t / .85f * 7, 0, 6);
+            p = (CemeteryPose){CEM_BOSS_FALL, 7, 4, emergeRows[enemy->facing], frame, false};
+        } else if (enemy->state == ENEMY_WALK) {
+            p.atlas = CEM_BOSS_WALK;
+            p.columns = 10;
+            p.frame = (int)(enemy->walkTime * 18) % 10;
+        } else if (enemy->state == ENEMY_IDLE) {
+            p.frame = (int)(t * 5) % 4;
+        } else if (enemy->state == ENEMY_ATTACK && enemy->guardianMelee) {
+            p.atlas = CEM_BOSS_MELEE;
+            p.columns = 10;
+            p.frame = t < COVEIRO_MELEE_WINDUP ? (int)Clamp(t / COVEIRO_MELEE_WINDUP * 5, 0, 4)
+                : 5 + (int)Clamp((t - COVEIRO_MELEE_WINDUP) /
+                                 (COVEIRO_MELEE_DURATION - COVEIRO_MELEE_WINDUP) * 5, 0, 4);
+        } else if (enemy->state == ENEMY_ATTACK) {
+            p.atlas = CEM_BOSS_SLAM + enemy->bossAttack;
+            p.row = enemy->facing;
+            if (enemy->bossAttack == COVEIRO_SHOVEL) {
+                p.columns = 10;
+                p.frame = t < .8f ? (int)Clamp(t / .8f * 4, 0, 3)
+                    : 4 + (int)Clamp((t - .8f) / .85f * 6, 0, 5);
+            } else if (enemy->bossAttack == COVEIRO_CHARGE) {
+                p.columns = 9;
+                bool phaseTwo = enemy->guardianPhase == GUARDIAN_PHASE_TWO;
+                if (t < .8f) p.frame = (int)Clamp(t / .8f * 3, 0, 2);
+                else if (phaseTwo && t >= 1.12f && t < 1.45f) p.frame = 2;
+                else if (t < (phaseTwo ? 1.77f : 1.35f)) p.frame = 3 + (int)(t * 12) % 3;
+                else p.frame = t < (phaseTwo ? 1.9f : 1.52f) ? 7 : 8;
+            } else {
+                p.columns = 8;
+                p.frame = t < .8f ? (int)Clamp(t / .8f * 4, 0, 3)
+                    : 4 + (int)Clamp((t - .8f) / .85f * 4, 0, 3);
             }
-            p.atlas=CEM_BOSS_SLAM+enemy->bossAttack;
-            p.columns=6;
-            float t=enemy->stateTime;
-            if(enemy->bossAttack==COVEIRO_SHOVEL) {
-                p.columns=12;
-                p.frame=t<.8f?(int)(t/.8f*6):6+(int)fminf((t-.8f)/.85f*6,5);
-            }
-            else if(t<.8f) p.frame=(int)(t/.8f*3);
-            else if(enemy->bossAttack==COVEIRO_CHARGE) {
-                if(enemy->guardianPhase==GUARDIAN_PHASE_TWO && t>=1.12f && t<1.45f) p.frame=1;
-                else if(t<(enemy->guardianPhase==GUARDIAN_PHASE_TWO?1.77f:1.35f)) p.frame=2+(int)(t*12)%2;
-                else p.frame=t<1.9f?4:5;
-            } else p.frame=t<1.02f?3:t<1.5f?4:5;
         }
         return p;
     }
@@ -290,7 +303,7 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
             if (enemy->pickupAvailable) DrawHealthPickup(enemy->position);
             continue;
         }
-        if (enemy->state == ENEMY_SPAWNING) {
+        if (enemy->state == ENEMY_SPAWNING && enemy->type != ENEMY_BOSS) {
             if (enemy->stateTime >= 0)
                 DrawCircleLines((int)enemy->position.x, (int)enemy->position.y,
                                 24 + 10 * sinf(enemy->stateTime*8), GOLD);
@@ -300,17 +313,18 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
         bool boss = enemy->type == ENEMY_BOSS;
         bool special = enemy->type == ENEMY_SPECIAL;
         bool fallen = enemy->state == ENEMY_FALLEN;
-        float collapse = fallen ? 1.0f :
+        float collapse = boss ? 0.0f : fallen ? 1.0f :
             ((boss || special) && enemy->state == ENEMY_DIE ? Clamp(enemy->stateTime / .85f, 0.0f, 1.0f) : 0.0f);
         CemeteryPose pose=CemeteryAnimationPose(enemy);
         const Texture2D atlases[]={group->coveiroWalk,group->boss[0],group->boss[1],group->boss[2],group->coveiroMelee,
             group->cemeteryZombie[0],group->cemeteryZombie[1],group->cemeteryZombie[2],
             group->cemeteryLantern[0],group->cemeteryLantern[1],group->cemeteryLantern[2],
-            group->cemeterySpecial[0],group->cemeterySpecial[1],group->cemeterySpecial[2]};
+            group->cemeterySpecial[0],group->cemeterySpecial[1],group->cemeterySpecial[2],
+            group->coveiroIdle,group->coveiroEmerge,group->coveiroFall};
         Texture2D tex=atlases[pose.atlas];
         int frame=pose.frame,row=pose.row;
         float cw=(float)tex.width/pose.columns,ch=(float)tex.height/pose.rows;
-        float baseSize=boss?(pose.atlas==CEM_BOSS_MELEE?220:190):special?128:96;
+        float baseSize=boss?ch*(210.0f/256.0f):special?128:96;
         float height=baseSize*(1.0f-.22f*collapse);
         float width=baseSize*cw/ch;
         float bob=0;
@@ -345,7 +359,7 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
                             Fade(VIOLET, .25f + .45f * enemy->stateTime / CEM_SPECIAL_IMPACT_TIME));
         DrawTexturePro(tex, (Rectangle){frame*cw, row*ch, pose.flip?-cw:cw, ch},
             (Rectangle){enemy->position.x, enemy->position.y+bob, width, height},
-            (Vector2){width/2,height*(boss?.94f:.914f)}, lean, tint);
+            (Vector2){width/2,boss?(ch-16)*(210.0f/256.0f):height*.914f}, lean, tint);
 
         if (fallen) DrawGameText("E: selar", (int)enemy->position.x-30, (int)enemy->position.y+10, 16, GOLD);
         if (!boss && EnemyCanBeHit(enemy) && enemy->health < enemy->maxHealth) {
@@ -373,9 +387,9 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
     }
 }
 
-static void DrawEffect(Texture2D tex, Vector2 position, int frame, float size) {
-    float w = (float)tex.width/4, h = (float)tex.height/2;
-    DrawTexturePro(tex, (Rectangle){(frame%4)*w,(frame/4)*h,w,h},
+static void DrawEffect(Texture2D tex, Vector2 position, int frame, int columns, float size) {
+    float w = (float)tex.width/columns, h = (float)tex.height/2;
+    DrawTexturePro(tex, (Rectangle){(frame%columns)*w,(frame/columns)*h,w,h},
         (Rectangle){position.x-size/2,position.y-size*.75f,size,size*.75f},
         (Vector2){0}, 0, WHITE);
 }
@@ -387,14 +401,15 @@ void DrawEnemyProjectiles(const EnemyGroup *group) {
         const EnemyRoot *root=&group->rootAttacks[i];
         if(!root->active) continue;
         if(root->age<.8f) DrawCircleLines((int)root->position.x,(int)root->position.y,62,GREEN);
-        else DrawEffect(group->effects[0],root->position,(int)fminf((root->age-.8f)*10,7),124);
+        else DrawEffect(group->effects[0],root->position,(int)fminf((root->age-.8f)*20,15),8,124);
     }
     if (boss->type == ENEMY_BOSS && boss->state == ENEMY_ATTACK && !boss->guardianMelee && boss->stateTime >= COVEIRO_WINDUP) {
         int frame = (int)fminf((boss->stateTime-COVEIRO_WINDUP)/1.2f*8, 7);
         if (boss->bossAttack == COVEIRO_ROOTS)
-            DrawEffect(group->effects[0], boss->attackTarget, frame, boss->guardianPhase == GUARDIAN_PHASE_TWO ? 230 : 190);
+            DrawEffect(group->effects[0], boss->attackTarget, (int)Clamp((boss->stateTime-COVEIRO_WINDUP)/.85f*16,0,15), 8,
+                       boss->guardianPhase == GUARDIAN_PHASE_TWO ? 230 : 190);
         if (boss->bossAttack == COVEIRO_CHARGE)
-            DrawEffect(group->effects[2], boss->position, frame, 140);
+            DrawEffect(group->effects[2], boss->position, frame, 4, 140);
     }
     for (int i = 0; i < CEMETERY_PROJECTILE_COUNT; i++) {
         const CemeteryProjectile *shot = &group->cemeteryProjectiles[i];

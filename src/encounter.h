@@ -87,6 +87,7 @@ bool CanEnterTemplarField(const Encounter *encounter, const Clearing *clearing,
 bool EncounterBossVisible(const Encounter *encounter, const EnemyGroup *enemies);
 float EncounterDamage(const Encounter *encounter);
 bool RerollEncounterReward(Encounter *encounter, int slot);
+void UnloadEncounterRewardUi(void);
 bool ChooseEncounterReward(Encounter *encounter, EnemyGroup *enemies, const Clearing *clearing,
                            Vector2 player, int *health, int choice);
 bool OpenEncounterSeal(Encounter *encounter, const EnemyGroup *enemies, Vector2 player);

@@ -1328,6 +1328,7 @@ int main(void) {
     UnloadTexture(dodgeSprites);
     UnloadTexture(protagonist);
     UnloadClearing(&clearing);
+    UnloadEncounterRewardUi();
     UnloadGameFonts();
     CloseWindow();
     return 0;

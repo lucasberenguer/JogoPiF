@@ -467,6 +467,22 @@ static void CheckLegacyCheckpoints(void) {
     assert(ExportImage(uiShot, "audit/rewards_accented_cards.png"));
     UnloadImage(uiShot);
 
+    SetWindowSize(800, 450);
+    RenderTexture2D compact = LoadRenderTexture(800, 450);
+    SetMousePosition(400, 210);
+    rTest.rewards[1] = (Reward){.kind = REWARD_WEAPON_UPGRADE, .rarity = RARITY_RARE, .weapon = 2};
+    SetRunWeaponLevel(&rTest.progress, 1);
+    BeginTextureMode(compact);
+    ClearBackground((Color){27, 23, 28, 255});
+    DrawEncounter(&rTest, &dummyEnemies);
+    EndTextureMode();
+    uiShot = LoadImageFromTexture(compact.texture);
+    ImageFlipVertical(&uiShot);
+    assert(ExportImage(uiShot, "audit/rewards_compact.png"));
+    UnloadImage(uiShot);
+    UnloadRenderTexture(compact);
+    SetWindowSize(1280, 720);
+
     /* Captura visual da tela de Game Over com botões lado a lado */
     BeginTextureMode(uiTarget);
     ClearBackground((Color){16, 10, 22, 255});
@@ -1447,6 +1463,7 @@ int main(void) {
     assert(encounter.chapelAltarDone && encounter.progress.angelBlessingUses==0);
     UnloadEnemies(&enemies);
     UnloadClearing(&clearing);
+    UnloadEncounterRewardUi();
     UnloadGameFonts();
     CloseWindow();
     puts("Four waves, boss fifth wave, rewards, boss roots, seals and checkpoints passed");
