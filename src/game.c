@@ -12,6 +12,7 @@
 #include "cutscene.h"
 #include "guardian_cutscene.h"
 #include "dev_tools.h"
+#include "video_settings.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -108,11 +109,13 @@ int main(void) {
         TraceLog(LOG_WARNING, "Nao foi possivel abrir a pasta de assets do executavel.");
 
     InitWindow(1280, 720, "Jogo PIF - Clareira");
-    const int monitor = GetCurrentMonitor();
-    SetWindowSize(GetMonitorWidth(monitor), GetMonitorHeight(monitor));
-    ToggleFullscreen();
+    /* Opções de vídeo salvas em video_pif.cfg (padrão: tela cheia sem borda, 60 FPS, 100%). */
+    VideoSettings *video = GetVideoSettings();
+    LoadVideoSettings(video);
+    if (video->fullscreen) ToggleGameFullscreen();
+    else ApplyVideoWindowSize();
     SetExitKey(KEY_NULL);
-    SetTargetFPS(60);
+    SetTargetFPS(video->fpsLimit);
 
     Clearing clearing = { 0 };
     if (!InitClearing(&clearing)) {
@@ -387,10 +390,10 @@ int main(void) {
                     devTools.open=false;
                 } else snprintf(devTools.status,sizeof(devTools.status),"Não foi possível carregar o cenário de teste.");
             }
-            BeginDrawing();
+            BeginGameFrame();
                 ClearBackground(BLACK);
                 if (devTools.open) DrawDevTools(&devTools,inPractice);
-            EndDrawing();
+            EndGameFrame();
             continue;
         }
         if (screen == GUARDIAN_SCREEN) {
@@ -411,10 +414,10 @@ int main(void) {
                 screen=2;
                 entryFadeRemaining=entryFadeDuration;
             }
-            BeginDrawing();
+            BeginGameFrame();
                 ClearBackground(BLACK);
                 if (screen==GUARDIAN_SCREEN) DrawGuardianCutscene(&guardianIntro);
-            EndDrawing();
+            EndGameFrame();
             continue;
         }
         if (screen == 0) {
@@ -508,10 +511,10 @@ int main(void) {
                 memset(katanaShockwaves, 0, sizeof(katanaShockwaves));
                 entryFadeRemaining = entryFadeDuration;
             }
-            BeginDrawing();
+            BeginGameFrame();
                 ClearBackground(BLACK);
                 DrawMenu(&menu);
-            EndDrawing();
+            EndGameFrame();
             continue;
         }
         if (screen == 1 || screen == OPENING_SCREEN) {
@@ -519,10 +522,10 @@ int main(void) {
             int choice;
             if (fromOpening) {
                 UpdateOpeningCutscene(&opening, GetFrameTime());
-                BeginDrawing();
+                BeginGameFrame();
                     ClearBackground(BLACK);
                     if (!opening.finished) DrawOpeningCutscene(&opening);
-                EndDrawing();
+                EndGameFrame();
                 if (!opening.finished) continue;
                 UnloadOpeningCutscene(&opening);
                 if (openingPreview) {
@@ -544,10 +547,10 @@ int main(void) {
                                             menu.audio.volume[AUDIO_EFFECTS]/100.0f)) {
                         currentWeapon = choice;
                         screen = OPENING_SCREEN;
-                        BeginDrawing();
+                        BeginGameFrame();
                             ClearBackground(BLACK);
                             DrawOpeningCutscene(&opening);
-                        EndDrawing();
+                        EndGameFrame();
                         continue;
                     }
                     TraceLog(LOG_WARNING, "Abertura indisponivel. Iniciando a partida.");
@@ -584,10 +587,10 @@ int main(void) {
                 screen = 2;
             }
             if (fromOpening) continue;
-            BeginDrawing();
+            BeginGameFrame();
                 ClearBackground(BLACK);
                 DrawWeaponSelect(&weaponSelect);
-            EndDrawing();
+            EndGameFrame();
             continue;
         }
         if (clearing.necromancerArena && encounter.phase==ENCOUNTER_CLEAR &&
@@ -662,7 +665,7 @@ int main(void) {
                 entryFadeRemaining=entryFadeDuration;
                 continue;
             }
-            BeginDrawing();
+            BeginGameFrame();
             ClearBackground((Color){16,10,22,255});
             DrawGameTextIn("Game Over", (Rectangle){0.0f, centerY - 190.0f, sw, 96.0f},
                            92.0f, (Color){220, 45, 55, 255}, true);
@@ -681,10 +684,12 @@ int main(void) {
             DrawGameTextIn("Enter ou R: nova tentativa  |  Esc: voltar ao menu",
                            (Rectangle){0.0f, btnY + btnHeight + 24.0f, sw, 28.0f},
                            18.0f, LIGHTGRAY, false);
-            EndDrawing();
+            EndGameFrame();
             continue;
         }
-        if (screen == 3 || IsKeyPressed(KEY_ESCAPE)) {
+        /* Ao trocar de janela (Alt+Tab, Cmd+Tab etc.), a partida pausa sozinha. */
+        bool lostFocus = screen == 2 && !IsWindowFocused();
+        if (screen == 3 || IsKeyPressed(KEY_ESCAPE) || lostFocus) {
             if (screen == 3) {
                 PauseAction action = UpdatePauseMenu(&menu);
                 if (action == PAUSE_RESUME) screen = 2;
@@ -695,10 +700,10 @@ int main(void) {
                 menu.pause.selected = 0;
                 for (int i = 0; i < 4; i++) menu.pause.buttonFocus[i] = i == 0 ? 1.0f : 0.0f;
             }
-            BeginDrawing();
+            BeginGameFrame();
                 ClearBackground(BLACK);
                 DrawPauseMenu(&menu);
-            EndDrawing();
+            EndGameFrame();
             continue;
         }
         if (entryFadeRemaining<=0 && !encounter.guardianIntroPending)
@@ -719,10 +724,10 @@ int main(void) {
                                   menu.audio.volume[AUDIO_EFFECTS]/100.0f))
                 screen=GUARDIAN_SCREEN;
             else CompleteAngelCinematic(&encounter,playerHealth);
-            BeginDrawing();
+            BeginGameFrame();
             ClearBackground(BLACK);
             if (screen==GUARDIAN_SCREEN) DrawGuardianCutscene(&guardianIntro);
-            EndDrawing();
+            EndGameFrame();
             continue;
         }
         if (encounter.phase==ENCOUNTER_VILLAGE_CINEMATIC) {
@@ -737,10 +742,10 @@ int main(void) {
                     screen=GUARDIAN_SCREEN;
                 else CompleteVillageCinematic(&encounter);
             }
-            BeginDrawing();
+            BeginGameFrame();
             ClearBackground(BLACK);
             if (screen==GUARDIAN_SCREEN) DrawGuardianCutscene(&guardianIntro);
-            EndDrawing();
+            EndGameFrame();
             continue;
         }
         if (GuardianLiberationPending(&encounter) || GuardianPassagePending(&encounter)) {
@@ -755,10 +760,10 @@ int main(void) {
             if (InitGuardianAftermath(&guardianIntro,passage,menu.audio.volume[AUDIO_MUSIC]/100.0f,
                                       menu.audio.volume[AUDIO_EFFECTS]/100.0f)) {
                 screen=GUARDIAN_SCREEN;
-                BeginDrawing();
+                BeginGameFrame();
                     ClearBackground(BLACK);
                     DrawGuardianCutscene(&guardianIntro);
-                EndDrawing();
+                EndGameFrame();
                 continue;
             }
             TraceLog(LOG_WARNING,"Cutscene pos-Guardiao indisponivel. Aplicando o estado final.");
@@ -781,9 +786,9 @@ int main(void) {
             ClearEnemyAttacks(&enemies);
             katanaAttackRemaining=katanaAttackCooldown=dodgeRemaining=dodgeCooldown=0;
             if (clearing.cemetery && menu.audio.playing[TRACK_COMBAT]) {
-                BeginDrawing();
+                BeginGameFrame();
                 ClearBackground(BLACK);
-                EndDrawing();
+                EndGameFrame();
                 continue;
             }
             float musicVolume=menu.audio.volume[AUDIO_MUSIC]/100.0f;
@@ -793,10 +798,10 @@ int main(void) {
                 : InitGuardianCutscene(&guardianIntro,musicVolume,effectsVolume);
             if (loaded) {
                 screen=GUARDIAN_SCREEN;
-                BeginDrawing();
+                BeginGameFrame();
                     ClearBackground(BLACK);
                     DrawGuardianCutscene(&guardianIntro);
-                EndDrawing();
+                EndGameFrame();
                 continue;
             }
             TraceLog(LOG_WARNING,"Cutscene do Guardiao indisponivel. Usando a apresentacao do chefe.");
@@ -1102,7 +1107,7 @@ int main(void) {
         if (!entering && nearPedestal && interactPressed) pedestalMessageTime = 3.0f;
         if (pedestalMessageTime > 0.0f) pedestalMessageTime -= deltaTime;
 
-        BeginDrawing();
+        BeginGameFrame();
             ClearBackground(BLACK);
             BeginMode2D(camera);
                 DrawClearing(&clearing);
@@ -1313,7 +1318,7 @@ int main(void) {
                 DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
                               Fade(BLACK, opacity));
             }
-        EndDrawing();
+        EndGameFrame();
     }
 
     UnloadOpeningCutscene(&opening);
@@ -1328,6 +1333,7 @@ int main(void) {
     UnloadTexture(dodgeSprites);
     UnloadTexture(protagonist);
     UnloadClearing(&clearing);
+    UnloadVideoFrame();
     UnloadGameFonts();
     CloseWindow();
     return 0;

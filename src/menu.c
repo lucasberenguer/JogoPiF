@@ -322,7 +322,6 @@ void UnloadMenu(Menu *m) {
 static Rectangle PauseButtonBounds(int index) {
     return MenuButtonBounds(index, 836.0f, 543.0f, 370.0f);
 }
-static const Rectangle pauseFullscreen = {626, 268, 420, 126};
 static const Rectangle pauseBack = {696, 710, 280, 84};
 static const Rectangle volumeBars[AUDIO_CHANNELS] = {
     {566, 456, 540, 16}, {566, 575, 540, 16}
@@ -340,11 +339,67 @@ static Vector2 SettingsMouse(Rectangle canvas) {
     return (Vector2){(mouse.x-canvas.x)/scale, (mouse.y-canvas.y)/scale};
 }
 
+/* Abas das Configurações e linhas da aba Vídeo, em coordenadas da arte (1672x941). */
+static const Rectangle settingsTabs[2] = {{566, 288, 260, 56}, {846, 288, 260, 56}};
+enum { VIDEO_ROW_FULLSCREEN, VIDEO_ROW_RENDER, VIDEO_ROW_FPS, VIDEO_ROW_COUNTER, VIDEO_ROWS };
+
+static Rectangle VideoRow(int row) {
+    return (Rectangle){455, 382 + row*62.0f, 762, 50};
+}
+
+static Rectangle VideoValue(int row) {
+    Rectangle bounds = VideoRow(row);
+    return (Rectangle){bounds.x + bounds.width - 350, bounds.y, 350, bounds.height};
+}
+
+static void ChangeVideoOption(int row, int direction) {
+    VideoSettings *video = GetVideoSettings();
+    switch (row) {
+        case VIDEO_ROW_FULLSCREEN: ToggleGameFullscreen(); break;
+        case VIDEO_ROW_RENDER: CycleVideoRenderScale(video, direction); break;
+        case VIDEO_ROW_FPS:
+            CycleVideoFpsLimit(video, direction);
+            SetTargetFPS(video->fpsLimit);
+            break;
+        case VIDEO_ROW_COUNTER: video->showFps = !video->showFps; break;
+    }
+    SaveVideoSettings(video);
+}
+
+static void UpdateVideoSettings(Menu *menu, Vector2 mouse, bool click) {
+    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W))
+        menu->videoFocus = (menu->videoFocus + VIDEO_ROWS - 1) % VIDEO_ROWS;
+    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S))
+        menu->videoFocus = (menu->videoFocus + 1) % VIDEO_ROWS;
+    int direction = (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D) || IsKeyPressed(KEY_ENTER)) ? 1 :
+                    (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) ? -1 : 0;
+    if (direction) ChangeVideoOption(menu->videoFocus, direction);
+    if (!click) return;
+    for (int row = 0; row < VIDEO_ROWS; row++) {
+        if (!CheckCollisionPointRec(mouse, VideoRow(row))) continue;
+        Rectangle value = VideoValue(row);
+        menu->videoFocus = row;
+        ChangeVideoOption(row, mouse.x < value.x + value.width/2 ? -1 : 1);
+    }
+}
+
 static bool UpdateSettings(Menu *menu) {
     Vector2 mouse = SettingsMouse(PauseCanvas());
     bool click = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     bool back = IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_BACKSPACE) ||
                 (click && CheckCollisionPointRec(mouse, pauseBack));
+    if (IsKeyPressed(KEY_TAB) || IsKeyPressed(KEY_Q) || IsKeyPressed(KEY_E))
+        menu->settingsTab = 1 - menu->settingsTab;
+    for (int tab = 0; tab < 2; tab++)
+        if (click && CheckCollisionPointRec(mouse, settingsTabs[tab])) menu->settingsTab = tab;
+    if (!back && IsKeyPressed(KEY_F)) {
+        ToggleGameFullscreen();
+        SaveVideoSettings(GetVideoSettings());
+    }
+    if (menu->settingsTab == 1) {
+        if (!back) UpdateVideoSettings(menu, mouse, click);
+        return back;
+    }
     if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_DOWN) ||
         IsKeyPressed(KEY_W) || IsKeyPressed(KEY_S))
         menu->volumeFocus = 1-menu->volumeFocus;
@@ -382,10 +437,26 @@ static bool UpdateSettings(Menu *menu) {
         }
         menu->volumeDrag = 0;
     }
-    if (!back && (IsKeyPressed(KEY_F) || IsKeyPressed(KEY_ENTER) ||
-                  (click && CheckCollisionPointRec(mouse, pauseFullscreen))))
-        ToggleFullscreen();
     return back;
+}
+
+/* A tela cheia exclusiva (ToggleFullscreen) mantinha o jogo desenhado por cima de
+   tudo após Alt+Tab, porque a raylib desliga a minimização automática ao perder o
+   foco. A janela sem borda do tamanho do monitor tem a mesma resolução nativa e
+   deixa o sistema trocar de janela normalmente. */
+bool IsGameFullscreen(void) {
+    return IsWindowState(FLAG_BORDERLESS_WINDOWED_MODE);
+}
+
+void ToggleGameFullscreen(void) {
+    ToggleBorderlessWindowed();
+    /* A raylib 5.5 também marca a janela sem borda como "sempre no topo", o que a
+       deixaria por cima das outras depois de Alt+Tab. */
+    if (IsWindowState(FLAG_WINDOW_TOPMOST)) ClearWindowState(FLAG_WINDOW_TOPMOST);
+    VideoSettings *video = GetVideoSettings();
+    video->fullscreen = IsGameFullscreen();
+    /* Fora da tela cheia, a janela usa a resolução escolhida nas Configurações. */
+    if (!video->fullscreen) ApplyVideoWindowSize();
 }
 
 PauseAction UpdatePauseMenu(Menu *menu) {
@@ -513,12 +584,61 @@ static void DrawPauseTextButton(const Menu *menu, Rectangle canvas, Rectangle lo
     DrawGameTextIn(label, bounds, fontSize*canvas.width/1672.0f, ColorTint(buttonText, tint), false);
 }
 
+static void DrawSettingsTabs(const Menu *menu, Rectangle canvas) {
+    static const char *names[2] = {"Áudio", "Vídeo"};
+    for (int tab = 0; tab < 2; tab++) {
+        Rectangle bounds = PauseRect(canvas, settingsTabs[tab]);
+        bool active = menu->settingsTab == tab;
+        Color tint = MenuButtonTint(bounds, active ? 1.0f : 0.0f, false);
+        if (!active) tint = ColorBrightness(tint, -.35f);
+        DrawPausePlate(menu, bounds, tint);
+        DrawGameTextIn(names[tab], bounds, 32*canvas.width/1672.0f,
+                       active ? GOLD : ColorTint(buttonText, tint), false);
+    }
+}
+
+static void DrawVideoSettings(const Menu *menu, Rectangle canvas) {
+    static const char *labels[VIDEO_ROWS] = {
+        "Tela cheia", "Renderização", "Limite de FPS", "Contador de FPS"
+    };
+    const VideoSettings *video = GetVideoSettings();
+    float scale = canvas.width/1672.0f;
+    for (int row = 0; row < VIDEO_ROWS; row++) {
+        Rectangle bounds = PauseRect(canvas, VideoRow(row));
+        bool focused = menu->videoFocus == row;
+        DrawRectangleRounded(bounds, .3f, 8, focused ? (Color){87, 47, 53, 235} : (Color){40, 22, 28, 190});
+        if (focused) DrawRectangleRoundedLinesEx(bounds, .3f, 8, fmaxf(1, 2*scale), GOLD);
+        int size = (int)fmaxf(12, 31*scale);
+        DrawGameText(labels[row], (int)(bounds.x + 22*scale), (int)(bounds.y + (bounds.height-size)/2),
+                     size, focused ? GOLD : RAYWHITE);
+        const char *value = "";
+        switch (row) {
+            case VIDEO_ROW_FULLSCREEN: value = IsGameFullscreen() ? "Ligada" : "Desligada"; break;
+            case VIDEO_ROW_RENDER:
+                value = video->renderScale >= 100 ? "100% (nativa)" : TextFormat("%d%%", video->renderScale);
+                break;
+            case VIDEO_ROW_FPS: value = TextFormat("%d FPS", video->fpsLimit); break;
+            case VIDEO_ROW_COUNTER: value = video->showFps ? "Ligado" : "Desligado"; break;
+        }
+        DrawGameTextIn(TextFormat("<   %s   >", value), PauseRect(canvas, VideoValue(row)),
+                       31*scale, focused ? GOLD : RAYWHITE, false);
+    }
+    const char *hint = "Setas ou clique alteram  ·  Tab troca de aba";
+    if (menu->videoFocus == VIDEO_ROW_RENDER)
+        hint = "Abaixo de 100%, a imagem fica menos nítida e mais leve";
+    DrawPauseText(canvas, hint, 660, 27, LIGHTGRAY);
+}
+
 static void DrawSettings(const Menu *menu, Rectangle canvas) {
     DrawMenuPanel(PauseRect(canvas, (Rectangle){395, 148, 882, 668}));
     DrawGameTextIn("Configurações", PauseRect(canvas, (Rectangle){395, 198, 882, 76}),
                    62*canvas.width/1672.0f, buttonText, true);
-    DrawPauseTextButton(menu, canvas, pauseFullscreen,
-                        IsWindowFullscreen() ? "Tela cheia ligada" : "Tela cheia desligada", 34);
+    DrawSettingsTabs(menu, canvas);
+    if (menu->settingsTab == 1) {
+        DrawVideoSettings(menu, canvas);
+        DrawPauseTextButton(menu, canvas, pauseBack, "Voltar  ·  Esc", 28);
+        return;
+    }
     static const char *names[AUDIO_CHANNELS] = {"Música", "Efeitos sonoros"};
     float scale = canvas.width/1672.0f;
     for (int i = 0; i < AUDIO_CHANNELS; i++) {
@@ -535,7 +655,7 @@ static void DrawSettings(const Menu *menu, Rectangle canvas) {
             DrawRectangleRec((Rectangle){bar.x,bar.y,filled,bar.height}, focused ? GOLD : ORANGE);
         DrawCircleV((Vector2){bar.x+filled,bar.y+bar.height/2}, 11*scale, focused ? GOLD : RAYWHITE);
     }
-    DrawPauseText(canvas, "Setas ajustam o volume  ·  F ou Enter alterna tela cheia", 641, 31, LIGHTGRAY);
+    DrawPauseText(canvas, "Setas ajustam o volume  ·  Tab troca de aba  ·  F alterna tela cheia", 641, 29, LIGHTGRAY);
     DrawPauseTextButton(menu, canvas, pauseBack, "Voltar  ·  Esc", 28);
 }
 

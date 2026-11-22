@@ -36,6 +36,7 @@ set(SOURCES
     src/village_enemy.c
     src/encounter.c
     src/presentation.c
+    src/video_settings.c
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
@@ -61,7 +62,7 @@ if(BUILD_TESTING)
     target_include_directories(player_collision_test PRIVATE src)
     target_link_libraries(player_collision_test PRIVATE raylib)
     add_test(NAME player_collision COMMAND player_collision_test)
-    add_executable(encounter_test tests/encounter_test.c src/encounter.c src/logica.c src/presentation.c src/enemy.c src/necromancer.c src/cemetery_enemy.c src/village_enemy.c src/clearing.c src/menu.c src/menu_video.c src/game_audio.c src/game_text.c src/dev_tools.c src/bible.c src/gun.c)
+    add_executable(encounter_test tests/encounter_test.c src/encounter.c src/logica.c src/presentation.c src/enemy.c src/necromancer.c src/cemetery_enemy.c src/village_enemy.c src/clearing.c src/menu.c src/menu_video.c src/game_audio.c src/game_text.c src/dev_tools.c src/bible.c src/gun.c src/video_settings.c)
     target_include_directories(encounter_test PRIVATE src)
     target_link_libraries(encounter_test PRIVATE raylib)
     if(WIN32)
@@ -70,7 +71,7 @@ if(BUILD_TESTING)
     set_target_properties(encounter_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/audit")
     add_test(NAME clearing_encounter COMMAND encounter_test)
     set_tests_properties(clearing_encounter PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
-    add_executable(guardian_cutscene_test tests/guardian_cutscene_test.c src/guardian_cutscene.c src/game_text.c)
+    add_executable(guardian_cutscene_test tests/guardian_cutscene_test.c src/guardian_cutscene.c src/game_text.c src/video_settings.c)
     target_include_directories(guardian_cutscene_test PRIVATE src)
     target_link_libraries(guardian_cutscene_test PRIVATE raylib)
     set_target_properties(guardian_cutscene_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/audit")

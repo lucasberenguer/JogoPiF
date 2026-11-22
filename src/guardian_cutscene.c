@@ -1,4 +1,5 @@
 #include "guardian_cutscene.h"
+#include "video_settings.h"
 #include "game_text.h"
 #include <math.h>
 #include <stdio.h>
@@ -531,7 +532,7 @@ void DrawGuardianCutscene(const GuardianCutscene *scene) {
     const GuardianScene *shot=&scene->scenes[scene->current];
     float scale=fminf(GetScreenWidth()/1280.0f,GetScreenHeight()/720.0f);
     Rectangle canvas={(GetScreenWidth()-1280*scale)/2,(GetScreenHeight()-720*scale)/2,1280*scale,720*scale};
-    BeginScissorMode((int)canvas.x,(int)canvas.y,(int)canvas.width,(int)canvas.height);
+    BeginGameScissor((int)canvas.x,(int)canvas.y,(int)canvas.width,(int)canvas.height);
     float enter=shot->fadeIn>0?Ease(scene->elapsed/shot->fadeIn):1;
     if (scene->current>0 && shot->transitionIn==CINEMATIC_CROSSFADE && enter<1) {
         DrawShot(scene,scene->current-1,canvas,scene->scenes[scene->current-1].duration,1);

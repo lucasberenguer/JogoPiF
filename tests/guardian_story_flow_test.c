@@ -13,6 +13,7 @@ static GameAudio *activeAudio;
 static void TestWindow(int w,int h,const char *title);
 static void IgnoreResize(int w,int h);
 static void IgnoreToggle(void);
+static bool TestFocused(void);
 static void IgnoreFps(int fps);
 static bool TestClose(void);
 static bool TestKey(int key);
@@ -28,6 +29,8 @@ static bool TestPassage(Encounter *e,EnemyGroup *enemies,Clearing *map,Vector2 *
 #define InitWindow TestWindow
 #define SetWindowSize IgnoreResize
 #define ToggleFullscreen IgnoreToggle
+#define ToggleGameFullscreen IgnoreToggle
+#define IsWindowFocused TestFocused
 #define SetTargetFPS IgnoreFps
 #define WindowShouldClose TestClose
 #define IsKeyPressed TestKey
@@ -44,6 +47,8 @@ static bool TestPassage(Encounter *e,EnemyGroup *enemies,Clearing *map,Vector2 *
 #undef InitWindow
 #undef SetWindowSize
 #undef ToggleFullscreen
+#undef ToggleGameFullscreen
+#undef IsWindowFocused
 #undef SetTargetFPS
 #undef WindowShouldClose
 #undef IsKeyPressed
@@ -62,6 +67,7 @@ static void TestWindow(int w,int h,const char *title) {
 }
 static void IgnoreResize(int w,int h) {(void)w;(void)h;}
 static void IgnoreToggle(void) {}
+static bool TestFocused(void) {return true;}
 static void IgnoreFps(int fps) {(void)fps;}
 static float TestDelta(void) {return .05f;}
 static bool TestClose(void) {return ++frames>1200 || transported>0;}

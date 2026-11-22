@@ -4,6 +4,7 @@
 #include "run_progress.h"
 #include "menu_video.h"
 #include "game_audio.h"
+#include "video_settings.h"
 typedef enum MenuAction { MENU_NONE, MENU_START, MENU_CONTINUE, MENU_TEST_VILLA, MENU_TEST_CHAPEL, MENU_QUIT } MenuAction;
 typedef enum PauseAction { PAUSE_NONE, PAUSE_RESUME, PAUSE_MAIN_MENU } PauseAction;
 typedef enum PausePage { PAUSE_OPTIONS, PAUSE_SETTINGS, PAUSE_CONTROLS } PausePage;
@@ -23,6 +24,7 @@ typedef struct Menu {
     PauseMenu pause;
     GameAudio audio;
     int volumeFocus, volumeDrag;
+    int settingsTab, videoFocus; /* aba 0: Áudio, 1: Vídeo */
     bool volumeChanged;
     MenuVideo *video;
     Texture2D videoFrame;
@@ -38,6 +40,9 @@ void UnloadMenu(Menu *menu);
 MenuAction UpdateMenu(Menu *menu);
 void DrawMenu(const Menu *menu);
 PauseAction UpdatePauseMenu(Menu *menu);
+/* Tela cheia sem borda (janela do tamanho do monitor). Permite Alt+Tab em todas as plataformas. */
+void ToggleGameFullscreen(void);
+bool IsGameFullscreen(void);
 void DrawPauseMenu(const Menu *menu);
 bool SaveMenuCheckpoint(int weapon);
 int LoadMenuCheckpointWeapon(void);

@@ -37,7 +37,7 @@ Arma de Fogo, Bíblia Sagrada e Katana. Clique numa carta ou use as setas e
 Enter; Esc volta ao menu. A escolha cria o checkpoint inicial; se já houver
 progresso, o menu pede confirmação antes de substituí-lo.
 **Continuar Jogo** retoma do checkpoint inicial da clareira com a arma escolhida,
-o único checkpoint disponível no protótipo. **Configurações** permite alternar tela cheia com F ou Enter;
+o único checkpoint disponível no protótipo. **Configurações** tem as abas Áudio e Vídeo (Tab troca de aba); F alterna a tela cheia sem borda;
 **Créditos** abre uma tela reservada aos nomes da equipe.
 O arquivo `partida_pif.sav` fica ao lado do executável.
 As cartas e a moldura da escolha estão em `assets/`. A arma selecionada aparece
@@ -146,3 +146,10 @@ cmake --build build
 
 O script de geração usa Pillow, NumPy e OpenCV; o jogo compilado não depende
 desses pacotes Python.
+
+## Vídeo
+
+Na aba **Vídeo** das Configurações: tela cheia (sem borda, permite Alt+Tab), renderização
+(50%, 75% ou 100% da resolução da tela), limite de FPS (30 ou 60) e contador de FPS no canto
+inferior direito. Setas ou clique alteram. As escolhas ficam em `video_pif.cfg`, ao lado do
+executável. Fora da tela cheia, a janela tem 1280×720.

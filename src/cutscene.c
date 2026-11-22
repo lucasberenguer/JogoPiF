@@ -1,4 +1,5 @@
 #include "game_text.h"
+#include "video_settings.h"
 #include "cutscene.h"
 #include <math.h>
 #include <stdio.h>
@@ -204,7 +205,7 @@ void DrawOpeningCutscene(const OpeningCutscene *scene) {
     float reveal = Ease(t/.78f);
     const Texture2D *art = scene->art;
     DrawRectangleRec(canvas, (Color){17,10,14,255});
-    BeginScissorMode((int)canvas.x,(int)canvas.y,(int)canvas.width,(int)canvas.height);
+    BeginGameScissor((int)canvas.x,(int)canvas.y,(int)canvas.width,(int)canvas.height);
     switch (beat) {
         case 0:
             DrawPanel(art[BATTLEFIELD],canvas,(Rectangle){60,67,1160,540},(Vector2){.54f,.48f},
