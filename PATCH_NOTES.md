@@ -9,7 +9,7 @@
 - **Dano Base do Golpe Principal (`WeaponBaseDamage(arma)` em `src/run_progress.h`)**:
   - Arma de fogo (`0`): `5` (tiro — `SHOT_DAMAGE` em `src/gun.c`)
   - Bíblia (`1`): `12` (contato — `BibleContactDamage()` em `src/bible.c`)
-  - Katana (`2`): `20` (golpe principal — `WeaponBaseDamage(WEAPON_KATANA)` em `src/game.c`)
+  - Katana (`2`): `17` (golpe principal — `WeaponBaseDamage(WEAPON_KATANA)` em `src/game.c`)
 - **Fórmula de Dano (`EncounterDamage` em `src/encounter.c`)**:
   $$\text{EncounterDamage} = \text{damage} \times (1 + 0{,}2 \times \text{nivel} + 0{,}5 \times \text{epicDamageStacks} + \text{bonusDaArma})$$
 
@@ -20,7 +20,7 @@
 | Bônus por acúmulo épico de dano | `+0.50` (`+50%` por stack) | `EPIC_DAMAGE_STACK_BONUS` | `src/run_progress.h` |
 | `bonusDaArma` (Bíblia `nivel >= 1`) | `+0.15` (`+15%`) | `BIBLE_L1_DAMAGE_BONUS` | `src/run_progress.h` |
 | `bonusDaArma` (Arma de fogo `nivel >= 2`) | `+0.25` (`+25%`) | `GUN_L2_DAMAGE_BONUS` | `src/run_progress.h` |
-| Dano base por arma (`{5, 12, 20}`) | `5` / `12` / `20` | `WeaponBaseDamage(int weapon)` | `src/run_progress.h` |
+| Dano base por arma (`{5, 12, 17}`) | `5` / `12` / `17` | `WeaponBaseDamage(int weapon)` | `src/run_progress.h` |
 
 Todo o cálculo é aditivo, acumulativo e sem teto. O dano final aplicado em cada acerto é `ceil(danoBaseDoGolpe * EncounterDamage)`.
 
@@ -32,7 +32,7 @@ Todo o cálculo é aditivo, acumulativo e sem teto. O dano final aplicado em cad
 
 | Nível | Efeito / Regra | Valor | Constante / Identificador | Arquivo |
 | --- | --- | --- | --- | --- |
-| Base (N0) | Dano base do golpe | `20` (era `25`, `-20%`) | `WeaponBaseDamage(WEAPON_KATANA)` | `src/run_progress.h` / `src/game.c` |
+| Base (N0) | Dano base do golpe | `17` (era `20`, `-15%`) | `WeaponBaseDamage(WEAPON_KATANA)` | `src/run_progress.h` / `src/game.c` |
 | Base (N0) | Arco de corte (`127°`, `cos(63,5°)`) | `+0.4462f` | `KATANA_BASE_ARC_DOT` | `src/game.c` |
 | Base (N0) | Alcance base | `105.0f px` | `KATANA_BASE_RANGE` | `src/game.c` |
 | Base (N0) | Recuperação entre golpes | `0.45f s` | `KATANA_BASE_RECOVERY` | `src/game.c` |
@@ -90,7 +90,7 @@ Todo o cálculo é aditivo, acumulativo e sem teto. O dano final aplicado em cad
 | Raro (`RARITY_RARE`) | Troca de arma (`REWARD_SWAP`) | Outra arma (mesmo nível) + `2` buffs comuns distintos | `COMMON_DAMAGE_BONUS`, `COMMON_HEALTH_BONUS`, `COMMON_SPEED_BONUS` | `src/encounter.c` |
 | Épico (`RARITY_EPIC`) | Upgrade da arma (`REWARD_WEAPON_UPGRADE`) | `nivel + 1` (somente se `< 5`) | `MAX_WEAPON_LEVEL` | `src/run_progress.h` |
 | Épico (`RARITY_EPIC`) | Poder das Armas (`REWARD_EPIC_DAMAGE`) | `+50%` aditivo (`epicDamageStacks++`) | `EPIC_DAMAGE_STACK_BONUS` | `src/run_progress.h` |
-| Épico (`RARITY_EPIC`) | Status (`REWARD_EPIC_STATUS`) | Vida `+30..+60` (múltiplos de `10`), dano `+0.25f` (`+25%`), vel. `+60.0f` (`+25%` da base `240`) | `EPIC_STATUS_MIN_TENS`, `EPIC_STATUS_MAX_TENS`, `EPIC_STATUS_DAMAGE_BONUS`, `EPIC_STATUS_SPEED_BONUS` | `src/encounter.c` |
+| Épico (`RARITY_EPIC`) | Status (`REWARD_EPIC_STATUS`) | Vida `+50` (fixo), dano `+0.25f` (`+25%`), vel. `+51.0f` (`+25%` da base `204`) | `EPIC_STATUS_HEALTH_BONUS`, `EPIC_STATUS_DAMAGE_BONUS`, `EPIC_STATUS_SPEED_BONUS` | `src/encounter.c` |
 | Épico (`RARITY_EPIC`) | Vida plena (`REWARD_EPIC_FULL_HEAL`) | `+50` vida máx e cura total | `EPIC_FULL_HEAL_MAX_HP_BONUS` | `src/encounter.c` |
 | Pesos de sorteio | Comum / Raro / Épico | `70` / `25` / `5` | `RARITY_WEIGHT_COMMON`, `RARITY_WEIGHT_RARE`, `RARITY_WEIGHT_EPIC`, `mapRarityWeights` | `src/encounter.c` |
 

@@ -59,7 +59,7 @@ Cadências, duração dos efeitos e comportamento da esquiva sem direção press
 - Após cada uma das ondas anteriores à última onda do mapa, aparecem três cartões sorteados por raridade (pesos base: Comum 70, Raro 25, Épico 5), sem repetir o mesmo tipo de cartão na mesma tela:
   - **Comum:** dano (+15%), vida máxima (+20 e cura 20) ou velocidade (+15).
   - **Raro:** troca de arma (sempre para outra arma, mantendo o nível único) acompanhada de 2 buffs comuns aleatórios e distintos entre si, descritos no cartão.
-  - **Épico:** upgrade da arma equipada (+1 nível, até o nível 5), poder das armas (+50% de dano aditivo acumulativo, mostrando o dano do golpe principal antes->depois), status (+30 a +60 de vida máxima em múltiplos de 10, +25% de dano e +25% de velocidade / +60) ou vida plena (+50 de vida máxima e cura completa).
+  - **Épico:** upgrade da arma equipada (+1 nível, até o nível 5), poder das armas (+50% de dano aditivo acumulativo, mostrando o dano do golpe principal antes->depois), status (+50 de vida máxima e cura, +25% de dano e +25% de velocidade / +51) ou vida plena (+50 de vida máxima e cura completa).
 - Todos os bônus são aditivos, acumulativos e sem teto (exceto o nível 5 da arma).
 - Após a última onda do mapa (antes do chefe), aparece a **tela épica**: três cartões épicos distintos entre os disponíveis, sem reroll.
 - Cada tela normal de bônus permite **um reroll gratuito por tela** através de um botão abaixo de cada cartão, que sorteia novamente apenas aquele cartão (sem repetir os tipos presentes nem o anterior) e depois desativa os três botões. A tela épica não possui reroll.
