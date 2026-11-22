@@ -12,7 +12,7 @@ typedef enum GuardianAttack {
     GUARDIAN_ROOTS, GUARDIAN_ROOT_WAVE, GUARDIAN_CURSE, GUARDIAN_ATTACK_COUNT
 } GuardianAttack;
 enum { COVEIRO_ROOTS, COVEIRO_SHOVEL, COVEIRO_CHARGE, COVEIRO_ATTACK_COUNT };
-enum { MARSHAL_SLASH, MARSHAL_CHARGE, MARSHAL_RETURN, MARSHAL_RUPTURE };
+enum { MARSHAL_SLASH, MARSHAL_CHARGE, MARSHAL_RETURN, MARSHAL_RUPTURE, MARSHAL_SPIN, MARSHAL_SHOCKWAVE };
 enum { BONE_CHARGE, BONE_CLAW, BONE_DASH, BONE_ATTACK_COUNT };
 typedef enum GuardianPhase {
     GUARDIAN_PHASE_ONE, GUARDIAN_PHASE_TRANSITION, GUARDIAN_PHASE_TWO
@@ -59,6 +59,7 @@ typedef struct Enemy {
     EnemyType type;
     TemplarRole templarRole;
     int necromancerForm;
+    bool necromancerWraith;
     EnemyState state;
     int facing;
     int lastKatanaSwing;
@@ -89,8 +90,9 @@ typedef struct EnemyGroup {
     Texture2D frontSprites;
     Texture2D clearingMelee[3], clearingArcher[3], clearingSpecial[3];
     Texture2D necromancerWalk[NECROMANCER_FORMS], necromancerSkills[NECROMANCER_FORMS];
-    Texture2D necromancerThrone, necromancerPortrait;
+    Texture2D necromancerBlade, necromancerEffects, necromancerThrone, necromancerPortrait;
     NecromancerFight necromancer;
+    Texture2D marshalSlam, marshalCharge, templarEffects, templarDust;
     Texture2D templarWalk[TEMPLAR_MARSHAL + 1], templarAttack[TEMPLAR_MARSHAL + 1];
     Texture2D bonelandGhoul, bonelandCultist;
     Texture2D boneLordWalk, boneLordPounce, boneLordClaw, boneLordDash, boneLordBite;
@@ -141,6 +143,7 @@ void DamageEnemyFrom(Enemy *enemy, int damage, Vector2 source);
 void KnockbackEnemy(Enemy *enemy, const Clearing *clearing,
                     Vector2 source, float distance);
 void MoveEnemy(const Clearing *clearing, Enemy *enemy, Vector2 delta);
+void DrawEnemyHealthBar(const Enemy *enemy, float top);
 bool EnemyCanBeHit(const Enemy *enemy);
 Vector2 EnemyCenter(const Enemy *enemy);
 int EnemyOptionalDropChance(EnemyType type);

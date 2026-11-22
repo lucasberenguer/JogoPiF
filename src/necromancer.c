@@ -3,7 +3,7 @@
 #include <math.h>
 
 enum {
-    SEPULCHER, CIRCLES, STAFF, PROFANE_STEP, HALO, RUNES, BLADE, FLIGHT, WINGS, JUDGMENT
+    SEPULCHER, CIRCLES, STAFF, PROFANE_STEP, HALO, RUNES, BLADE, FLIGHT
 };
 
 static const Vector2 sealCenter = {836, 480};
@@ -12,14 +12,18 @@ static const struct {
     float windup, duration;
     int damage;
 } skills[] = {
-    [SEPULCHER] = {.68f, 1.38f, 14}, [CIRCLES] = {.78f, 1.92f, 19},
-    [STAFF] = {.55f, 1.39f, 20}, [PROFANE_STEP] = {.65f, 1.44f, 16},
-    [HALO] = {.70f, 1.75f, 15}, [RUNES] = {.86f, 2.36f, 21},
-    [BLADE] = {.45f, 2.14f, 18}, [FLIGHT] = {.72f, 1.96f, 26},
-    [WINGS] = {.62f, 1.55f, 20}, [JUDGMENT] = {.88f, 2.87f, 26}
+    [SEPULCHER] = {.60f, 1.47f, 27}, [CIRCLES] = {.72f, 2.05f, 34},
+    [STAFF] = {.68f, 1.39f, 0}, [PROFANE_STEP] = {.60f, 1.49f, 31},
+    [HALO] = {.65f, 1.75f, 30}, [RUNES] = {.79f, 2.36f, 37},
+    [BLADE] = {.45f, 2.02f, 30}, [FLIGHT] = {.65f, 1.73f, 39},
 };
 
 bool LoadNecromancerSprites(EnemyGroup *group) {
+    group->necromancerEffects=LoadTexture("assets/necromante_combate_v2.png");
+    group->necromancerBlade=LoadTexture("assets/necromante_lamina_v2.png");
+    if (!group->necromancerEffects.id || !group->necromancerBlade.id) return false;
+    SetTextureFilter(group->necromancerBlade,TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->necromancerEffects,TEXTURE_FILTER_POINT);
     group->necromancerThrone=LoadTexture("assets/necromante_trono.png");
     group->necromancerPortrait=LoadTexture("assets/necromante_retrato.png");
     if (!group->necromancerThrone.id || !group->necromancerPortrait.id) return false;
@@ -36,6 +40,8 @@ bool LoadNecromancerSprites(EnemyGroup *group) {
 }
 
 void UnloadNecromancerSprites(EnemyGroup *group) {
+    if (group->necromancerBlade.id) UnloadTexture(group->necromancerBlade);
+    if (group->necromancerEffects.id) UnloadTexture(group->necromancerEffects);
     if (group->necromancerThrone.id) UnloadTexture(group->necromancerThrone);
     if (group->necromancerPortrait.id) UnloadTexture(group->necromancerPortrait);
     for (int i=0;i<NECROMANCER_FORMS;i++) {
@@ -46,10 +52,11 @@ void UnloadNecromancerSprites(EnemyGroup *group) {
 
 void StartNecromancer(EnemyGroup *group, float power) {
     int hp = (int)(4200 * fmaxf(1,power));
+    for(int i=1;i<=NECROMANCER_WRAITHS;i++) group->list[i].state=ENEMY_GONE;
     group->list[0]=(Enemy){.type=ENEMY_BOSS,.state=ENEMY_SPAWNING,.necromancerForm=1,
         .position={836,263},.speed=140,.power=power,.health=hp,.maxHealth=hp,
         .attackCooldown=.65f,.lastKatanaSwing=-1};
-    group->necromancer=(NecromancerFight){.lastPlayer={836,845},.previousPlayer={836,845}};
+    group->necromancer=(NecromancerFight){.lastPlayer={836,845},.previousPlayer={836,845},.automaticClock=1.65f};
 }
 
 void DamageNecromancer(Enemy *boss,int damage) {
@@ -84,6 +91,52 @@ static void Shot(EnemyGroup *g,Vector2 origin,Vector2 direction,float speed,int 
     }
 }
 
+static Vector2 Aim(Vector2 origin, Vector2 target) {
+    Vector2 delta=Vector2Subtract(target,origin);
+    return Vector2LengthSqr(delta)>1 ? Vector2Normalize(delta) : (Vector2){0,1};
+}
+
+static void Fan(EnemyGroup *g,Vector2 origin,Vector2 dir,int count,float spread,float speed,int damage) {
+    for(int i=0;i<count;i++)
+        Shot(g,origin,Vector2Rotate(dir,(i-(count-1)*.5f)*spread),speed,damage);
+}
+
+static void SummonWraiths(EnemyGroup *g,const Clearing *map,Vector2 player) {
+    for(int i=0;i<NECROMANCER_WRAITHS;i++) {
+        Enemy *wraith=&g->list[i+1];
+        if(wraith->necromancerWraith && wraith->state!=ENEMY_GONE) continue;
+        Vector2 origin;
+        Vector2 requested={i==0?525:1147,Clamp(player.y-110,355,670)};
+        if(FindFreeMapPosition(map,requested,&origin))
+            *wraith=(Enemy){.position=origin,.type=ENEMY_COMMON_RANGED,.state=ENEMY_IDLE,
+                .necromancerWraith=true,.health=230,.maxHealth=230,.lastKatanaSwing=-1,
+                .dropRolled=true,.attackCooldown=1.0f};
+    }
+}
+
+static void UpdateWraiths(EnemyGroup *g,Vector2 player,float dt) {
+    for(int i=0;i<NECROMANCER_WRAITHS;i++) {
+        Enemy *wraith=&g->list[i+1];
+        if(!wraith->necromancerWraith || wraith->state==ENEMY_GONE) continue;
+        if(wraith->state==ENEMY_DIE) {
+            wraith->stateTime+=dt;
+            if(wraith->stateTime>=.32f) wraith->state=ENEMY_GONE;
+            continue;
+        }
+        wraith->walkTime+=dt;
+        if(wraith->walkTime>=5.9f) {
+            wraith->state=ENEMY_GONE;
+            continue;
+        }
+        wraith->bibleHitCooldown=fmaxf(0,wraith->bibleHitCooldown-dt);
+        wraith->attackCooldown-=dt;
+        if(wraith->attackCooldown<=0) {
+            Shot(g,wraith->position,Aim(wraith->position,player),450,22);
+            wraith->attackCooldown+=1.0f;
+        }
+    }
+}
+
 static bool Crossed(float before,float now,float instant) { return before<instant && now>=instant; }
 
 static void Sweep(EnemyGroup *g,const Clearing *map,const Enemy *boss,Vector2 player,
@@ -105,18 +158,18 @@ static void StartSkill(EnemyGroup *g,const Clearing *map,Enemy *boss,Vector2 pla
     boss->attackDirection=Vector2LengthSqr(delta)>1 ? Vector2Normalize(delta) : (Vector2){0,1};
     boss->facing=Facing(boss->attackDirection);
     if (skill==CIRCLES) {
-        fight->marks[0]=fight->previousPlayer;
-        fight->marks[1]=fight->lastPlayer;
-        if (Vector2Distance(fight->marks[0],fight->marks[1])<100) {
-            Vector2 offset={player.x<836?125:-125,0};
-            if (!FindFreeMapPosition(map,Vector2Add(player,offset),&fight->marks[1]))
-                fight->marks[1]=player;
-        }
+        fight->marks[0]=player;
+        Vector2 travel=Vector2Subtract(player,fight->previousPlayer);
+        Vector2 direction=Vector2LengthSqr(travel)>100 ? Vector2Normalize(travel) :
+            (Vector2){player.x<836?1:-1,0};
+        for(int i=1;i<3;i++)
+            if(!FindFreeMapPosition(map,Vector2Add(player,Vector2Scale(direction,i*122)),&fight->marks[i]))
+                fight->marks[i]=player;
     } else if (skill==PROFANE_STEP) {
         Vector2 offset={player.x<836?210:-210,-135};
         if (!FindFreeMapPosition(map,Vector2Add(player,offset),&fight->marks[0]))
             fight->marks[0]=boss->position;
-    } else if (skill==RUNES || skill==JUDGMENT) {
+    } else if (skill==RUNES) {
         int start=GetRandomValue(0,2);
         for(int i=0;i<3;i++) fight->marks[i]=runes[(start+i)%3];
     }
@@ -128,14 +181,17 @@ static void UpdateSkill(EnemyGroup *g,const Clearing *map,Enemy *boss,Vector2 pl
     int skill=boss->bossAttack, damage=skills[skill].damage;
     float t=boss->stateTime, before=t-dt, windup=skills[skill].windup;
     Vector2 dir=boss->attackDirection;
-    if (skill==SEPULCHER && Crossed(before,t,windup)) {
-        for(int i=-1;i<=1;i++) Shot(g,boss->position,Vector2Rotate(dir,i*.36f),365,damage);
+    if (skill==SEPULCHER) {
+        if(Crossed(before,t,windup))
+            Fan(g,boss->position,dir,5,.20f,535,damage);
+        if(Crossed(before,t,windup+.31f))
+            Fan(g,boss->position,Aim(boss->position,player),4,.24f,465,damage);
     } else if (skill==CIRCLES) {
-        for(int i=0;i<2;i++) if(Crossed(before,t,windup+i*.46f) &&
+        for(int i=0;i<3;i++) if(Crossed(before,t,windup+i*.38f) &&
             Vector2Distance(player,fight->marks[i])<=93)
             Hurt(g,boss,dodging,health,damage);
     } else if (skill==STAFF && Crossed(before,t,windup)) {
-        Sweep(g,map,boss,player,dodging,health,138,.06f,damage);
+        SummonWraiths(g,map,player);
     } else if (skill==PROFANE_STEP) {
         if(Crossed(before,t,windup)) {
             boss->position=fight->marks[0];
@@ -144,12 +200,16 @@ static void UpdateSkill(EnemyGroup *g,const Clearing *map,Enemy *boss,Vector2 pl
             boss->facing=Facing(boss->attackDirection);
         }
         if(Crossed(before,t,windup+.27f))
-            Shot(g,boss->position,boss->attackDirection,475,damage);
+            Fan(g,boss->position,boss->attackDirection,5,.22f,590,damage);
     } else if (skill==HALO) {
-        for(int i=0;i<5;i++) if(i!=2 && Crossed(before,t,windup+i*.105f))
-            Shot(g,boss->position,Vector2Rotate(dir,(i-2)*.37f),410,damage);
-    } else if (skill==RUNES || skill==JUDGMENT) {
-        int count=skill==RUNES?2:3;
+        if(Crossed(before,t,windup))
+            Fan(g,boss->position,dir,7,.18f,495,damage);
+        if(Crossed(before,t,windup+.36f))
+            Fan(g,boss->position,Vector2Rotate(dir,.09f),6,.18f,565,damage);
+    } else if (skill==RUNES) {
+        int count=2;
+        if(Crossed(before,t,windup))
+            SummonWraiths(g,map,player);
         for(int i=0;i<count;i++) {
             float radius=190, age=t-windup-i*.41f;
             if (age<0 || age>.54f) continue;
@@ -178,16 +238,11 @@ static void UpdateSkill(EnemyGroup *g,const Clearing *map,Enemy *boss,Vector2 pl
                 Hurt(g,boss,dodging,health,damage);
             }
         }
-    } else if (skill==WINGS && Crossed(before,t,windup)) {
-        Vector2 normal={-dir.y,dir.x};
-        for(int side=-1;side<=1;side+=2)
-            for(int i=-1;i<=1;i++)
-                Shot(g,boss->position,Vector2Rotate(Vector2Scale(normal,(float)side),i*.31f),390,damage);
     }
     if(t>=skills[skill].duration) {
         boss->state=ENEMY_IDLE;
         boss->stateTime=0;
-        boss->attackCooldown=boss->necromancerForm==1?.40f:.30f;
+        boss->attackCooldown=boss->necromancerForm==1?.34f:.23f;
     }
 }
 
@@ -199,6 +254,9 @@ void UpdateNecromancer(EnemyGroup *g,const Clearing *map,Vector2 player,float dt
     boss->stateTime+=dt;
     if(boss->guardianPhase==GUARDIAN_PHASE_TRANSITION || boss->state==ENEMY_DIE) {
         for(int i=0;i<NECROMANCER_SHOTS;i++) fight->shots[i].life=0;
+        for(int i=0;i<NECROMANCER_WRAITHS;i++) g->list[i+1].state=ENEMY_GONE;
+        fight->automaticClock=1.65f;
+        fight->automaticVolley=0;
         if(boss->guardianPhase==GUARDIAN_PHASE_TRANSITION && boss->stateTime>=1.22f) {
             boss->necromancerForm++;
             boss->guardianPhase=GUARDIAN_PHASE_ONE;
@@ -218,6 +276,7 @@ void UpdateNecromancer(EnemyGroup *g,const Clearing *map,Vector2 player,float dt
         if(boss->stateTime>=2.05f) {boss->state=ENEMY_IDLE;boss->stateTime=0;}
         return;
     }
+    UpdateWraiths(g,player,dt);
     fight->sampleClock+=dt;
     if(fight->sampleClock>=.34f) {
         fight->previousPlayer=fight->lastPlayer;
@@ -232,22 +291,33 @@ void UpdateNecromancer(EnemyGroup *g,const Clearing *map,Vector2 player,float dt
         int form=boss->necromancerForm;
         if(distance>1) boss->facing=Facing(delta);
         boss->attackCooldown=fmaxf(0,boss->attackCooldown-dt);
-        static const int order[3][4]={{SEPULCHER,CIRCLES,STAFF,STAFF},
-            {PROFANE_STEP,HALO,RUNES,RUNES},{BLADE,FLIGHT,WINGS,JUDGMENT}};
-        int span=form==3?4:3;
-        int skill=order[form-1][fight->rotation%span];
-        float desired=form==3?144:275;
-        if(skill==STAFF) desired=115;
-        if(boss->attackCooldown<=0 && (distance<=desired+25 || skill==PROFANE_STEP ||
-            skill==FLIGHT || skill==CIRCLES || skill==RUNES || skill==JUDGMENT)) {
+        static const int order[3][4]={{SEPULCHER,CIRCLES,STAFF,SEPULCHER},
+            {PROFANE_STEP,HALO,RUNES,HALO},{BLADE,FLIGHT,BLADE,FLIGHT}};
+        int skill=order[form-1][fight->rotation%4];
+        float desired=form==3?135:365;
+        if(boss->attackCooldown<=0 && (skill!=BLADE || distance<=desired+22)) {
             fight->rotation++;
             StartSkill(g,map,boss,player,skill);
         } else {
-            boss->state=distance>desired?ENEMY_WALK:ENEMY_IDLE;
-            if (boss->state==ENEMY_WALK) {
+            bool retreat=form<3 && distance<245;
+            boss->state=distance>desired || retreat ? ENEMY_WALK : ENEMY_IDLE;
+            if (boss->state==ENEMY_WALK && distance>1) {
                 boss->walkTime+=dt;
-                MoveEnemy(map,boss,Vector2Scale(delta,dt*boss->speed*(form==3?1.55f:1)/distance));
+                float pace=form==3?1.65f:retreat?-.86f:1;
+                MoveEnemy(map,boss,Vector2Scale(delta,dt*boss->speed*pace/distance));
             }
+        }
+    }
+    if(boss->necromancerForm==3) {
+        float before=fight->automaticClock;
+        fight->automaticClock-=dt;
+        if(before>.38f && fight->automaticClock<=.38f)
+            fight->automaticAim=player;
+        if(fight->automaticClock<=0) {
+            Vector2 dir=Aim(boss->position,fight->automaticAim);
+            bool wide=fight->automaticVolley++%2==1;
+            Fan(g,boss->position,dir,wide?8:5,wide?.34f:.19f,wide?445:560,wide?26:29);
+            fight->automaticClock=1.56f;
         }
     }
     for(int i=0;i<NECROMANCER_SHOTS;i++) {
@@ -265,6 +335,12 @@ void UpdateNecromancer(EnemyGroup *g,const Clearing *map,Vector2 player,float dt
             }
         }
     }
+}
+
+static void DrawCombatSprite(Texture2D texture,int row,int frame,Vector2 center,float size,float angle,Color tint) {
+    float width=texture.width/6.0f, height=texture.height/4.0f;
+    DrawTexturePro(texture,(Rectangle){frame*width,row*height,width,height},
+                   (Rectangle){center.x,center.y,size,size},(Vector2){size*.5f,size*.5f},angle,tint);
 }
 
 static void DrawFloor(const EnemyGroup *g,const Enemy *boss) {
@@ -286,11 +362,11 @@ static void DrawFloor(const EnemyGroup *g,const Enemy *boss) {
     float t=boss->stateTime, windup=skills[skill].windup;
     float heading=atan2f(boss->attackDirection.y,boss->attackDirection.x)*RAD2DEG;
     Color warning=(Color){237,94,133,255};
-    if(skill==CIRCLES || skill==RUNES || skill==JUDGMENT) {
-        int count=skill==JUDGMENT?3:2;
+    if(skill==CIRCLES || skill==RUNES) {
+        int count=skill==RUNES?2:3;
         for(int i=0;i<count;i++) {
             Vector2 mark=fight->marks[i];
-            float age=t-windup-i*(skill==CIRCLES?.46f:.41f);
+            float age=t-windup-i*(skill==CIRCLES?.38f:.41f);
             float range=skill==CIRCLES?93:190;
             if(age<0) {
                 float glow=Clamp(1+age*.7f,.20f,.80f);
@@ -309,29 +385,57 @@ static void DrawFloor(const EnemyGroup *g,const Enemy *boss) {
         Vector2 end=Vector2Add(boss->position,Vector2Scale(boss->attackDirection,535));
         DrawLineEx(boss->position,end,114,Fade(MAROON,.27f));
         DrawLineEx(boss->position,end,3,Fade(warning,.78f));
-    } else if(skill==WINGS && t<windup) {
-        for(int side=-1;side<=1;side+=2)
-            DrawCircleSector(boss->position,240,heading+side*90-18,heading+side*90+18,18,Fade(warning,.36f));
-    } else if(skill==STAFF || skill==BLADE) {
-        float hit=skill==STAFF?windup:t<.62f?.45f:t<.98f?.73f:1.38f;
+    } else if(skill==BLADE) {
+        float hit=t<.62f?.45f:t<.98f?.73f:1.38f;
         float age=t-hit;
-        float radius=skill==STAFF?138:hit==1.38f?181:155;
+        float radius=hit==1.38f?181:155;
         if(age<0) DrawCircleSector(boss->position,radius,heading-85,heading+85,26,Fade(warning,.27f));
         else if(age<.22f) DrawRing(boss->position,radius*.69f,radius,heading-85,heading+85,
                                    26,Fade(warning,1-age/.22f));
     } else if((skill==SEPULCHER || skill==HALO) && t<windup) {
         DrawCircleV(boss->position,24+22*t/windup,Fade(skill==HALO?GOLD:warning,.28f));
         if(skill==HALO)
-            for(int i=0;i<5;i++) {
-                Vector2 shard=Vector2Add(boss->position,Vector2Scale(Vector2Rotate(boss->attackDirection,(i-2)*.37f),62));
-                DrawPoly(shard,4,6,45,Fade(i==2?DARKGRAY:GOLD,.8f));
+            for(int i=0;i<7;i++) {
+                Vector2 shard=Vector2Add(boss->position,Vector2Scale(Vector2Rotate(boss->attackDirection,(i-3)*.18f),62));
+                DrawPoly(shard,4,6,45,Fade(GOLD,.8f));
             }
     }
 }
 
 void DrawNecromancer(const EnemyGroup *g,Vector2 player,bool foreground) {
     const Enemy *boss=&g->list[0];
+    const NecromancerFight *fight=&g->necromancer;
     if(!foreground) DrawFloor(g,boss);
+    for(int i=0;i<NECROMANCER_WRAITHS;i++) {
+        const Enemy *wraith=&g->list[i+1];
+        if(!wraith->necromancerWraith || wraith->state==ENEMY_GONE) continue;
+        float age=wraith->walkTime;
+        float opacity=wraith->state==ENEMY_DIE ? 1-wraith->stateTime/.32f : Clamp(age*4,0,1);
+        Vector2 feet=wraith->position;
+        if(!foreground) {
+            int frame=(int)Clamp(age*9,0,5);
+            float glow=wraith->attackCooldown<.25f?.92f:.58f;
+            DrawCombatSprite(g->necromancerEffects,1,frame,feet,126,0,Fade(WHITE,glow*opacity));
+            DrawCircleLinesV(feet,29,Fade(VIOLET,glow*opacity));
+        }
+        if((feet.y>=player.y)==foreground) {
+            Vector2 center={feet.x,feet.y-37+7*sinf(age*5)};
+            DrawCombatSprite(g->necromancerEffects,2,(int)(age*10)%6,center,105,0,Fade(WHITE,opacity));
+            DrawEnemyHealthBar(wraith,center.y-48);
+        }
+    }
+    if(foreground && boss->necromancerForm==3 && boss->health>0 &&
+       boss->guardianPhase!=GUARDIAN_PHASE_TRANSITION && fight->automaticClock<=.38f) {
+        float age=1-fight->automaticClock/.38f;
+        Vector2 cast={boss->position.x,boss->position.y-136};
+        DrawCombatSprite(g->necromancerEffects,1,(int)Clamp(age*6,0,5),cast,142,0,WHITE);
+        DrawPoly(cast,4,8+19*age,age*90,Fade(VIOLET,.85f));
+        Vector2 direction=Aim(boss->position,fight->automaticAim);
+        for(int i=0;i<3;i++) {
+            Vector2 mote=Vector2Add(cast,Vector2Scale(direction,27+18*i+13*age));
+            DrawPoly(mote,4,5-i,45,Fade(RAYWHITE,.78f));
+        }
+    }
     if(boss->state!=ENEMY_GONE && boss->state!=ENEMY_FALLEN &&
        (boss->position.y>=player.y)==foreground) {
         int form=boss->necromancerForm-1;
@@ -358,7 +462,7 @@ void DrawNecromancer(const EnemyGroup *g,Vector2 player,bool foreground) {
             if (skill==BLADE && t>=.65f && t<.98f) frame=t<.73f?1:2;
             if (skill==FLIGHT && t>=impact && t<1.35f) frame=2;
             if (skill==PROFANE_STEP) frame=t<windup*.55f?0:t<windup+.27f?1:t<1.15f?2:3;
-            if ((skill==RUNES || skill==JUDGMENT) && t>=impact && t<impact+.82f) frame=2;
+            if ((skill==RUNES) && t>=impact && t<impact+.82f) frame=2;
             if(skill==FLIGHT && t>=windup && t<1.35f)
                 offset=-42*sinf(PI*(t-windup)/(1.35f-windup));
             if(skill==PROFANE_STEP && t<windup) alpha=1-.84f*t/windup;
@@ -369,22 +473,47 @@ void DrawNecromancer(const EnemyGroup *g,Vector2 player,bool foreground) {
             row=3; frame=(int)Clamp(t*3.1f,0,3);
         }
         if(boss->state==ENEMY_DIE) alpha=Clamp(1-t/1.15f,0,1);
-        float tile=texture.width*.25f, height=throne?texture.height:texture.height*.25f;
-        float scale=208.0f/256, ground=throne || texture.id==g->necromancerWalk[form].id?230:310;
-        bool flip=action && boss->facing==2;
+        bool blade=action && boss->bossAttack==BLADE;
+        if(blade) {
+            texture=g->necromancerBlade;
+            row=facingRows[boss->facing];
+            float hit=t<.62f?.45f:t<1.10f?.73f:1.38f;
+            float age=t-hit;
+            frame=age<-.22f?0:age<-.09f?1:age<0?2:age<.10f?3:age<.24f?4:5;
+        }
+        float tile=texture.width/(blade?6.0f:4.0f);
+        float height=throne?texture.height:texture.height*.25f;
+        float scale=(throne ? 208.0f : blade ? 275.0f : 240.0f)/256;
+        float ground=blade?240:throne || texture.id==g->necromancerWalk[form].id?230:310;
+        bool flip=action && !blade && boss->facing==2;
         if (!throne) DrawEllipse((int)boss->position.x,(int)boss->position.y,36,13,Fade(BLACK,.55f*alpha));
         DrawTexturePro(texture,(Rectangle){frame*tile,row*height,flip?-tile:tile,height},
                        (Rectangle){boss->position.x,boss->position.y+offset,tile*scale,height*scale},
                        (Vector2){tile*.5f*scale,ground*scale},0,Fade(WHITE,alpha));
+        if (!throne && boss->guardianPhase != GUARDIAN_PHASE_TRANSITION)
+            DrawEnemyHealthBar(boss, boss->position.y + offset - ground * scale - 8);
+    }
+    if(foreground && boss->state==ENEMY_ATTACK &&
+       (boss->bossAttack==BLADE || boss->bossAttack==FLIGHT)) {
+        float hit=boss->bossAttack==FLIGHT?skills[FLIGHT].windup:
+            boss->stateTime<.73f?.45f:boss->stateTime<1.38f?.73f:1.38f;
+        float age=(boss->stateTime-hit)/.24f;
+        if(age>=0 && age<1) {
+            Vector2 position=Vector2Add(boss->position,Vector2Scale(boss->attackDirection,59));
+            position.y-=36;
+            float heading=atan2f(boss->attackDirection.y,boss->attackDirection.x)*RAD2DEG;
+            DrawCombatSprite(g->necromancerEffects,3,(int)(age*6),position,204,heading,WHITE);
+        }
     }
     if(foreground) for(int i=0;i<NECROMANCER_SHOTS;i++) {
         const NecromancerShot *shot=&g->necromancer.shots[i];
         if(shot->life<=0) continue;
         Vector2 center={shot->position.x,shot->position.y-20};
         Vector2 tail=Vector2Subtract(center,Vector2Scale(shot->velocity,.060f));
-        Color tint=boss->necromancerForm==2?GOLD:(Color){220,50,119,255};
-        DrawLineEx(tail,center,9,Fade(tint,.65f));
-        DrawCircleV(center,12,Fade(tint,.7f));
-        DrawPoly(center,4,7,45,RAYWHITE);
+        Color tint=boss->necromancerForm==2?GOLD:VIOLET;
+        float heading=atan2f(shot->velocity.y,shot->velocity.x)*RAD2DEG;
+        DrawLineEx(tail,center,6,Fade(tint,.44f));
+        DrawCircleV(center,8,Fade(RAYWHITE,.78f));
+        DrawCombatSprite(g->necromancerEffects,0,(int)((2.7f-shot->life)*18)%6,center,76,heading,WHITE);
     }
 }

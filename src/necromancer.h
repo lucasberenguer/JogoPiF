@@ -6,7 +6,7 @@ struct Enemy;
 struct EnemyGroup;
 struct Clearing;
 
-enum { NECROMANCER_FORMS = 3, NECROMANCER_SHOTS = 32 };
+enum { NECROMANCER_FORMS = 3, NECROMANCER_SHOTS = 64, NECROMANCER_WRAITHS = 2 };
 typedef struct NecromancerShot {
     Vector2 position, velocity;
     float life;
@@ -15,7 +15,9 @@ typedef struct NecromancerShot {
 
 typedef struct NecromancerFight {
     NecromancerShot shots[NECROMANCER_SHOTS];
-    Vector2 marks[3];
+    Vector2 marks[3], automaticAim;
+    float automaticClock;
+    int automaticVolley;
     Vector2 previousPlayer, lastPlayer;
     float sampleClock;
     int rotation;

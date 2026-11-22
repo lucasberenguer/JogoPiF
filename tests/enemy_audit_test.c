@@ -173,7 +173,105 @@ static void CheckGuardianMelee(Clearing *map, EnemyGroup *group) {
     }
 }
 
+static void CheckTemplarBalance(void) {
+    Clearing map = {.templarField = true, .background = {.width = 1672, .height = 941},
+                    .playableBounds = {0, 0, 1672, 941}, .spawn = {835, 840}};
+    EnemyGroup group = {0};
+    const int health[] = {
+        [TEMPLAR_SHIELD] = 210, [TEMPLAR_EXECUTIONER] = 270,
+        [TEMPLAR_CROSSBOW] = 150, [TEMPLAR_STANDARD] = 180,
+    };
+    for (int wave = 1; wave <= 2; wave++) {
+        StartEnemyWave(&group, &map, wave, map.spawn, 1);
+        int count = 0;
+        for (int i = 0; i < ENEMY_COUNT; i++) {
+            const Enemy *enemy = &group.list[i];
+            if (enemy->state == ENEMY_GONE) continue;
+            assert(enemy->templarRole >= TEMPLAR_SHIELD && enemy->templarRole <= TEMPLAR_STANDARD);
+            assert(enemy->health == health[enemy->templarRole]);
+            assert(enemy->maxHealth == enemy->health);
+            count++;
+        }
+        assert(count == wave + 4);
+    }
+
+    StartArenaBoss(&group, &map, map.spawn, 1);
+    Enemy *marshal = &group.list[0];
+    assert(marshal->templarRole == TEMPLAR_MARSHAL && marshal->maxHealth == 3000);
+    marshal->position = (Vector2){835, 500};
+    marshal->health = marshal->maxHealth / 2;
+    marshal->guardianPhase = GUARDIAN_PHASE_TWO;
+    marshal->state = ENEMY_IDLE;
+    marshal->attackCooldown = 0;
+    marshal->attackBurst = 1;
+    Vector2 player = {955, 500};
+    int playerHealth = 100;
+    UpdateEnemies(&group, &map, player, .01f, false, &playerHealth, 100);
+    assert(marshal->bossAttack == MARSHAL_SHOCKWAVE);
+    UpdateEnemies(&group, &map, player, .90f, false, &playerHealth, 100);
+    assert(playerHealth == 100);
+    UpdateEnemies(&group, &map, player, .20f, false, &playerHealth, 100);
+    assert(playerHealth == 67);
+}
+
+static int CountNecromancerShots(const EnemyGroup *group) {
+    int count=0;
+    for(int i=0;i<NECROMANCER_SHOTS;i++)
+        count+=group->necromancer.shots[i].life>0;
+    return count;
+}
+
+static void CheckNecromancerPressure(void) {
+    Clearing map={.necromancerArena=true,.background={.width=1672,.height=941},
+                  .playableBounds={0,0,1672,941}};
+    EnemyGroup group={0};
+    Vector2 player={836,680};
+    int health=100;
+    StartNecromancer(&group,1);
+    Enemy *boss=&group.list[0];
+    boss->state=ENEMY_IDLE;
+    boss->attackCooldown=0;
+    UpdateNecromancer(&group,&map,player,.01f,false,&health);
+    UpdateNecromancer(&group,&map,player,.61f,false,&health);
+    assert(CountNecromancerShots(&group)==5);
+
+    StartNecromancer(&group,1);
+    boss->state=ENEMY_IDLE;
+    boss->attackCooldown=0;
+    group.necromancer.rotation=2;
+    UpdateNecromancer(&group,&map,player,.01f,false,&health);
+    UpdateNecromancer(&group,&map,player,.69f,false,&health);
+    Enemy *wraith=&group.list[1];
+    assert(wraith->necromancerWraith && wraith->health==230 && wraith->maxHealth==230);
+    assert(CountNecromancerShots(&group)==0);
+    UpdateNecromancer(&group,&map,player,.99f,true,&health);
+    assert(CountNecromancerShots(&group)==0);
+    UpdateNecromancer(&group,&map,player,.02f,true,&health);
+    assert(CountNecromancerShots(&group)==2);
+    DamageEnemy(wraith,100);
+    assert(wraith->health==130 && EnemyCanBeHit(wraith));
+    DamageEnemy(wraith,130);
+    assert(wraith->health==0 && !EnemyCanBeHit(wraith));
+    DamageNecromancer(boss,boss->maxHealth);
+    UpdateNecromancer(&group,&map,player,.01f,false,&health);
+    assert(group.list[1].state==ENEMY_GONE && group.list[2].state==ENEMY_GONE);
+
+    StartNecromancer(&group,1);
+    boss->state=ENEMY_IDLE;
+    boss->necromancerForm=3;
+    boss->position=(Vector2){836,550};
+    boss->attackCooldown=0;
+    group.necromancer.automaticClock=.5f;
+    UpdateNecromancer(&group,&map,player,.13f,true,&health);
+    for(int i=0;i<5;i++) UpdateNecromancer(&group,&map,player,.08f,true,&health);
+    assert(boss->state==ENEMY_ATTACK);
+    assert(group.necromancer.automaticVolley==1);
+    assert(CountNecromancerShots(&group)==5);
+}
+
 int main(void) {
+    CheckNecromancerPressure();
+    CheckTemplarBalance();
     const int expected[] = {20, 25, 45, 65, 100};
     for (int type=0; type<5; type++) {
         assert(EnemyOptionalDropChance((EnemyType)type) == expected[type]);
