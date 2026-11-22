@@ -114,7 +114,7 @@ typedef struct EnemyGroup {
     Texture2D villageBossWalk, villageBossAttack, villageBossCharge;
     Texture2D villageZombie[VILLAGE_ZOMBIE_ATLAS_COUNT];
     Texture2D cemeteryZombie[3], cemeteryLantern[3], cemeterySpecial[3], cemeterySpell;
-    Texture2D coveiroWalk,coveiroMelee,boss[3],effects[3];
+    Texture2D coveiroIdle,coveiroWalk,coveiroMelee,coveiroEmerge,coveiroFall,boss[3],effects[3];
     EnemyImpact impacts[16], templarBlood;
     CemeteryProjectile cemeteryProjectiles[CEMETERY_PROJECTILE_COUNT];
 } EnemyGroup;
@@ -151,7 +151,8 @@ typedef struct CemeteryPose { int atlas,columns,rows,row,frame; bool flip; } Cem
 enum { CEM_BOSS_WALK,CEM_BOSS_SLAM,CEM_BOSS_THROW,CEM_BOSS_CHARGE,CEM_BOSS_MELEE,
        CEM_ZOMBIE_IDLE,CEM_ZOMBIE_WALK,CEM_ZOMBIE_ATTACK,
        CEM_LANTERN_IDLE,CEM_LANTERN_WALK,CEM_LANTERN_ATTACK,
-       CEM_SPECIAL_IDLE,CEM_SPECIAL_WALK,CEM_SPECIAL_ATTACK };
+       CEM_SPECIAL_IDLE,CEM_SPECIAL_WALK,CEM_SPECIAL_ATTACK,
+       CEM_BOSS_IDLE,CEM_BOSS_EMERGE,CEM_BOSS_FALL };
 #define CEM_ZOMBIE_HIT_TIME .41f
 #define CEM_LANTERN_RELEASE_TIME .55f
 #define CEM_SPECIAL_IMPACT_TIME .52f

@@ -20,37 +20,71 @@
 #define UI_CARD_FRAME_RARE_PATH "assets/ui/card_frame_rare.png"
 #define UI_CARD_FRAME_EPIC_PATH "assets/ui/card_frame_epic.png"
 #define UI_REROLL_BUTTON_PATH "assets/ui/reroll_button.png"
-#define UI_CARD_NPATCH_SLICE 16
+#define UI_REWARD_BANNER_PATH "assets/ui/reward_banner.png"
 
 static const char *const cardFramePaths[RARITY_COUNT] = {
     UI_CARD_FRAME_COMMON_PATH,
     UI_CARD_FRAME_RARE_PATH,
     UI_CARD_FRAME_EPIC_PATH
 };
+static const Rectangle cardFrameSources[RARITY_COUNT] = {
+    {218, 20, 1100, 886}, {188, 19, 1160, 930}, {145, 0, 1246, 1000}
+};
 
 typedef struct RewardUiAssets {
     bool attempted;
     Texture2D frames[RARITY_COUNT];
     Texture2D rerollButton;
+    Texture2D banner;
 } RewardUiAssets;
 
 static RewardUiAssets rewardUiAssets = {0};
 
+static Texture2D LoadRewardArtwork(const char *path, bool rareFrame) {
+    if (!FileExists(path)) return (Texture2D){0};
+    Image art = LoadImage(path);
+    if (!art.data) return (Texture2D){0};
+    if (rareFrame && art.format == PIXELFORMAT_UNCOMPRESSED_R8G8B8) {
+        ImageFormat(&art, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+        Color *pixels = art.data;
+        Rectangle crop = cardFrameSources[RARITY_RARE];
+        /* The blue halo was supplied on black. Recover its alpha outside the panel. */
+        for (int y = 0; y < art.height; y++) for (int x = 0; x < art.width; x++) {
+            float u = x / (float)art.width, v = y / (float)art.height;
+            if (u >= .155f && u <= .845f && v >= .154f && v <= .864f) continue;
+            Color *p = &pixels[y * art.width + x];
+            int alpha = (int)fmaxf(p->r, fmaxf(p->g, p->b));
+            if (alpha == 0) { p->a = 0; continue; }
+            p->r = p->r * 255 / alpha;
+            p->g = p->g * 255 / alpha;
+            p->b = p->b * 255 / alpha;
+            float edge = fminf(fminf(x - crop.x, crop.x + crop.width - x),
+                               fminf(y - crop.y, crop.y + crop.height - y));
+            float fade = Clamp(edge / 36.0f, 0, 1);
+            p->a = (unsigned char)(alpha * fade * fade * (3 - 2 * fade));
+        }
+    }
+    Texture2D texture = LoadTextureFromImage(art);
+    UnloadImage(art);
+    if (texture.id) SetTextureFilter(texture, TEXTURE_FILTER_BILINEAR);
+    return texture;
+}
+
 static void EnsureRewardUiAssetsLoaded(void) {
     if (rewardUiAssets.attempted || !IsWindowReady()) return;
     rewardUiAssets.attempted = true;
-    for (int i = 0; i < RARITY_COUNT; i++) {
-        if (FileExists(cardFramePaths[i])) {
-            rewardUiAssets.frames[i] = LoadTexture(cardFramePaths[i]);
-            if (rewardUiAssets.frames[i].id)
-                SetTextureFilter(rewardUiAssets.frames[i], TEXTURE_FILTER_POINT);
-        }
-    }
-    if (FileExists(UI_REROLL_BUTTON_PATH)) {
-        rewardUiAssets.rerollButton = LoadTexture(UI_REROLL_BUTTON_PATH);
-        if (rewardUiAssets.rerollButton.id)
-            SetTextureFilter(rewardUiAssets.rerollButton, TEXTURE_FILTER_POINT);
-    }
+    for (int i = 0; i < RARITY_COUNT; i++)
+        rewardUiAssets.frames[i] = LoadRewardArtwork(cardFramePaths[i], i == RARITY_RARE);
+    rewardUiAssets.rerollButton = LoadRewardArtwork(UI_REROLL_BUTTON_PATH, false);
+    rewardUiAssets.banner = LoadRewardArtwork(UI_REWARD_BANNER_PATH, false);
+}
+
+void UnloadEncounterRewardUi(void) {
+    for (int i = 0; i < RARITY_COUNT; i++)
+        if (rewardUiAssets.frames[i].id) UnloadTexture(rewardUiAssets.frames[i]);
+    if (rewardUiAssets.rerollButton.id) UnloadTexture(rewardUiAssets.rerollButton);
+    if (rewardUiAssets.banner.id) UnloadTexture(rewardUiAssets.banner);
+    rewardUiAssets = (RewardUiAssets){0};
 }
 
 static const int mapRarityWeights[MAX_CAMPAIGN_MAPS][RARITY_COUNT] = {
@@ -450,10 +484,20 @@ static Rectangle ChoiceRect(int index, int count) {
                        GetScreenHeight()/2.0f-30,w,140};
 }
 
+static Rectangle RewardCardRect(int index, int count) {
+    float sw = GetScreenWidth(), sh = GetScreenHeight();
+    float gap = Clamp(sw * .014f, 7, 18);
+    float width = fminf(356, fminf((sw - gap * (count + 1)) / count, sh * .55f));
+    float height = width * .79f;
+    float left = (sw - width * count - gap * (count - 1)) * .5f;
+    return (Rectangle){left + index * (width + gap), sh * .54f - height * .5f, width, height};
+}
+
 static Rectangle RerollButtonRect(int index, int count) {
-    Rectangle card = ChoiceRect(index, count);
-    float bw = fminf(150.0f, card.width - 20.0f);
-    return (Rectangle){card.x + (card.width - bw) * 0.5f, card.y + card.height + 10.0f, bw, 34.0f};
+    Rectangle card = RewardCardRect(index, count);
+    float width = card.width * .50f;
+    return (Rectangle){card.x + (card.width - width) * .5f,
+                       card.y + card.height + 6, width, width * .29f};
 }
 
 bool RerollEncounterReward(Encounter *e, int slot) {
@@ -469,11 +513,11 @@ bool RerollEncounterReward(Encounter *e, int slot) {
     return true;
 }
 
-static int ChoiceInput(int count) {
+static int ChoiceInput(int count, Rectangle (*choiceRect)(int, int)) {
     for (int i=0; i<count; i++) {
         if (IsKeyPressed(KEY_ONE+i)) return i;
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
-            CheckCollisionPointRec(GetMousePosition(),ChoiceRect(i,count))) return i;
+            CheckCollisionPointRec(GetMousePosition(),choiceRect(i,count))) return i;
     }
     return -1;
 }
@@ -707,7 +751,7 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
         }
         if (e->phase == ENCOUNTER_BASEMENT_PILLAR) {
             if (IsKeyPressed(KEY_ESCAPE)) { e->phase = ENCOUNTER_FIGHT; return false; }
-            int sel = ChoiceInput(2);
+            int sel = ChoiceInput(2, ChoiceRect);
             if (sel >= 0) {
                 static const int solution[4] = {0, 1, 0, 1}; /* NW=V(0), NE=F(1), SW=V(0), SE=F(1) */
                 int t = e->basementTarget;
@@ -841,13 +885,13 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
                 }
             }
         }
-        int selected=ChoiceInput(e->rewardCount);
+        int selected=ChoiceInput(e->rewardCount, RewardCardRect);
         if (selected>=0) {
             return ChooseEncounterReward(e,enemies,clearing,player,health,selected);
         }
     } else if (e->phase==ENCOUNTER_SEAL) {
         Enemy *enemy=&enemies->list[e->sealEnemy];
-        int selected=ChoiceInput(enemy->type==ENEMY_BOSS?3:2);
+        int selected=ChoiceInput(enemy->type==ENEMY_BOSS?3:2, ChoiceRect);
         if (selected>=0) return AnswerEncounterSeal(e,enemies,health,selected);
     }
     return false;
@@ -897,7 +941,7 @@ static const char *RewardText(const Encounter *e, Reward reward) {
                 else if (nextLevel == 4) perk = "Onda de choque (22 dano, recarga 2,5 s)";
                 else if (nextLevel == 5) perk = "Onda tripla (+-20 graus, recarga 1,8 s)";
             }
-            return TextFormat("%s (%d/%d) -\n%s\nDano +20%%",
+            return TextFormat("%s (%d/%d)\n%s\nDano +20%%",
                               WeaponTitle(reward.weapon), nextLevel, MAX_WEAPON_LEVEL, perk);
         }
         case REWARD_EPIC_DAMAGE: {
@@ -918,140 +962,121 @@ static const char *RewardText(const Encounter *e, Reward reward) {
     }
 }
 
-static void DrawMultilineCardText(const char *text, Rectangle area, float fontSize, Color color) {
-    char buffer[256];
-    snprintf(buffer, sizeof(buffer), "%s", text);
-    char *lines[6];
-    int lineCount = 0;
-    char *cursor = buffer;
-    while (cursor && *cursor && lineCount < 6) {
-        lines[lineCount++] = cursor;
-        char *newline = strchr(cursor, '\n');
-        if (newline) {
-            *newline = '\0';
-            cursor = newline + 1;
+static Rectangle RewardSection(Rectangle box, float x, float y, float w, float h) {
+    return (Rectangle){box.x + box.width*x, box.y + box.height*y, box.width*w, box.height*h};
+}
+
+static void DrawRewardEffects(char *text, Rectangle area, float size) {
+    const char *lines[8];
+    int count = 0;
+    while (text && *text && count < 8) {
+        lines[count++] = text;
+        char *end = strchr(text, '\n');
+        if (end) *end = '\0';
+        char *wrap = NULL;
+        for (char *space = strchr(text, ' '); space; space = strchr(space + 1, ' ')) {
+            *space = '\0';
+            bool fits = MeasureGameTextEx(text, size, false).x <= area.width;
+            *space = ' ';
+            if (!fits) break;
+            wrap = space;
+        }
+        if (wrap && MeasureGameTextEx(text, size, false).x > area.width) {
+            if (end) *end = '\n';
+            *wrap = '\0';
+            text = wrap + 1;
         } else {
-            break;
+            text = end ? end + 1 : NULL;
         }
     }
-    if (lineCount == 0) return;
-    float maxLineW = 1.0f;
-    for (int i = 0; i < lineCount; i++) {
-        float w = MeasureGameTextEx(lines[i], fontSize, false).x;
-        if (w > maxLineW) maxLineW = w;
-    }
-    float lineStep = fontSize * 1.18f;
-    float totalH = lineCount * lineStep;
-    float scale = fminf(1.0f, fminf(area.width / maxLineW, area.height / totalH));
-    float finalSize = fontSize * scale;
-    float finalStep = lineStep * scale;
-    for (int i = 0; i < lineCount; i++) {
-        DrawGameTextEx(lines[i], (Vector2){area.x, area.y + i * finalStep}, finalSize, color, false);
+    if (!count) return;
+    float step = fminf(size * 1.13f, area.height / count);
+    area.y += (area.height - count * step) * .5f;
+    area.height = step;
+    for (int i = 0; i < count; i++) {
+        DrawGameTextIn(lines[i], area, fminf(step, size), (Color){255, 239, 222, 255}, false);
+        area.y += step;
     }
 }
 
-static void DrawRewardCardFrame(Rectangle box, int rarity, bool hovered) {
-    EnsureRewardUiAssetsLoaded();
-    int r = (rarity >= 0 && rarity < RARITY_COUNT) ? rarity : RARITY_COMMON;
-    static const Color bgNormal[RARITY_COUNT] = {
-        {38, 42, 50, 245},  /* Comum: ardósia prateada escura */
-        {22, 42, 76, 245},  /* Raro: azul profundo */
-        {48, 24, 72, 245}   /* Épico: roxo escuro */
+static void DrawRewardCard(Rectangle box, int slot, const Encounter *e, bool hovered) {
+    static const Color fallback[RARITY_COUNT] = {
+        {55, 38, 42, 255}, {13, 31, 66, 255}, {43, 14, 61, 255}
     };
-    static const Color bgHover[RARITY_COUNT] = {
-        {58, 64, 76, 255},
-        {34, 64, 112, 255},
-        {74, 38, 108, 255}
-    };
-    static const Color outerBorder[RARITY_COUNT] = {
-        {196, 204, 216, 255}, /* Comum: cinza prata claro */
-        {72, 156, 255, 255},  /* Raro: azul brilhante */
-        {182, 92, 255, 255}   /* Épico: roxo vibrante */
-    };
-    static const Color innerBorder[RARITY_COUNT] = {
-        {135, 145, 160, 230},
-        {130, 195, 255, 230},
-        {235, 190, 90, 240}   /* Épico: filete interno dourado */
-    };
+    Reward reward = e->rewards[slot];
+    int r = (reward.rarity >= 0 && reward.rarity < RARITY_COUNT) ? reward.rarity : RARITY_COMMON;
+    Texture2D texture = rewardUiAssets.frames[r];
+    Rectangle title = RewardSection(box, .11f, .305f, .78f, .232f);
+    Rectangle effects = RewardSection(box, .135f, .594f, .73f, .24f);
+    Color titleInk = {255, 225, 161, 255};
 
-    Texture2D tex = rewardUiAssets.frames[r];
-    if (tex.id) {
-        int slice = (int)fminf(UI_CARD_NPATCH_SLICE, fminf(tex.width / 3.0f, tex.height / 3.0f));
-        NPatchInfo patch = {
-            .source = {0, 0, (float)tex.width, (float)tex.height},
-            .left = slice, .top = slice, .right = slice, .bottom = slice,
-            .layout = NPATCH_NINE_PATCH
-        };
-        DrawTextureNPatch(tex, patch, box, (Vector2){0, 0}, 0.0f, hovered ? WHITE : (Color){235, 235, 235, 255});
+    if (texture.id) {
+        if (r == RARITY_EPIC) {
+            Rectangle backing = RewardSection(box, .102f, .231f, .796f, .643f);
+            DrawRectangleRounded(backing, .22f, 10, (Color){37, 17, 46, 255});
+        }
+        Rectangle art = box;
+        if (hovered) {
+            art.x -= 3; art.y -= 3; art.width += 6; art.height += 6;
+        }
+        DrawTexturePro(texture, cardFrameSources[r], art, (Vector2){0}, 0,
+                       hovered ? WHITE : (Color){223, 223, 223, 255});
     } else {
-        DrawRectangleRec(box, hovered ? bgHover[r] : bgNormal[r]);
-        DrawRectangleLinesEx(box, 3.0f, outerBorder[r]);
-        Rectangle inner = {box.x + 5.0f, box.y + 5.0f, box.width - 10.0f, box.height - 10.0f};
-        DrawRectangleLinesEx(inner, 1.5f, innerBorder[r]);
+        DrawRectangleRounded(RewardSection(box, .02f, .10f, .96f, .86f), .07f, 8, fallback[r]);
+        DrawRectangleLinesEx(RewardSection(box, .02f, .10f, .96f, .86f), hovered ? 3 : 1, titleInk);
+        DrawGameTextIn(RarityLabel(r), RewardSection(box, .18f, .12f, .64f, .16f), 19, titleInk, false);
     }
 
-    /* Detalhe no topo por raridade: gema e ornamento dourado no épico */
-    Vector2 gemCenter = {box.x + box.width * 0.5f, box.y};
-    if (r == RARITY_COMMON) {
-        DrawCircleV(gemCenter, 7.0f, (Color){110, 118, 130, 255});
-        DrawCircleV(gemCenter, 4.5f, (Color){220, 226, 235, 255});
-    } else if (r == RARITY_RARE) {
-        DrawPoly(gemCenter, 4, 9.0f, 45.0f, (Color){32, 92, 180, 255});
-        DrawPoly(gemCenter, 4, 6.0f, 45.0f, (Color){120, 205, 255, 255});
-        DrawPolyLinesEx(gemCenter, 4, 9.0f, 45.0f, 1.5f, (Color){200, 235, 255, 255});
-    } else {
-        /* Ornamento dourado nos cantos e ao redor da gema roxa do épico */
-        Color gold = (Color){242, 198, 88, 255};
-        DrawLineEx((Vector2){gemCenter.x - 28.0f, gemCenter.y}, (Vector2){gemCenter.x - 10.0f, gemCenter.y}, 3.0f, gold);
-        DrawLineEx((Vector2){gemCenter.x + 10.0f, gemCenter.y}, (Vector2){gemCenter.x + 28.0f, gemCenter.y}, 3.0f, gold);
-        DrawPoly((Vector2){gemCenter.x - 28.0f, gemCenter.y}, 4, 4.0f, 45.0f, gold);
-        DrawPoly((Vector2){gemCenter.x + 28.0f, gemCenter.y}, 4, 4.0f, 45.0f, gold);
-        DrawPoly(gemCenter, 4, 11.0f, 45.0f, gold);
-        DrawPoly(gemCenter, 4, 7.5f, 45.0f, (Color){185, 85, 255, 255});
-        DrawPoly(gemCenter, 4, 4.0f, 45.0f, (Color){245, 210, 255, 255});
-        /* Cantoneiras douradas */
-        float c = 12.0f;
-        DrawLineEx((Vector2){box.x + 2, box.y + 2}, (Vector2){box.x + 2 + c, box.y + 2}, 2.5f, gold);
-        DrawLineEx((Vector2){box.x + 2, box.y + 2}, (Vector2){box.x + 2, box.y + 2 + c}, 2.5f, gold);
-        DrawLineEx((Vector2){box.x + box.width - 2, box.y + 2}, (Vector2){box.x + box.width - 2 - c, box.y + 2}, 2.5f, gold);
-        DrawLineEx((Vector2){box.x + box.width - 2, box.y + 2}, (Vector2){box.x + box.width - 2, box.y + 2 + c}, 2.5f, gold);
-    }
-
-    /* Rótulo de raridade ("COMUM" / "RARO" / "ÉPICO") */
-    const char *tag = RarityLabel(r);
-    Color tagColor = r == RARITY_EPIC ? (Color){245, 208, 105, 255} : outerBorder[r];
-    Rectangle tagBounds = {box.x + 12.0f, box.y + 9.0f, box.width - 24.0f, 18.0f};
-    DrawGameTextIn(tag, tagBounds, 15.0f, tagColor, false);
+    char label[256];
+    snprintf(label, sizeof(label), "%s", RewardText(e, reward));
+    char *details = strchr(label, '\n');
+    if (details) *details++ = '\0';
+    DrawGameTextIn(TextFormat("%d. %s", slot + 1, label), title,
+                   fminf(26, box.width * .102f), titleInk, false);
+    DrawRewardEffects(details, effects, fminf(21, box.width * .076f));
 }
 
 static void DrawRerollButton(Rectangle btn, bool disabled, bool hovered) {
-    EnsureRewardUiAssetsLoaded();
-    Texture2D strip = rewardUiAssets.rerollButton;
-    if (strip.id && strip.width >= 3) {
-        int stateIndex = disabled ? 2 : (hovered ? 1 : 0);
-        float frameW = strip.width / 3.0f;
-        Rectangle src = {stateIndex * frameW, 0, frameW, (float)strip.height};
-        DrawTexturePro(strip, src, btn, (Vector2){0, 0}, 0.0f, WHITE);
-        return;
+    Color tint = disabled ? (Color){130, 117, 125, 165} : hovered ? WHITE : (Color){226, 226, 226, 255};
+    Texture2D texture = rewardUiAssets.rerollButton;
+    if (texture.id) {
+        DrawTexturePro(texture, (Rectangle){38, 59, 2098, 613}, btn, (Vector2){0}, 0, tint);
+    } else {
+        DrawRectangleRec(btn, disabled ? DARKGRAY : MAROON);
+        DrawRectangleLinesEx(btn, 2, tint);
+        DrawGameTextIn("Sortear", btn, 18, tint, false);
     }
-    Color fill = disabled ? (Color){52, 52, 56, 230}
-                          : (hovered ? (Color){126, 86, 40, 255} : (Color){86, 56, 26, 255});
-    Color border = disabled ? (Color){125, 125, 132, 255}
-                            : (hovered ? (Color){250, 212, 112, 255} : (Color){206, 162, 74, 255});
-    Color ink = disabled ? (Color){165, 165, 172, 255} : RAYWHITE;
-    DrawRectangleRec(btn, fill);
-    DrawRectangleLinesEx(btn, 2.0f, border);
-    Rectangle inner = {btn.x + 3.0f, btn.y + 3.0f, btn.width - 6.0f, btn.height - 6.0f};
-    DrawRectangleLinesEx(inner, 1.0f, Fade(border, 0.55f));
-    /* Ícone de seta circular à esquerda do botão */
-    Vector2 iconCenter = {btn.x + 22.0f, btn.y + btn.height * 0.5f};
-    DrawRing(iconCenter, 5.5f, 8.0f, 35.0f, 325.0f, 16, ink);
-    Vector2 tip = {iconCenter.x + 6.5f, iconCenter.y - 5.5f};
-    DrawTriangle((Vector2){tip.x + 3.0f, tip.y + 1.0f},
-                 (Vector2){tip.x - 4.0f, tip.y - 3.0f},
-                 (Vector2){tip.x - 2.5f, tip.y + 4.0f}, ink);
-    Rectangle textArea = {btn.x + 34.0f, btn.y + 4.0f, btn.width - 42.0f, btn.height - 8.0f};
-    DrawGameTextIn("Sortear", textArea, 17.0f, ink, false);
+}
+
+static void DrawRewardScreen(const Encounter *e) {
+    if (e->rewardCount <= 0) return;
+    EnsureRewardUiAssetsLoaded();
+    Rectangle first = RewardCardRect(0, e->rewardCount);
+    float width = first.width * 1.55f;
+    float height = width * .313f;
+    Rectangle banner = {GetScreenWidth() * .5f - width * .5f,
+                        first.y - height - first.width * .052f, width, height};
+    if (rewardUiAssets.banner.id) {
+        DrawTexturePro(rewardUiAssets.banner, (Rectangle){47, 7, 2080, 653},
+                       banner, (Vector2){0}, 0, WHITE);
+    } else {
+        DrawGameTextIn("Escolha seu bônus", banner, 42, GOLD, true);
+    }
+    bool canReroll = !IsEpicRewardStage(e);
+    Vector2 mouse = GetMousePosition();
+    for (int i = 0; i < e->rewardCount; i++) {
+        Rectangle box = RewardCardRect(i, e->rewardCount);
+        DrawRewardCard(box, i, e, CheckCollisionPointRec(mouse, box));
+        if (canReroll) {
+            Rectangle button = RerollButtonRect(i, e->rewardCount);
+            DrawRerollButton(button, e->rerolled, !e->rerolled && CheckCollisionPointRec(mouse, button));
+        }
+    }
+    if (canReroll && e->rerolled) {
+        Rectangle button = RerollButtonRect(0, e->rewardCount);
+        DrawGameTextIn("Sorteio já usado", (Rectangle){0, button.y + button.height + 3, GetScreenWidth(), 22},
+                       16, (Color){226, 197, 169, 255}, false);
+    }
 }
 
 void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
@@ -1315,17 +1340,19 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         DrawGameText(hint, (sw - MeasureGameText(hint, 19)) / 2, by + bh - 44, 19, GOLD);
         return;
     }
+    if (e->phase == ENCOUNTER_REWARD) {
+        DrawRewardScreen(e);
+        return;
+    }
     int titleY=(int)(GetScreenHeight()/2-160);
-    const char *title=e->phase==ENCOUNTER_REWARD ? "Escolha seu bônus" :
-                      e->phase==ENCOUNTER_SEAL ? (e->progress.map==NECROMANCER_MAP ?
+    const char *title=e->phase==ENCOUNTER_SEAL ? (e->progress.map==NECROMANCER_MAP ?
                         "Grande Selo Profano" : "Selo - combate pausado") : "Fim da tentativa";
     DrawGameTextIn(title,(Rectangle){0,titleY,GetScreenWidth(),49},42,GOLD,true);
     if (e->phase==ENCOUNTER_DEFEAT) {
         DrawGameText("Esc: menu | Continuar reinicia esta onda ou boss",GetScreenWidth()/2-270,titleY+80,20,RAYWHITE);
         return;
     }
-    int count=e->phase==ENCOUNTER_REWARD ? e->rewardCount :
-              enemies->list[e->sealEnemy].type==ENEMY_BOSS ? 3 : 2;
+    int count=enemies->list[e->sealEnemy].type==ENEMY_BOSS ? 3 : 2;
     if (e->phase==ENCOUNTER_SEAL) {
         if (count == 3) {
             const char *prompt = TextFormat("Qual expressão equivale a: %s ?", e->sealQuestion.mc.questionText);
@@ -1346,32 +1373,20 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
     for (int i=0;i<count;i++) {
         Rectangle box=ChoiceRect(i,count);
         bool hovered = CheckCollisionPointRec(GetMousePosition(),box);
-        if (e->phase==ENCOUNTER_REWARD) {
-            DrawRewardCardFrame(box, e->rewards[i].rarity, hovered);
-            const char *label = RewardText(e, e->rewards[i]);
-            Rectangle textArea = {box.x + 14.0f, box.y + 30.0f, box.width - 28.0f, box.height - 40.0f};
-            DrawMultilineCardText(TextFormat("%d. %s", i + 1, label), textArea, 18.0f, RAYWHITE);
-            if (!IsEpicRewardStage(e)) {
-                Rectangle btn = RerollButtonRect(i, count);
-                bool btnHover = !e->rerolled && CheckCollisionPointRec(GetMousePosition(), btn);
-                DrawRerollButton(btn, e->rerolled, btnHover);
-            }
-        } else {
-            DrawRectangleRec(box,hovered?(Color){80,45,50,255}:(Color){40,25,35,255});
-            DrawRectangleLinesEx(box,2,GOLD);
-            const char *label = count==2 ? (i==0?"Verdadeiro":"Falso")
-                                         : e->sealQuestion.mc.choices[i];
-            if (e->phase==ENCOUNTER_SEAL && e->progress.map==NECROMANCER_MAP)
-                DrawGameTextIn(TextFormat("%d. %s",i+1,label),
-                    (Rectangle){box.x+8,box.y+6,box.width-16,box.height-12},19,RAYWHITE,false);
-            else {
-                const char *optText = TextFormat("%d. %s", i + 1, label);
-                Rectangle optArea = {box.x + 14.0f, box.y + 16.0f, box.width - 24.0f, 34.0f};
-                if (MeasureGameText(optText, 19) > (int)optArea.width)
-                    DrawGameTextIn(optText, optArea, 19.0f, RAYWHITE, false);
-                else
-                    DrawGameText(optText, (int)box.x + 14, (int)box.y + 20, 19, RAYWHITE);
-            }
+        DrawRectangleRec(box,hovered?(Color){80,45,50,255}:(Color){40,25,35,255});
+        DrawRectangleLinesEx(box,2,GOLD);
+        const char *label = count==2 ? (i==0?"Verdadeiro":"Falso")
+                                     : e->sealQuestion.mc.choices[i];
+        if (e->phase==ENCOUNTER_SEAL && e->progress.map==NECROMANCER_MAP)
+            DrawGameTextIn(TextFormat("%d. %s",i+1,label),
+                (Rectangle){box.x+8,box.y+6,box.width-16,box.height-12},19,RAYWHITE,false);
+        else {
+            const char *optText = TextFormat("%d. %s", i + 1, label);
+            Rectangle optArea = {box.x + 14.0f, box.y + 16.0f, box.width - 24.0f, 34.0f};
+            if (MeasureGameText(optText, 19) > (int)optArea.width)
+                DrawGameTextIn(optText, optArea, 19.0f, RAYWHITE, false);
+            else
+                DrawGameText(optText, (int)box.x + 14, (int)box.y + 20, 19, RAYWHITE);
         }
     }
 }

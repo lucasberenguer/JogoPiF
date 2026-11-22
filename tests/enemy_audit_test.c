@@ -304,7 +304,7 @@ int main(void) {
     UpdateEnemies(&group,&map,target,.34f,false,&health,100);
     assert(health==100 && !coveiro->attackConnected);
     UpdateEnemies(&group,&map,target,.03f,false,&health,100);
-    assert(health==72 && coveiro->attackConnected && CemeteryAnimationPose(coveiro).frame==3);
+    assert(health==72 && coveiro->attackConnected && CemeteryAnimationPose(coveiro).frame==5);
     UpdateEnemies(&group,&map,target,.45f,false,&health,100);
     assert(coveiro->state==ENEMY_IDLE && !coveiro->guardianMelee && coveiro->guardianMeleeCooldown>0);
     coveiro->position=(Vector2){800,600};
@@ -430,8 +430,14 @@ int main(void) {
         poseEnemy.bossAttack=attack;poseEnemy.facing=face;poseEnemy.stateTime=f*.01f;
         CemeteryPose pose=CemeteryAnimationPose(&poseEnemy);
         assert(pose.frame>=0 && pose.frame<pose.columns && pose.row>=0 && pose.row<4);
-        assert(pose.flip==(face==2));
+        assert(!pose.flip && pose.row==face);
     }
+    poseEnemy.state=ENEMY_DIE;
+    poseEnemy.stateTime=.50f;
+    poseEnemy.facing=3;
+    assert(CemeteryAnimationPose(&poseEnemy).atlas==CEM_BOSS_FALL);
+    poseEnemy.state=ENEMY_FALLEN;
+    assert(CemeteryAnimationPose(&poseEnemy).frame==6);
     Clearing arena=map;arena.cemetery=false;
     /* Clareira: 3 ondas de 14/18/22, vida +10% e dano +15% sobre a base. */
     for (int wave=1;wave<=3;wave++) {

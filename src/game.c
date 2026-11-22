@@ -1334,6 +1334,7 @@ int main(void) {
     UnloadTexture(protagonist);
     UnloadClearing(&clearing);
     UnloadVideoFrame();
+    UnloadEncounterRewardUi();
     UnloadGameFonts();
     CloseWindow();
     return 0;

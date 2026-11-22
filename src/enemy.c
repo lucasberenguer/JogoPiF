@@ -328,24 +328,31 @@ bool InitEnemies(EnemyGroup *group) {
         group->cemeterySpecial[i]=LoadTexture(specialSheets[i]);
         if (group->cemeterySpecial[i].id) SetTextureFilter(group->cemeterySpecial[i],TEXTURE_FILTER_POINT);
     }
-    group->coveiroWalk=LoadTexture("assets/coveiro_walk_v4.png");
-    group->coveiroMelee=LoadTexture("assets/coveiro_melee_v4.png");
+    group->coveiroIdle=LoadTexture("assets/coveiro_novo_idle.png");
+    group->coveiroWalk=LoadTexture("assets/coveiro_novo_run.png");
+    group->coveiroEmerge=LoadTexture("assets/coveiro_novo_emerge.png");
+    group->coveiroFall=LoadTexture("assets/coveiro_novo_fall.png");
+    group->coveiroMelee=LoadTexture("assets/coveiro_novo_melee.png");
     group->cemeterySpell=LoadTexture("assets/zumbi_lanterna_projetil.png");
-    group->boss[0] = LoadTexture("assets/coveiro_slam_v3.png");
-    group->boss[1] = LoadTexture("assets/coveiro_throw_v4.png");
-    group->boss[2] = LoadTexture("assets/coveiro_charge_v3.png");
-    group->effects[0]=LoadTexture("assets/coveiro_efeito_raizes.png");
+    group->boss[0] = LoadTexture("assets/coveiro_novo_pull.png");
+    group->boss[1] = LoadTexture("assets/coveiro_novo_spin.png");
+    group->boss[2] = LoadTexture("assets/coveiro_novo_charge.png");
+    group->effects[0]=LoadTexture("assets/coveiro_novo_pull_effect.png");
     group->effects[1]=LoadTexture("assets/coveiro_pa_vento_v4.png");
     group->effects[2]=LoadTexture("assets/coveiro_efeito_investida.png");
     if (!group->cemeteryZombie[0].id || !group->cemeteryZombie[1].id || !group->cemeteryZombie[2].id ||
         !group->cemeteryLantern[0].id || !group->cemeteryLantern[1].id || !group->cemeteryLantern[2].id ||
         !group->cemeterySpecial[0].id || !group->cemeterySpecial[1].id || !group->cemeterySpecial[2].id ||
+        !group->coveiroIdle.id || !group->coveiroEmerge.id || !group->coveiroFall.id ||
         !group->coveiroWalk.id || !group->coveiroMelee.id || !group->cemeterySpell.id || !group->boss[0].id ||
         !group->boss[1].id || !group->boss[2].id || !group->effects[0].id ||
         !group->effects[1].id || !group->effects[2].id) {
         UnloadEnemies(group);
         return false;
     }
+    SetTextureFilter(group->coveiroIdle,TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->coveiroEmerge,TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->coveiroFall,TEXTURE_FILTER_POINT);
     SetTextureFilter(group->coveiroWalk,TEXTURE_FILTER_POINT);
     SetTextureFilter(group->coveiroMelee,TEXTURE_FILTER_POINT);
     SetTextureFilter(group->cemeterySpell,TEXTURE_FILTER_POINT);
@@ -480,6 +487,9 @@ void UnloadEnemies(EnemyGroup *group) {
     for (int i=0;i<3;i++) if (group->cemeteryZombie[i].id) UnloadTexture(group->cemeteryZombie[i]);
     for (int i=0;i<3;i++) if (group->cemeteryLantern[i].id) UnloadTexture(group->cemeteryLantern[i]);
     for (int i=0;i<3;i++) if (group->cemeterySpecial[i].id) UnloadTexture(group->cemeterySpecial[i]);
+    if (group->coveiroIdle.id) UnloadTexture(group->coveiroIdle);
+    if (group->coveiroEmerge.id) UnloadTexture(group->coveiroEmerge);
+    if (group->coveiroFall.id) UnloadTexture(group->coveiroFall);
     if (group->coveiroWalk.id) UnloadTexture(group->coveiroWalk);
     if (group->coveiroMelee.id) UnloadTexture(group->coveiroMelee);
     if (group->cemeterySpell.id) UnloadTexture(group->cemeterySpell);
