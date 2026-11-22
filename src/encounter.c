@@ -206,7 +206,7 @@ static void StartStage(Encounter *e, EnemyGroup *enemies, const Clearing *cleari
                 ShowWaveBeforeBoss(&e->presentation);
         }
         if (clearing->cemetery || clearing->village) e->presentation.portraitCenterX=.73f;
-        e->guardianIntroPending=e->progress.map == 0 &&
+        e->guardianIntroPending=(e->progress.map == 0 || clearing->boneland) &&
                                 e->progress.stage==CLEARING_BOSS_STAGE &&
                                 !e->progress.guardianIntroSeen;
         if (e->progress.stage == CLEARING_BOSS_STAGE) StartArenaBoss(enemies, clearing, player, e->progress.bossPower);
@@ -579,6 +579,7 @@ bool ChooseEncounterReward(Encounter *e, EnemyGroup *enemies, const Clearing *cl
     ApplyReward(e,e->rewards[choice],health);
     bool lastWave = e->progress.stage == CampaignWaveCount(e->progress.map);
     e->progress.stage = lastWave ? CLEARING_BOSS_STAGE : e->progress.stage + 1;
+    if (lastWave && clearing->boneland) e->progress.guardianIntroSeen=false;
     e->progress.health=*health;
     if (!e->practice) SaveClearingCheckpoint(&e->progress);
     StartStage(e,enemies,clearing,player);

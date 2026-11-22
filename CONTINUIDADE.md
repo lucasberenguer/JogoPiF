@@ -4,6 +4,12 @@ Atualizado em 22/11/2026. Leia junto do código e de `git status` antes de retom
 
 ## Retomada rápida
 
+- **Validação da introdução do Cérbero:** Release compilada em `out/review`. `clearing_encounter` passou com o bloqueio do combate e a liberação após a cena. Um teste isolado do player em raylib confirmou o carregamento das artes, a ordem e duração dos sete planos, a conclusão automática e o pulo. O teste geral `guardian_cutscene` excedeu o limite de 35 s. A mixagem ainda não foi verificada em partida.
+
+- **22/11 — O Despertar do Cérbero dos Ossos:** introdução de 35 s após aceitar a recompensa da terceira onda. Reutiliza o player do Guardião e suspende o combate e a interface até concluir ou pular. O checkpoint do chefe registra a conclusão. Sete planos em `assets/cutscenes/terra_dos_ossos/data/sequencia.ini`, com trilha contínua reaproveitada do Coveiro e efeitos reaproveitados das cutscenes existentes. As cenas 2–5 têm as artes enviadas. Faltam `images/cena_01.png`, `images/cena_06.png` e `images/cena_07.png`; até o envio, a sequência usa reenquadramentos das cenas 2 e 5. Trilha dedicada, rugido e revisão audiovisual em partida continuam pendentes.
+
+- **22/11 — Trilha da Capela:** o MP3 `take-1-take-1 (2).mp3` foi convertido em `assets/audio/capela.wav`, um loop de 59,048 s com sobreposição de 2 s entre fim e começo. A Capela do Anjo, o puzzle do Porão Secreto e a Capela Invertida selecionam a mesma faixa, mantendo a posição nas transições entre mapas. A cutscene do altar conserva sua trilha própria. Build Release em `out/review` concluída e emenda verificada nas amostras PCM. Escuta em partida completa pendente.
+
 Projeto universitário em C99 + raylib 5.5, aprovado pelo professor. Equipe de quatro pessoas, prazo apertado. **Roguelike** 2D top-down em pixel art sombrio (ao morrer, perde tudo e reinicia). O usuário participa de game design, arte e código. Clareira e cemitério estão jogáveis e foram considerados bem nivelados pelo usuário.
 
 Repositório: https://github.com/lucasberenguer/JogoPiF.git — branch `main`.

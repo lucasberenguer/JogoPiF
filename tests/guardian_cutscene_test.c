@@ -337,6 +337,21 @@ int main(void) {
         UpdateGuardianCutscene(&scene,.1f,(GuardianCutsceneInput){0});
     assert(scene.finished && !scene.skipped);
     UnloadGuardianCutscene(&scene);
+    assert(InitBonelandCutscene(&scene,.12f,.12f));
+    assert(scene.count==7 && scene.artCount>=4);
+    const float bonelandDurations[] = {5,5,4,6,5,4,6};
+    for (int i=0; i<7; i++) {
+        assert(scene.scenes[i].artIndex>=0 && scene.scenes[i].duration==bonelandDurations[i]);
+        assert(strcmp(scene.scenes[0].music,scene.scenes[i].music)==0);
+    }
+    for (int i=0; i<400 && !scene.finished; i++)
+        UpdateGuardianCutscene(&scene,.1f,(GuardianCutsceneInput){0});
+    assert(scene.finished && !scene.skipped);
+    UnloadGuardianCutscene(&scene);
+    assert(InitBonelandCutscene(&scene,0,0));
+    UpdateGuardianCutscene(&scene,0,(GuardianCutsceneInput){.skip=true});
+    assert(scene.finished && scene.skipped);
+    UnloadGuardianCutscene(&scene);
     assert(InitAngelCutscene(&scene,.12f,.12f));
     assert(scene.count==52 && scene.artCount==15 && scene.mouseAdvance);
     if (IsAudioDeviceReady()) assert(scene.music.stream.buffer);

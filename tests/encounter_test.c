@@ -1179,11 +1179,14 @@ int main(void) {
     assert(ChooseEncounterReward(&boneEncounter, &enemies, &bones, bones.spawn, &boneHealth, 0));
     assert(boneEncounter.progress.stage == CLEARING_BOSS_STAGE);
     assert(boneEncounter.presentation.wave == 4);
-    assert(!boneEncounter.guardianIntroPending && enemies.list[0].type == ENEMY_BOSS);
+    assert(boneEncounter.guardianIntroPending && EncounterPaused(&boneEncounter));
+    assert(!EncounterBossVisible(&boneEncounter, &enemies) && enemies.list[0].type == ENEMY_BOSS);
     assert(SaveClearingCheckpoint(&boneEncounter.progress));
     assert(LoadClearingCheckpoint(&boneResume));
     assert(boneResume.map == BONELAND_MAP && boneResume.stage == CLEARING_BOSS_STAGE);
-    boneEncounter.presentation=(StagePresentation){0};
+    CompleteGuardianIntro(&boneEncounter,true);
+    assert(!boneEncounter.guardianIntroPending && boneEncounter.progress.guardianIntroSeen);
+    assert(EncounterBossVisible(&boneEncounter, &enemies));
     enemies.list[0].state=ENEMY_FALLEN;
     assert(OpenEncounterSeal(&boneEncounter, &enemies, enemies.list[0].position));
     assert(AnswerEncounterSeal(&boneEncounter, &enemies, &boneHealth, boneEncounter.answer));

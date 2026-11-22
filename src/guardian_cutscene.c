@@ -71,6 +71,7 @@ static bool LoadSequence(GuardianCutscene *scene, const char *sequence) {
         else if (!strcmp(key,"narration_duration")) shot->narrationDuration=strtof(value,NULL);
         else if (!strcmp(key,"narration_fade")) shot->narrationFade=strtof(value,NULL);
         else if (!strcmp(key,"image")) snprintf(shot->image,sizeof(shot->image),"%s",value);
+        else if (!strcmp(key,"fallback_image")) snprintf(shot->fallbackImage,sizeof(shot->fallbackImage),"%s",value);
         else if (!strcmp(key,"duration")) shot->duration = strtof(value,NULL);
         else if (!strcmp(key,"fade_in")) shot->fadeIn = strtof(value,NULL);
         else if (!strcmp(key,"fade_out")) shot->fadeOut = strtof(value,NULL);
@@ -186,6 +187,8 @@ static bool InitSequence(GuardianCutscene *scene, const char *directory, const c
     if (!LoadSequence(scene,sequence)) { UnloadGuardianCutscene(scene); return false; }
     for (int i=0; i<scene->count; i++) {
         GuardianScene *shot = &scene->scenes[i];
+        if (shot->fallbackImage[0] && !FileExists(TextFormat("%simages/%s",scene->assetDirectory,shot->image)))
+            snprintf(shot->image,sizeof(shot->image),"%s",shot->fallbackImage);
         shot->artIndex = -1;
         for (int j=0; j<i; j++)
             if (!strcmp(shot->image,scene->scenes[j].image)) shot->artIndex=scene->scenes[j].artIndex;
@@ -227,6 +230,10 @@ bool InitVillageCutscene(GuardianCutscene *scene, float musicVolume, float effec
 
 bool InitCoveiroCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume) {
     return InitSequence(scene,"assets/cutscenes/coveiro/","sequencia.ini",musicVolume,effectsVolume);
+}
+
+bool InitBonelandCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume) {
+    return InitSequence(scene,"assets/cutscenes/terra_dos_ossos/","sequencia.ini",musicVolume,effectsVolume);
 }
 
 bool InitGuardianCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume) {

@@ -292,6 +292,10 @@ int main(void) {
         float musicStrength = 1.0f;
         if (screen == 0) track = TRACK_MENU;
         else if ((screen == 2 || screen == 3) && playerHealth > 0 &&
+                 (clearing.chapel || clearing.basement || clearing.invertedChapel)) {
+            track = TRACK_CHAPEL;
+            if (screen == 3 || EncounterPaused(&encounter)) musicStrength = 0.42f;
+        } else if ((screen == 2 || screen == 3) && playerHealth > 0 &&
                  encounter.progress.stage <= CLEARING_BOSS_STAGE) {
             track = (encounter.guardianIntroPending || encounter.phase==ENCOUNTER_VILLAGE_CINEMATIC ||
                 encounter.phase==ENCOUNTER_LETTER) ? TRACK_SILENT :
@@ -785,7 +789,7 @@ int main(void) {
             ResetBible(&bible);
             ClearEnemyAttacks(&enemies);
             katanaAttackRemaining=katanaAttackCooldown=dodgeRemaining=dodgeCooldown=0;
-            if (clearing.cemetery && menu.audio.playing[TRACK_COMBAT]) {
+            if ((clearing.cemetery || clearing.boneland) && menu.audio.playing[TRACK_COMBAT]) {
                 BeginGameFrame();
                 ClearBackground(BLACK);
                 EndGameFrame();
@@ -795,6 +799,7 @@ int main(void) {
             float effectsVolume=menu.audio.volume[AUDIO_EFFECTS]/100.0f;
             bool loaded=clearing.cemetery
                 ? InitCoveiroCutscene(&guardianIntro,musicVolume,effectsVolume)
+                : clearing.boneland ? InitBonelandCutscene(&guardianIntro,musicVolume,effectsVolume)
                 : InitGuardianCutscene(&guardianIntro,musicVolume,effectsVolume);
             if (loaded) {
                 screen=GUARDIAN_SCREEN;
@@ -852,6 +857,7 @@ int main(void) {
                 nextProgress.map = nextMap;
                 nextProgress.stage = (toNecromancer || toInverted || toBasement || toChapel || toVillage) ? CLEARING_BOSS_STAGE : 1;
                 if (toInverted || toBasement || toChapel || toVillage) nextProgress.guardianIntroSeen = true;
+                if (toBoneland) nextProgress.guardianIntroSeen = false;
                 nextProgress.bossPower=1;
                 nextProgress.health=playerHealth;
                 bool practice=encounter.practice;
