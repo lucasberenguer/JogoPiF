@@ -58,37 +58,40 @@ static void CheckBoneLordAttacks(void) {
                     .playableBounds = {0, 0, 1200, 900}, .spawn = {600, 750}};
     EnemyGroup group = {0};
     Vector2 origin = {400, 400};
-    for (int scenario = 0; scenario < 7; scenario++) {
-        int expectedAttack = scenario < 2 ? BONE_CHARGE : scenario == 2 ? BONE_CLAW : BONE_DASH;
-        Vector2 player = {scenario < 2 ? 660 : scenario == 2 ? 485 : 580, 400};
+    const struct { int attack, damage; float distance; bool evade; } scenarios[] = {
+        {BONE_CLAW, 19, 85, false},
+        {BONE_RANGED, 22, 280, false},
+        {BONE_RAIN, 24, 270, false},
+        {BONE_RAIN, 0, 270, true},
+        {BONE_DASH, 27, 180, false},
+        {BONE_DASH, 0, 180, true},
+        {BONE_BLAST, 31, 120, false},
+    };
+    for (unsigned i = 0; i < sizeof(scenarios)/sizeof(scenarios[0]); i++) {
+        int attack = scenarios[i].attack;
+        Vector2 player = {origin.x + scenarios[i].distance, origin.y};
         int health = 100;
-        map.obstacleCount = 0;
         StartArenaBoss(&group, &map, player, 1);
-        assert(EnemiesRemaining(&group) == 1);
         Enemy *boss = &group.list[0];
         boss->position = origin;
         boss->state = ENEMY_IDLE;
         boss->attackCooldown = 0;
-        if (expectedAttack != BONE_CHARGE) boss->bossAttack = expectedAttack - 1;
-        group.practiceInvincible = scenario == 6;
+        boss->bossAttack = (attack + BONE_ATTACK_COUNT - 1) % BONE_ATTACK_COUNT;
         UpdateEnemies(&group, &map, player, .01f, false, &health, 100);
-        assert(boss->state == ENEMY_ATTACK && boss->bossAttack == expectedAttack);
-        if (scenario == 1) player.y += 125; /* Leave the charge corridor. */
-        if (scenario == 4) player.x += 100; /* Leave the dash range before it locks. */
-        if (scenario == 5) {
-            map.obstacles[0] = (Rectangle){490, 355, 24, 90};
-            map.obstacleCount = 1;
-        }
-        int expectedHealth = scenario == 0 ? 75 : scenario == 2 ? 81 : scenario == 3 ? 73 : 100;
-        int frames = scenario < 2 ? 26 : scenario == 2 ? 9 : 21;
-        for (int i = 0; i < frames; i++) {
-            UpdateEnemies(&group, &map, player, .05f, scenario >= 3, &health, 100);
+        assert(boss->state == ENEMY_ATTACK && boss->bossAttack == attack);
+        bool projectile = false;
+        for (int frame = 0; frame < 38; frame++) {
+            if (attack == BONE_RAIN && scenarios[i].evade && frame == 10) player.y += 130;
+            UpdateEnemies(&group, &map, player, .05f, scenarios[i].evade && attack == BONE_DASH, &health, 100);
             assert(!IsMapActorBlocked(&map, boss->position));
-            if (i < (scenario < 2 ? 12 : scenario == 2 ? 6 : 19)) assert(health == 100);
+            if (frame == 13 && attack == BONE_DASH) {
+                assert(fabsf(boss->position.y - origin.y) > 60);
+                assert(health == 100);
+            }
+            if (group.projectiles[0].remaining > 0 && group.projectiles[0].boneShot) projectile = true;
         }
-        assert(health == expectedHealth);
-        assert(!group.rootAttacks[0].active);
-        if (scenario == 5) assert(boss->position.x < 490);
+        assert(health == 100 - scenarios[i].damage);
+        if (attack == BONE_RANGED) assert(projectile);
     }
 }
 
@@ -582,14 +585,17 @@ int main(void) {
     ClearEnemyAttacks(&group);
     Enemy *special=&group.list[0];
     for (int scenario=0;scenario<3;scenario++) {
-        *special=(Enemy){.position={target.x-50,target.y},.type=ENEMY_SPECIAL,.state=ENEMY_IDLE,
+        *special=(Enemy){.position={target.x-145,target.y},.type=ENEMY_SPECIAL,.state=ENEMY_IDLE,
             .health=110,.maxHealth=110,.power=1};
         group.playerHitCooldown=0;
         health=100;
         UpdateEnemies(&group,&map,target,.01f,false,&health,100);
         assert(special->state==ENEMY_ATTACK && special->facing==3);
-        UpdateEnemies(&group,&map,target,CEM_SPECIAL_IMPACT_TIME-.01f,false,&health,100);
+        UpdateEnemies(&group,&map,target,.20f,false,&health,100);
+        assert(special->position.x==target.x-145);
+        UpdateEnemies(&group,&map,target,CEM_SPECIAL_IMPACT_TIME-.21f,false,&health,100);
         assert(health==100 && !special->attackConnected && CemeteryAnimationPose(special).frame==2);
+        assert(special->position.x>target.x-76);
         Vector2 impactTarget=scenario==2?(Vector2){target.x+100,target.y}:target;
         UpdateEnemies(&group,&map,impactTarget,.02f,scenario==1,&health,100);
         assert(health==(scenario==0?82:100) && special->attackConnected);
@@ -617,7 +623,7 @@ int main(void) {
     for(int scenario=0;scenario<3;scenario++) {
         for(int i=0;i<ENEMY_COUNT;i++) group.list[i]=(Enemy){.state=ENEMY_GONE};
         ClearEnemyAttacks(&group);group.cemetery=true;group.playerHitCooldown=scenario==2?.5f:0;
-        group.projectiles[0]=(EnemyProjectile){{target.x-20,target.y-35},{1,0},1,20};
+        group.projectiles[0]=(EnemyProjectile){{target.x-20,target.y-35},{1,0},1,20,false};
         health=100;UpdateEnemies(&group,&map,target,.05f,scenario==1,&health,100);
         assert(health==(scenario==0?80:100));
         assert(group.projectiles[0].remaining==0);

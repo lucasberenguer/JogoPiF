@@ -17,6 +17,10 @@
 #define COVEIRO_ENRAGED_CHARGE_SPEED (680.0f * COVEIRO_MOVEMENT_SCALE)
 #define COVEIRO_SHOVEL_RADIUS 43.0f
 #define CEM_SPECIAL_RADIUS 76.0f
+#define CEM_SPECIAL_DASH_START .27f
+#define CEM_SPECIAL_DASH_SPEED 360.0f
+#define CEM_SPECIAL_ATTACK_RANGE 150.0f
+#define CEM_SPECIAL_STOP_DISTANCE 32.0f
 #define CEM_SPECIAL_ATTACK_DURATION 1.04f
 
 static bool HitPlayer(EnemyGroup *group, bool dodging, int *health, int damage) {
@@ -169,12 +173,20 @@ void CemeteryUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
 
 void CemeteryUpdateSpecial(EnemyGroup *group, const Clearing *map, Enemy *enemy, Vector2 player,
                            float dt, bool dodging, int *health) {
-    Vector2 offset = Vector2Subtract(player, enemy->position);
-    float distance = Vector2Length(offset);
     if (enemy->state == ENEMY_ATTACK) {
+        float t = enemy->stateTime;
+        float dashTime = fminf(t, CEM_SPECIAL_IMPACT_TIME) - fmaxf(t - dt, CEM_SPECIAL_DASH_START);
+        if (dashTime > 0.0f) {
+            Vector2 remaining = Vector2Subtract(enemy->attackTarget, enemy->position);
+            float distanceLeft = Vector2DotProduct(remaining, enemy->attackDirection);
+            float step = Clamp(distanceLeft, 0.0f, CEM_SPECIAL_DASH_SPEED * dashTime);
+            if (step > 0.0f)
+                MoveEnemy(map, enemy, Vector2Scale(enemy->attackDirection, step));
+        }
         if (enemy->stateTime >= CEM_SPECIAL_IMPACT_TIME && !enemy->attackConnected) {
             enemy->attackConnected = true;
-            if (distance <= CEM_SPECIAL_RADIUS && MapHasClearPath(map, enemy->position, player))
+            if (Vector2Distance(enemy->position, player) <= CEM_SPECIAL_RADIUS &&
+                MapHasClearPath(map, enemy->position, player))
                 HitPlayer(group, dodging, health, (int)(18 * enemy->power));
         }
         if (enemy->stateTime >= CEM_SPECIAL_ATTACK_DURATION) {
@@ -184,10 +196,16 @@ void CemeteryUpdateSpecial(EnemyGroup *group, const Clearing *map, Enemy *enemy,
         return;
     }
     if (*health <= 0) return;
+    Vector2 offset = Vector2Subtract(player, enemy->position);
+    float distance = Vector2Length(offset);
     if (distance > .01f)
         enemy->facing = fabsf(offset.x) > fabsf(offset.y) ? (offset.x < 0 ? 2 : 3) : (offset.y < 0 ? 1 : 0);
-    if (distance <= CEM_SPECIAL_RADIUS && enemy->attackCooldown <= 0 &&
+    if (distance <= CEM_SPECIAL_ATTACK_RANGE && enemy->attackCooldown <= 0 &&
         MapHasClearPath(map, enemy->position, player)) {
+        enemy->attackDirection = Vector2Normalize(offset);
+        float maxDash = CEM_SPECIAL_DASH_SPEED * (CEM_SPECIAL_IMPACT_TIME - CEM_SPECIAL_DASH_START);
+        float dashDistance = Clamp(distance - CEM_SPECIAL_STOP_DISTANCE, 0.0f, maxDash);
+        enemy->attackTarget = Vector2Add(enemy->position, Vector2Scale(enemy->attackDirection, dashDistance));
         enemy->state = ENEMY_ATTACK;
         enemy->stateTime = 0;
         enemy->attackConnected = false;
@@ -354,9 +372,11 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
         if (boss && fallen) DrawBossGroundSeal(group->sealMarker, enemy->position);
         if (boss && collapse > 0.0f)
             DrawEllipse((int)enemy->position.x, (int)enemy->position.y - 8, 52.0f, 18.0f, Fade(BLACK, .38f));
-        if (special && enemy->state == ENEMY_ATTACK && enemy->stateTime < CEM_SPECIAL_IMPACT_TIME)
-            DrawCircleLines((int)enemy->position.x, (int)enemy->position.y, CEM_SPECIAL_RADIUS,
-                            Fade(VIOLET, .25f + .45f * enemy->stateTime / CEM_SPECIAL_IMPACT_TIME));
+        if (special && enemy->state == ENEMY_ATTACK && enemy->stateTime < CEM_SPECIAL_IMPACT_TIME) {
+            Color warning = Fade(VIOLET, .25f + .45f * enemy->stateTime / CEM_SPECIAL_IMPACT_TIME);
+            DrawLineEx(enemy->position, enemy->attackTarget, 3, warning);
+            DrawCircleLines((int)enemy->attackTarget.x, (int)enemy->attackTarget.y, CEM_SPECIAL_RADIUS, warning);
+        }
         DrawTexturePro(tex, (Rectangle){frame*cw, row*ch, pose.flip?-cw:cw, ch},
             (Rectangle){enemy->position.x, enemy->position.y+bob, width, height},
             (Vector2){width/2,boss?(ch-16)*(210.0f/256.0f):height*.914f}, lean, tint);

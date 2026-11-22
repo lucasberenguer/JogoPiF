@@ -341,9 +341,16 @@ int main(void) {
     assert(scene.count==7 && scene.artCount>=4);
     const float bonelandDurations[] = {5,5,4,6,5,4,6};
     for (int i=0; i<7; i++) {
-        assert(scene.scenes[i].artIndex>=0 && scene.scenes[i].duration==bonelandDurations[i]);
+        const char *image = TextFormat("cena_%02d.png",i+1);
+        assert(strcmp(scene.scenes[i].image,image)==0);
+        bool exists = FileExists(TextFormat("assets/cutscenes/terra_dos_ossos/images/%s",image));
+        assert((scene.scenes[i].artIndex>=0)==exists);
+        assert(scene.scenes[i].duration==bonelandDurations[i]);
         assert(strcmp(scene.scenes[0].music,scene.scenes[i].music)==0);
     }
+    assert(scene.scenes[0].narration[0] && scene.scenes[6].narration[0]);
+    assert(strcmp(scene.scenes[5].audioEvent,"rugido")==0);
+    if (IsAudioDeviceReady()) assert(scene.scenes[5].cue.stream.buffer);
     for (int i=0; i<400 && !scene.finished; i++)
         UpdateGuardianCutscene(&scene,.1f,(GuardianCutsceneInput){0});
     assert(scene.finished && !scene.skipped);

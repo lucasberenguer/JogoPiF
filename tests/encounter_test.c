@@ -635,8 +635,8 @@ static void CheckDevTools(Encounter *e, EnemyGroup *enemies, Clearing *map) {
     Capture("audit/boneland_attack_poses.png", e, enemies, map, player);
     assert(StartDevEncounter(&tools, DEV_BOSS_ONE, e, enemies, map, &player, &health));
     assert(e->presentation.areaEntry && e->presentation.wave == 4 && e->presentation.waveTotal == 4);
-    assert(enemies->boneLordWalk.id && enemies->boneLordPounce.id && enemies->boneLordClaw.id);
-    assert(enemies->boneLordDash.id && enemies->boneLordBite.id && enemies->boneLordPortrait.id);
+    for (int i = 0; i < BONE_SHEET_COUNT; i++) assert(enemies->boneLordSheets[i].id);
+    assert(enemies->boneLordPortrait.id);
     UpdateStagePresentation(&e->presentation, e->presentation.remaining);
     assert(e->presentation.boss && EncounterPaused(e));
     assert(strcmp(e->presentation.bossName, "Rasga-Ossos") == 0);
@@ -647,10 +647,23 @@ static void CheckDevTools(Encounter *e, EnemyGroup *enemies, Clearing *map) {
     Enemy *boss = &enemies->list[0];
     boss->position = (Vector2){835, 530};
     boss->state = ENEMY_ATTACK;
-    boss->bossAttack = BONE_CHARGE;
-    boss->stateTime = .95f;
     boss->facing = 2;
-    Capture("audit/boneland_boss_attack.png", e, enemies, map, player);
+    boss->attackDirection = (Vector2){-1,0};
+    boss->attackTarget = (Vector2){635,530};
+    const float poses[BONE_ATTACK_COUNT] = {
+        [BONE_CLAW]=.45f, [BONE_RANGED]=.94f, [BONE_RAIN]=1.17f,
+        [BONE_DASH]=1.11f, [BONE_BLAST]=1.0f,
+    };
+    const char *captures[BONE_ATTACK_COUNT] = {
+        "audit/rasga_ossos_garra.png", "audit/rasga_ossos_disparo.png",
+        "audit/rasga_ossos_chuva.png", "audit/rasga_ossos_dash.png",
+        "audit/rasga_ossos_explosao.png",
+    };
+    for (int attack = 0; attack < BONE_ATTACK_COUNT; attack++) {
+        boss->bossAttack = attack;
+        boss->stateTime = poses[attack];
+        Capture(captures[attack], e, enemies, map, player);
+    }
 }
 
 static void CheckSealDifficultyTableAndGlyphFallback(Encounter *e, EnemyGroup *enemies, Clearing *map) {
@@ -1037,14 +1050,18 @@ int main(void) {
         enemies.list[face]=(Enemy){.position={380+face*270,520},.type=ENEMY_COMMON_RANGED,
             .state=ENEMY_ATTACK,.stateTime=CEM_LANTERN_RELEASE_TIME,.facing=face,.health=50,.maxHealth=50};
     }
-    enemies.projectiles[0]=(EnemyProjectile){{800,455},{1,0},3.76f,10};
+    enemies.projectiles[0]=(EnemyProjectile){{800,455},{1,0},3.76f,10,false};
     enemies.impacts[0]=(EnemyImpact){.position={920,450},.remaining=.27f,.direction={1,0}};
     Capture("audit/cemetery_lantern_cast.png",&encounter,&enemies,&clearing,(Vector2){30,30});
     ClearEnemyAttacks(&enemies);
     const EnemyState specialStates[]={ENEMY_IDLE, ENEMY_WALK, ENEMY_ATTACK, ENEMY_ATTACK};
+    const Vector2 specialDirections[]={{0,1},{0,-1},{-1,0},{1,0}};
     for (int row=0;row<4;row++) for (int face=0;face<4;face++) {
-        enemies.list[row*4+face]=(Enemy){.position={430+face*250,290+row*155},
+        Vector2 position={430+face*250,290+row*155};
+        Vector2 direction=specialDirections[face];
+        enemies.list[row*4+face]=(Enemy){.position=position,
             .type=ENEMY_SPECIAL,.state=specialStates[row],.facing=face,.walkTime=.3f,
+            .attackTarget={position.x+direction.x*55,position.y+direction.y*55},
             .stateTime=row==3?CEM_SPECIAL_IMPACT_TIME:.35f,.health=110,.maxHealth=110};
     }
     Capture("audit/cemetery_special_directions.png",&encounter,&enemies,&clearing,(Vector2){30,30});

@@ -277,16 +277,6 @@ static Texture2D LoadBonelandSprite(const char *path) {
     return texture;
 }
 
-static Texture2D LoadBoneLordSprite(const char *path) {
-    Image image = LoadImage(path);
-    if (!image.data) return (Texture2D){0};
-    ImageAlphaClear(&image, BLANK, .24f);
-    Texture2D texture = LoadTextureFromImage(image);
-    UnloadImage(image);
-    if (texture.id) SetTextureFilter(texture, TEXTURE_FILTER_POINT);
-    return texture;
-}
-
 static const float templarArrivalTime = 2.05f;
 static const float templarPlantTime = .48f;
 static const float shieldImpact = .42f;
@@ -376,11 +366,18 @@ bool InitEnemies(EnemyGroup *group) {
     if (matte.id) UnloadShader(matte);
     group->bonelandGhoul = LoadBonelandSprite("assets/terra_dos_ossos_carnical.png");
     group->bonelandCultist = LoadBonelandSprite("assets/terra_dos_ossos_cultista.png");
-    group->boneLordWalk = LoadBoneLordSprite("assets/terra_dos_ossos_chefe_marcha.png");
-    group->boneLordPounce = LoadBoneLordSprite("assets/terra_dos_ossos_chefe_bote.png");
-    group->boneLordClaw = LoadBoneLordSprite("assets/terra_dos_ossos_chefe_garra.png");
-    group->boneLordDash = LoadBoneLordSprite("assets/terra_dos_ossos_chefe_dash.png");
-    group->boneLordBite = LoadBoneLordSprite("assets/terra_dos_ossos_chefe_mordida.png");
+    const char *boneSheets[BONE_SHEET_COUNT] = {
+        "assets/rasga_ossos/idle.png", "assets/rasga_ossos/marcha.png",
+        "assets/rasga_ossos/garra.png", "assets/rasga_ossos/disparo.png",
+        "assets/rasga_ossos/chuva.png", "assets/rasga_ossos/chuva_fx.png",
+        "assets/rasga_ossos/dash.png", "assets/rasga_ossos/explosao.png",
+        "assets/rasga_ossos/explosao_fx.png",
+    };
+    for (int i = 0; i < BONE_SHEET_COUNT; i++) {
+        group->boneLordSheets[i] = LoadTexture(boneSheets[i]);
+        if (!group->boneLordSheets[i].id) { UnloadEnemies(group); return false; }
+        SetTextureFilter(group->boneLordSheets[i], TEXTURE_FILTER_POINT);
+    }
     static const char *const templarFiles[] = {
         [TEMPLAR_SHIELD] = "assets/templario_escudo.png",
         [TEMPLAR_EXECUTIONER] = "assets/templario_carrasco.png",
@@ -457,7 +454,6 @@ bool InitEnemies(EnemyGroup *group) {
         !group->clearingArcher[0].id || !group->clearingArcher[1].id || !group->clearingArcher[2].id ||
         !group->clearingSpecial[0].id || !group->clearingSpecial[1].id || !group->clearingSpecial[2].id ||
         !group->bonelandGhoul.id || !group->bonelandCultist.id ||
-        !group->boneLordWalk.id || !group->boneLordPounce.id || !group->boneLordClaw.id || !group->boneLordDash.id || !group->boneLordBite.id ||
         !group->sealMarker.id ||
         !group->roots.id || !group->rootWave.id || !group->curse.id || !group->guardianMelee.id ||
         !group->bossPortrait.id || !group->cemeteryPortrait.id || !group->boneLordPortrait.id || !group->marshalPortrait.id ||
@@ -527,11 +523,8 @@ void UnloadEnemies(EnemyGroup *group) {
     }
     if (group->bonelandGhoul.id) UnloadTexture(group->bonelandGhoul);
     if (group->bonelandCultist.id) UnloadTexture(group->bonelandCultist);
-    if (group->boneLordWalk.id) UnloadTexture(group->boneLordWalk);
-    if (group->boneLordPounce.id) UnloadTexture(group->boneLordPounce);
-    if (group->boneLordClaw.id) UnloadTexture(group->boneLordClaw);
-    if (group->boneLordDash.id) UnloadTexture(group->boneLordDash);
-    if (group->boneLordBite.id) UnloadTexture(group->boneLordBite);
+    for (int i = 0; i < BONE_SHEET_COUNT; i++)
+        if (group->boneLordSheets[i].id) UnloadTexture(group->boneLordSheets[i]);
     if (group->bossSprites.id) UnloadTexture(group->bossSprites);
     if (group->guardianSpawn.id) UnloadTexture(group->guardianSpawn);
     if (group->guardianDefeat.id) UnloadTexture(group->guardianDefeat);
@@ -748,7 +741,7 @@ void StartArenaBoss(EnemyGroup *group, const Clearing *clearing, Vector2 player,
         .bossAttack = (clearing->cemetery ? COVEIRO_ATTACK_COUNT : GUARDIAN_ATTACK_COUNT) - 1};
     boss->health = boss->maxHealth;
     if (clearing->boneland) {
-        boss->bossAttack = BONE_DASH;
+        boss->bossAttack = BONE_BLAST;
         boss->speed = 132;
     }
     if (clearing->templarField) {
@@ -863,7 +856,7 @@ static void FireRangedProjectile(EnemyGroup *group, const Enemy *enemy, Vector2 
         if (group->projectiles[i].remaining <= 0.0f) {
             group->projectiles[i] = (EnemyProjectile){origin, Vector2Normalize(toward),
                 group->cemetery ? CEMETERY_SPELL_LIFETIME : 1.5f,
-                EnemyHitDamage(group, enemy, ENEMY_ATTACK_DAMAGE)};
+                EnemyHitDamage(group, enemy, ENEMY_ATTACK_DAMAGE), false};
             return;
         }
     }
@@ -943,13 +936,19 @@ static void AddEnemyImpact(EnemyGroup *group,Vector2 position,Vector2 direction)
     }
 }
 
+#define BONE_DASH_HIDE .34f
+#define BONE_DASH_REAPPEAR .78f
+#define BONE_SHOT_LIFETIME 1.65f
+
 static const struct {
-    float minRange, range, windup, impactEnd, duration;
+    float range, windup, impactEnd, duration, radius;
     int damage;
 } boneAttacks[BONE_ATTACK_COUNT] = {
-    [BONE_CHARGE] = {110, 395, .65f, 1.25f, 1.65f, 25},
-    [BONE_CLAW] = {0, 115, .32f, .42f, .84f, 19},
-    [BONE_DASH] = {0, 245, .80f, 1.00f, 1.46f, 27},
+    [BONE_CLAW]   = {115, .43f, .52f, .91f, 115, 19},
+    [BONE_RANGED] = {550, .90f, 1.08f, 1.57f,  27, 22},
+    [BONE_RAIN]   = {520, .92f, 1.37f, 1.86f,  96, 24},
+    [BONE_DASH]   = {440, 1.00f, 1.28f, 1.62f, 62, 27},
+    [BONE_BLAST]  = {175, .85f, 1.20f, 1.68f, 166, 31},
 };
 
 static void MoveEnemyStraight(const Clearing *map, Enemy *boss, float distance) {
@@ -963,94 +962,113 @@ static void MoveEnemyStraight(const Clearing *map, Enemy *boss, float distance) 
     }
 }
 
-static void BoneLordHit(EnemyGroup *group, Enemy *boss, bool dodging, int *health) {
-    bool lockedDash = boss->bossAttack == BONE_DASH;
-    if (*health <= 0 || group->practiceInvincible ||
-        (!lockedDash && (dodging || group->playerHitCooldown > 0))) return;
+static bool BoneLordHit(EnemyGroup *group, const Enemy *boss, bool dodging, int *health) {
+    if (*health <= 0 || group->practiceInvincible || dodging || group->playerHitCooldown > 0)
+        return false;
     int damage = (int)(boneAttacks[boss->bossAttack].damage * boss->power);
     *health = damage < *health ? *health - damage : 0;
     group->playerHitCooldown = .65f;
+    return true;
+}
+
+static void FireBoneLordShot(EnemyGroup *group, const Enemy *boss) {
+    for (int i = 0; i < ENEMY_PROJECTILE_COUNT; i++) {
+        if (group->projectiles[i].remaining > 0) continue;
+        group->projectiles[i] = (EnemyProjectile){
+            .position = {boss->position.x, boss->position.y - 35},
+            .direction = boss->attackDirection, .remaining = BONE_SHOT_LIFETIME,
+            .damage = (int)(boneAttacks[BONE_RANGED].damage * boss->power), .boneShot = true};
+        return;
+    }
+}
+
+static Vector2 BoneDashFlank(const Clearing *map, Vector2 origin, Vector2 direction, Vector2 player) {
+    Vector2 lateral = {-direction.y, direction.x};
+    for (int side = 1; side >= -1; side -= 2) {
+        Vector2 flank = Vector2Add(Vector2Subtract(player, Vector2Scale(direction, 118)),
+                                   Vector2Scale(lateral, side * 122));
+        if (!IsMapActorBlocked(map, flank) && MapHasClearPath(map, origin, flank))
+            return flank;
+    }
+    return origin;
 }
 
 static void UpdateBoneLord(EnemyGroup *group, const Clearing *map, Enemy *boss,
                            Vector2 player, float dt, bool dodging, int *health) {
     Vector2 toPlayer = Vector2Subtract(player, boss->position);
     float distance = Vector2Length(toPlayer);
-    bool enraged = GuardianEnraged(boss);
     if (boss->state != ENEMY_ATTACK) {
         if (*health <= 0) return;
         boss->facing = FacingToward(toPlayer);
-        if (boss->attackCooldown <= 0 && distance <= boneAttacks[BONE_CHARGE].range &&
-            MapHasClearPath(map, boss->position, player)) {
-            for (int offset = 1; offset <= BONE_ATTACK_COUNT; offset++) {
-                int attack = (boss->bossAttack + offset) % BONE_ATTACK_COUNT;
-                if (distance < boneAttacks[attack].minRange || distance > boneAttacks[attack].range)
-                    continue;
+        if (boss->attackCooldown <= 0 && MapHasClearPath(map, boss->position, player)) {
+            for (int i = 1; i <= BONE_ATTACK_COUNT; i++) {
+                int attack = (boss->bossAttack + i) % BONE_ATTACK_COUNT;
+                if (distance > boneAttacks[attack].range) continue;
                 boss->bossAttack = attack;
-                boss->attackDirection = distance > .001f ? Vector2Scale(toPlayer, 1 / distance) : (Vector2){0, 1};
+                boss->attackDirection = distance > .001f ? Vector2Normalize(toPlayer) : (Vector2){0, 1};
+                boss->attackTarget = attack == BONE_DASH ?
+                    BoneDashFlank(map, boss->position, boss->attackDirection, player) : player;
                 boss->state = ENEMY_ATTACK;
                 boss->stateTime = 0;
                 boss->attackConnected = false;
-                boss->attackBurst = 0;
                 return;
             }
         }
         boss->state = distance > 70 ? ENEMY_WALK : ENEMY_IDLE;
         if (boss->state == ENEMY_WALK) {
             boss->walkTime += dt;
-            MoveEnemy(map, boss, Vector2Scale(toPlayer, boss->speed * (enraged ? 1.22f : 1.0f) * dt / distance));
+            MoveEnemy(map, boss, Vector2Scale(toPlayer, boss->speed *
+                      (GuardianEnraged(boss) ? 1.22f : 1.0f) * dt / distance));
         }
         return;
     }
 
     int attack = boss->bossAttack;
-    float time = boss->stateTime;
-    float previous = time - dt;
+    float t = boss->stateTime, previous = t - dt;
     float windup = boneAttacks[attack].windup;
-    float impactEnd = boneAttacks[attack].impactEnd;
-    float active = fmaxf(0, fminf(time, impactEnd) - fmaxf(previous, windup));
-    if (attack == BONE_CHARGE && active > 0) {
-        Vector2 origin = boss->position;
-        MoveEnemyStraight(map, boss, active * 560);
-        Vector2 segment = Vector2Subtract(boss->position, origin);
-        float lengthSquared = Vector2LengthSqr(segment);
-        float along = lengthSquared > 0 ? Clamp(Vector2DotProduct(toPlayer, segment) / lengthSquared, 0, 1) : 0;
-        Vector2 nearest = Vector2Add(origin, Vector2Scale(segment, along));
-        if (!boss->attackConnected && Vector2DistanceSqr(nearest, player) <= 63 * 63 &&
-            MapHasClearPath(map, nearest, player)) {
-            boss->attackConnected = true;
-            BoneLordHit(group, boss, dodging, health);
+    float end = boneAttacks[attack].impactEnd;
+    float active = fminf(t, end) - fmaxf(previous, windup);
+    if (attack == BONE_DASH) {
+        float hidden = fminf(t, BONE_DASH_REAPPEAR) - fmaxf(previous, BONE_DASH_HIDE);
+        if (hidden > 0) {
+            Vector2 remaining = Vector2Subtract(boss->attackTarget, boss->position);
+            float fraction = Clamp(hidden / (BONE_DASH_REAPPEAR - fmaxf(previous, BONE_DASH_HIDE)), 0, 1);
+            MoveEnemy(map, boss, Vector2Scale(remaining, fraction));
         }
-    } else if (attack == BONE_CLAW && !boss->attackConnected && time >= windup) {
-        if (distance <= boneAttacks[attack].range &&
-            Vector2DotProduct(boss->attackDirection, toPlayer) >= distance * .45f &&
-            MapHasClearPath(map, boss->position, player))
-            BoneLordHit(group, boss, dodging, health);
-        boss->attackConnected = true;
-    } else if (attack == BONE_DASH) {
-        if (boss->attackBurst == 0 && time >= windup) {
-            boss->attackBurst = 1;
-            bool locked = distance <= boneAttacks[attack].range && MapHasClearPath(map, boss->position, player);
-            boss->attackConnected = !locked;
-            if (locked && distance > .001f) boss->attackDirection = Vector2Scale(toPlayer, 1 / distance);
+        if (previous < BONE_DASH_REAPPEAR && t >= BONE_DASH_REAPPEAR) {
+            Vector2 aim = Vector2Subtract(player, boss->position);
+            if (Vector2LengthSqr(aim) > .001f) boss->attackDirection = Vector2Normalize(aim);
             boss->facing = FacingToward(boss->attackDirection);
-            float travel = locked ? fmaxf(0, distance - 36) : boneAttacks[attack].range;
-            boss->attackTarget = Vector2Add(boss->position, Vector2Scale(boss->attackDirection, travel));
         }
         if (active > 0) {
-            float remaining = Vector2Distance(boss->position, boss->attackTarget);
-            float fraction = active / (impactEnd - fmaxf(previous, windup));
-            MoveEnemyStraight(map, boss, remaining * fraction);
+            Vector2 origin = boss->position;
+            MoveEnemyStraight(map, boss, active * (GuardianEnraged(boss) ? 810 : 720));
+            Vector2 segment = Vector2Subtract(boss->position, origin);
+            float lengthSquared = Vector2LengthSqr(segment);
+            float along = lengthSquared > 0 ?
+                Clamp(Vector2DotProduct(Vector2Subtract(player, origin), segment) / lengthSquared, 0, 1) : 0;
+            Vector2 contact = Vector2Add(origin, Vector2Scale(segment, along));
+            if (!boss->attackConnected && Vector2Distance(contact, player) <= boneAttacks[attack].radius &&
+                MapHasClearPath(map, contact, player))
+                boss->attackConnected = BoneLordHit(group, boss, dodging, health);
         }
-        if (previous < impactEnd && time >= impactEnd && !boss->attackConnected) {
-            BoneLordHit(group, boss, dodging, health);
+    } else if (!boss->attackConnected && active > 0) {
+        if (attack == BONE_RANGED) {
+            FireBoneLordShot(group, boss);
             boss->attackConnected = true;
+        } else {
+            Vector2 center = attack == BONE_RAIN ? boss->attackTarget : boss->position;
+            bool inArc = attack != BONE_CLAW ||
+                Vector2DotProduct(boss->attackDirection, toPlayer) >= distance * .45f;
+            if (inArc && Vector2Distance(center, player) <= boneAttacks[attack].radius &&
+                MapHasClearPath(map, center, player))
+                boss->attackConnected = BoneLordHit(group, boss, dodging, health);
         }
     }
-    if (time >= boneAttacks[attack].duration) {
+    if (t >= boneAttacks[attack].duration) {
         boss->state = ENEMY_IDLE;
         boss->stateTime = 0;
-        boss->attackCooldown = enraged ? .43f : .72f;
+        boss->attackCooldown = GuardianEnraged(boss) ? .43f : .72f;
     }
 }
 
@@ -1407,7 +1425,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
     for (int i = 0; i < ENEMY_PROJECTILE_COUNT; i++) {
         EnemyProjectile *shot = &group->projectiles[i];
         if (shot->remaining <= 0.0f) continue;
-        float speed = group->cemetery ? 273.0f : group->boneland ? CULTIST_SHOT_SPEED : RANGED_SHOT_SPEED;
+        float speed = shot->boneShot ? 485.0f : group->cemetery ? 273.0f : group->boneland ? CULTIST_SHOT_SPEED : RANGED_SHOT_SPEED;
         Vector2 movement = Vector2Scale(shot->direction, speed * dt);
         int steps = (int)(Vector2Length(movement) / 6.0f) + 1;
         Vector2 step = Vector2Scale(movement, 1.0f / steps);
@@ -1421,12 +1439,13 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             } else {
                 shot->position = next;
                 Vector2 playerCenter = {player.x, player.y - 35.0f};
-                float radius = group->cemetery ? 30 : 24;
+                float radius = shot->boneShot ? boneAttacks[BONE_RANGED].radius : group->cemetery ? 30 : 24;
                 if (Vector2DistanceSqr(next, playerCenter) <= radius * radius) {
                     if (group->cemetery || group->boneland) AddEnemyImpact(group,next,shot->direction);
                     if (clearing->templarField)
                         HurtByTemplar(group, player, playerHealth, playerDodging, shot->damage);
-                    else if (!playerDodging && group->playerHitCooldown <= 0.0f && *playerHealth > 0) {
+                    else if (!playerDodging && !(shot->boneShot && group->practiceInvincible) &&
+                             group->playerHitCooldown <= 0.0f && *playerHealth > 0) {
                         *playerHealth -= shot->damage;
                         if (*playerHealth < 0) *playerHealth = 0;
                         group->playerHitCooldown = 0.65f;
@@ -1523,6 +1542,18 @@ static void DrawRangedProjectiles(const EnemyGroup *group) {
             int step=(int)((CEMETERY_SPELL_LIFETIME-shot->remaining)*16);
             int frame=step<2?step:2+(step-2)%4;
             DrawCemeterySpell(group->cemeterySpell,shot->position,shot->direction,frame,WHITE);
+            continue;
+        }
+        if (shot->boneShot) {
+            Texture2D sheet = group->boneLordSheets[BONE_RANGED_SHEET];
+            float age = BONE_SHOT_LIFETIME - shot->remaining;
+            int width = sheet.width / 8;
+            int height = sheet.height / 3;
+            int frame = 6 + ((int)(age * 17) % 2);
+            float angle = atan2f(shot->direction.y, shot->direction.x) * RAD2DEG;
+            DrawTexturePro(sheet, (Rectangle){frame * width, height, width, height},
+                (Rectangle){shot->position.x, shot->position.y, 99, 88},
+                (Vector2){49.5f, 44}, angle, WHITE);
             continue;
         }
         if (group->boneland) {
@@ -2093,120 +2124,156 @@ void DrawHealthPickup(Vector2 position) {
     DrawHeartShape(drop, 0.90f, RED);
 }
 
-static void DrawBoneLordWarning(const Enemy *boss) {
+static Rectangle BoneFrame(Texture2D texture, int columns, int rows, int column, int row) {
+    int left = column * texture.width / columns;
+    int right = (column + 1) * texture.width / columns;
+    int top = row * texture.height / rows;
+    int bottom = (row + 1) * texture.height / rows;
+    return (Rectangle){left, top, right - left, bottom - top};
+}
+
+static int BoneFrameAt(float time, float start, float end, int count) {
+    return (int)Clamp((time - start) / (end - start) * count, 0, count - 1);
+}
+
+static void DrawBoneGroundEffect(Texture2D texture, int columns, int frame, Vector2 center,
+                                 float width) {
+    int row = frame / columns;
+    Rectangle source = BoneFrame(texture, columns, 3, frame % columns, row);
+    float height = width * source.height / source.width;
+    float ground = columns == 4 ? (float[]){.68f,.72f,.89f}[row] : .92f;
+    DrawTexturePro(texture, source, (Rectangle){center.x, center.y, width, height},
+                   (Vector2){width * .5f, height * ground}, 0, WHITE);
+}
+
+static void DrawBoneLordWarning(const EnemyGroup *group, const Enemy *boss) {
     if (boss->type != ENEMY_BOSS || boss->state != ENEMY_ATTACK) return;
     int attack = boss->bossAttack;
-    float remaining = boneAttacks[attack].windup - boss->stateTime;
-    if (remaining <= 0) return;
-
-    float strength = .35f + .40f * (1 - remaining / boneAttacks[attack].windup);
-    if (attack == BONE_CHARGE) {
-        Vector2 end = Vector2Add(boss->position, Vector2Scale(boss->attackDirection, 336));
-        DrawLineEx(boss->position, end, 126, Fade(ORANGE, strength * .29f));
-        DrawLineEx(boss->position, end, 4, Fade(GOLD, strength));
-    } else if (attack == BONE_CLAW) {
+    float t = boss->stateTime;
+    float windup = boneAttacks[attack].windup;
+    float radius = boneAttacks[attack].radius;
+    float strength = .35f + .40f * Clamp(t / windup, 0, 1);
+    if (attack == BONE_RAIN || attack == BONE_BLAST) {
+        bool rain = attack == BONE_RAIN;
+        Vector2 center = rain ? boss->attackTarget : boss->position;
+        if (t < windup) {
+            DrawCircleV(center, radius, Fade(RED, strength * .19f));
+            DrawRing(center, radius - 3, radius, 0, 360, 64, Fade(ORANGE, strength));
+        }
+        int frame;
+        if (rain) {
+            frame = t < windup ? BoneFrameAt(t, 0, windup, 8) :
+                8 + BoneFrameAt(t, windup, boneAttacks[attack].duration, 16);
+            DrawBoneGroundEffect(group->boneLordSheets[BONE_RAIN_FX_SHEET], 8, frame,
+                                 center, radius * 2.1f);
+        } else {
+            frame = t < windup ? BoneFrameAt(t, 0, windup, 4) :
+                4 + BoneFrameAt(t, windup, boneAttacks[attack].duration, 8);
+            DrawBoneGroundEffect(group->boneLordSheets[BONE_BLAST_FX_SHEET], 4, frame,
+                                 center, radius * 2.15f);
+        }
+        return;
+    }
+    if (t >= windup) return;
+    if (attack == BONE_CLAW) {
         float facing = atan2f(boss->attackDirection.y, boss->attackDirection.x) * RAD2DEG;
         float angle = acosf(.45f) * RAD2DEG;
-        DrawCircleSector(boss->position, 115, facing - angle, facing + angle, 28, Fade(ORANGE, strength * .38f));
-        DrawCircleSectorLines(boss->position, 115, facing - angle, facing + angle, 28, Fade(GOLD, strength));
-    } else {
-        float range = boneAttacks[attack].range;
-        DrawCircleV(boss->position, range, Fade(RED, strength * .19f));
-        DrawRing(boss->position, range - 4, range, 0, 360, 64, Fade(ORANGE, strength));
+        DrawCircleSector(boss->position, radius, facing - angle, facing + angle, 28, Fade(ORANGE, strength * .38f));
+    } else if (attack != BONE_DASH || t >= BONE_DASH_REAPPEAR) {
+        float reach = attack == BONE_DASH ? 225 : boneAttacks[attack].range;
+        Vector2 end = Vector2Add(boss->position, Vector2Scale(boss->attackDirection, reach));
+        DrawLineEx(boss->position, end, 2, Fade(GOLD, strength));
     }
 }
 
 static void DrawBoneLord(const EnemyGroup *group, const Enemy *boss) {
-    static const int rowForFacing[] = {0, 3, 1, 2};
-    static const int walkGround[] = {234, 482, 729, 991};
-    static const int pounceRows[] = {0, 284, 538, 781, 1122};
-    static const int pounceColumns[][6] = {
-        {0, 275, 553, 846, 1135, 1402},
-        {0, 270, 529, 843, 1130, 1402},
-        {0, 279, 530, 843, 1134, 1402},
-        {0, 280, 557, 834, 1135, 1402},
-    };
-    static const int pounceGround[] = {249, 502, 746, 1080};
-    static const int clawRows[] = {0, 282, 544, 814, 1122};
-    static const int clawGround[] = {249, 507, 785, 1088};
-    static const int altRows[] = {0, 279, 553, 825, 1122};
-    static const int dashGround[] = {270, 525, 797, 1108};
-    static const int biteGround[] = {246, 507, 785, 1092};
-
+    static const int rowForFacing[] = {0, 2, 3, 1};
+    static const int idleGround[] = {236, 477, 763, 983};
+    static const int walkGround[] = {242, 486, 752, 998};
+    static const int clawGround[] = {223, 463, 719, 956};
     int row = rowForFacing[boss->facing];
-    Texture2D texture = group->boneLordWalk;
-    int frame = boss->state == ENEMY_WALK ? (int)(boss->walkTime * 9) % 6 : 0;
-    int left = frame * 256, top = row * 256, right = left + 256, bottom = top + 256;
-    int ground = walkGround[row];
-    float scale = .62f;
-    float lift = 0;
+    int sheet = boss->state == ENEMY_WALK ? BONE_WALK_SHEET : BONE_IDLE_SHEET;
+    float t = boss->stateTime;
+    int frame = (int)fmaxf(0, (boss->state == ENEMY_WALK ? boss->walkTime : t) *
+                                  (boss->state == ENEMY_WALK ? 10 : 5)) % 6;
+    int columns = 6, rows = 4;
+    int ground = (sheet == BONE_WALK_SHEET ? walkGround : idleGround)[row];
+    bool lateral = false;
+
     if (boss->state == ENEMY_ATTACK) {
         int attack = boss->bossAttack;
-        float t = boss->stateTime;
         float windup = boneAttacks[attack].windup;
-        float impactEnd = boneAttacks[attack].impactEnd;
         float duration = boneAttacks[attack].duration;
-        frame = t < windup ? (t < windup * .43f ? 0 : 1)
-            : t < impactEnd ? 2 : t < (impactEnd + duration) * .5f ? 3 : 4;
-        bool enraged = GuardianEnraged(boss);
-        if (attack == BONE_DASH || (attack == BONE_CLAW && enraged)) {
-            bool dash = attack == BONE_DASH;
-            texture = dash ? group->boneLordDash : group->boneLordBite;
-            left = frame * texture.width / 5;
-            right = (frame + 1) * texture.width / 5;
-            top = altRows[row];
-            bottom = altRows[row + 1];
-            ground = dash ? dashGround[row] : biteGround[row];
-            if (dash && frame == 2)
-                lift = (enraged ? 39 : 24) * sinf(PI * (t - windup) / (impactEnd - windup));
-        } else if (attack == BONE_CLAW) {
-            texture = group->boneLordClaw;
-            left = frame * texture.width / 5;
-            right = (frame + 1) * texture.width / 5;
-            top = clawRows[row];
-            bottom = clawRows[row + 1];
+        if (attack == BONE_CLAW) {
+            sheet = BONE_CLAW_SHEET;
+            columns = 8;
             ground = clawGround[row];
+            frame = t < windup ? BoneFrameAt(t, 0, windup, 4) :
+                4 + BoneFrameAt(t, windup, duration, 4);
         } else {
-            texture = group->boneLordPounce;
-            left = pounceColumns[row][frame];
-            right = pounceColumns[row][frame + 1];
-            top = pounceRows[row];
-            bottom = pounceRows[row + 1];
-            ground = pounceGround[row];
-            if (frame == 2) lift = (attack == BONE_DASH ? 18 : 10) * sinf(PI * (t - windup) / (impactEnd - windup));
+            lateral = true;
+            columns = 8;
+            rows = 3;
+            if (attack == BONE_RANGED) {
+                sheet = BONE_RANGED_SHEET;
+                frame = t < windup ? BoneFrameAt(t, 0, windup, 13) :
+                    t < windup + .10f ? 13 : 16 + BoneFrameAt(t, windup + .10f, duration, 8);
+                ground = (int[]){225,464,705}[frame / 8];
+            } else if (attack == BONE_RAIN) {
+                sheet = BONE_RAIN_SHEET;
+                rows = 2;
+                frame = t < windup ? BoneFrameAt(t, 0, windup, 8) :
+                    8 + BoneFrameAt(t, windup, duration, 8);
+                ground = (int[]){349,711}[frame / 8];
+            } else if (attack == BONE_BLAST) {
+                sheet = BONE_BLAST_SHEET;
+                frame = t < windup ? BoneFrameAt(t, 0, windup, 8) :
+                    8 + BoneFrameAt(t, windup, duration, 16);
+                ground = (int[]){240,481,685}[frame / 8];
+            } else {
+                sheet = BONE_DASH_SHEET;
+                if (t < BONE_DASH_HIDE) {
+                    columns = 6;
+                    frame = BoneFrameAt(t, 0, BONE_DASH_HIDE, 4);
+                    ground = 222;
+                } else if (t < BONE_DASH_REAPPEAR) {
+                    return;
+                } else {
+                    columns = 5;
+                    bool charging = t >= windup;
+                    frame = charging ? 10 + BoneFrameAt(t, windup, duration, 5) :
+                        6 + BoneFrameAt(t, BONE_DASH_REAPPEAR, windup, 4);
+                    ground = charging ? 692 : 462;
+                }
+            }
+            row = frame / columns;
+            frame %= columns;
         }
     }
 
+    Texture2D texture = group->boneLordSheets[sheet];
+    Rectangle source = BoneFrame(texture, columns, rows, frame, row);
     float collapse = boss->state == ENEMY_FALLEN ? 1 :
-        boss->state == ENEMY_DIE ? Clamp(boss->stateTime / ENEMY_DEFEAT_DURATION, 0, 1) : 0;
-    float reveal = boss->state == ENEMY_SPAWNING ? Clamp(boss->stateTime, 0, 1) : 1;
-    float width = (right - left) * scale;
+        boss->state == ENEMY_DIE ? Clamp(t / ENEMY_DEFEAT_DURATION, 0, 1) : 0;
+    float reveal = boss->state == ENEMY_SPAWNING ? Clamp(t, 0, 1) : 1;
+    const float scale = .62f;
     float heightScale = scale * (1 - .48f * collapse);
-    float height = (bottom - top) * heightScale;
+    float width = source.width * scale;
     Color tint = Fade(collapse > 0 ? (Color){211, 171, 163, 255} : WHITE, reveal);
     if (boss->state == ENEMY_FALLEN) DrawBossGroundSeal(group->sealMarker, boss->position);
     DrawEllipse((int)boss->position.x, (int)boss->position.y - 9, 54, 19, Fade(BLACK, .38f * reveal));
     if (boss->guardianPhase == GUARDIAN_PHASE_TRANSITION) {
-        float flare = Clamp(boss->stateTime / GUARDIAN_PHASE_TRANSITION_TIME, 0, 1);
+        float flare = Clamp(t / GUARDIAN_PHASE_TRANSITION_TIME, 0, 1);
         DrawRing(boss->position, 45 + 72 * flare, 50 + 72 * flare, 0, 360, 36,
                  Fade(ORANGE, 1 - flare));
         DrawEmberBurst(boss->position, flare);
         tint = ColorLerp((Color){255, 165, 120, 255}, WHITE, flare);
-    } else if (GuardianEnraged(boss) && boss->state == ENEMY_ATTACK) {
-        int attack = boss->bossAttack;
-        float impact = boss->stateTime - (attack == BONE_DASH ? boneAttacks[attack].impactEnd :
-                                                                   boneAttacks[attack].windup);
-        if (impact >= 0 && impact < .29f) {
-            Vector2 contact = Vector2Add(boss->position, Vector2Scale(boss->attackDirection, 54));
-            DrawEmberBurst(contact, impact / .29f);
-        }
     }
-    DrawTexturePro(texture, (Rectangle){left, top, right - left, bottom - top},
-        (Rectangle){boss->position.x, boss->position.y + 28 * (1 - reveal) - lift, width, height},
-        (Vector2){width * .5f, (ground - top) * heightScale},
+    if (lateral && boss->facing == 2) source.width = -source.width;
+    DrawTexturePro(texture, source,
+        (Rectangle){boss->position.x, boss->position.y + 28 * (1 - reveal), width, source.height * heightScale},
+        (Vector2){width * .5f, (ground - source.y) * heightScale},
         (boss->facing == 2 ? -1 : 1) * 14 * collapse, tint);
-    if (boss->state == ENEMY_FALLEN)
-        DrawGameText("E: selar", (int)boss->position.x - 30, (int)boss->position.y + 12, 18, GOLD);
 }
 
 void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
@@ -2228,7 +2295,7 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
     }
     if (!foreground) {
         DrawTemplarWarnings(group);
-        if (group->boneland) DrawBoneLordWarning(&group->list[0]);
+        if (group->boneland) DrawBoneLordWarning(group, &group->list[0]);
     }
     if (!foreground) for (int i=0; i<ENEMY_ROOT_COUNT; i++) {
         const EnemyRoot *root = &group->rootAttacks[i];
