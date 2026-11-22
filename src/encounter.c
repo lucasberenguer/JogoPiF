@@ -126,9 +126,7 @@ static const char *WeaponTitle(int weapon) {
 }
 
 static bool IsEpicRewardStage(const Encounter *e) {
-    int lastWave = e->progress.map == TEMPLAR_FIELD_MAP ? TEMPLAR_FIELD_WAVES
-                 : (e->progress.map == BONELAND_MAP ? BONELAND_WAVES : CLEARING_WAVES);
-    return e->progress.stage == lastWave;
+    return e->progress.stage == CampaignWaveCount(e->progress.map);
 }
 
 static void StartStage(Encounter *e, EnemyGroup *enemies, const Clearing *clearing, Vector2 player) {
@@ -153,8 +151,8 @@ static void StartStage(Encounter *e, EnemyGroup *enemies, const Clearing *cleari
         int wave = e->progress.stage;
         if (clearing->necromancerArena || clearing->village || clearing->chapel || clearing->basement || clearing->invertedChapel)
             wave = 0;
-        else if ((clearing->boneland || clearing->templarField) && wave == CLEARING_BOSS_STAGE)
-            wave = (clearing->boneland ? BONELAND_WAVES : TEMPLAR_FIELD_WAVES) + 1;
+        else if (wave == CLEARING_BOSS_STAGE)
+            wave = CampaignWaveCount(e->progress.map) + 1;
         BeginStagePresentation(&e->presentation, wave, areaTitle,
             e->progress.stage==CLEARING_BOSS_STAGE ? bossTitle : NULL);
         if (clearing->necromancerArena) {
@@ -535,8 +533,7 @@ bool ChooseEncounterReward(Encounter *e, EnemyGroup *enemies, const Clearing *cl
                            Vector2 player, int *health, int choice) {
     if (e->phase!=ENCOUNTER_REWARD || choice<0 || choice>=e->rewardCount) return false;
     ApplyReward(e,e->rewards[choice],health);
-    bool lastWave = (clearing->boneland && e->progress.stage == BONELAND_WAVES) ||
-                    (clearing->templarField && e->progress.stage == TEMPLAR_FIELD_WAVES);
+    bool lastWave = e->progress.stage == CampaignWaveCount(e->progress.map);
     e->progress.stage = lastWave ? CLEARING_BOSS_STAGE : e->progress.stage + 1;
     e->progress.health=*health;
     if (!e->practice) SaveClearingCheckpoint(&e->progress);
@@ -1117,13 +1114,14 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
     } else if (e->progress.map == 5) {
         DrawGameText("Capela Invertida (Mundo Invertido) - aproxime-se do altar e estátuas (E)", 24, statusY, 20, GOLD);
     }
-    else if (e->progress.stage<=CLEARING_WAVES) DrawGameText(TextFormat("%s - onda %d/5 | Restantes: %d",
-        mapLabel,e->progress.stage,EnemiesRemaining(enemies)),24,statusY,20,GOLD);
+    else if (e->progress.stage<=CampaignWaveCount(e->progress.map)) DrawGameText(TextFormat("%s - onda %d/%d | Restantes: %d",
+        mapLabel,e->progress.stage,CampaignWaveCount(e->progress.map)+1,EnemiesRemaining(enemies)),24,statusY,20,GOLD);
     else DrawGameText(e->phase==ENCOUNTER_CLEAR ? clearLabel :
         (e->progress.map == 2 ? (e->villageHordeStarted ?
             TextFormat("Horda da Vila - Restantes: %d", EnemiesRemaining(enemies)) :
             "Duelo - Líder da Vila")
-            : TextFormat("Onda 5/5 - %s", bossLabel)),24,statusY,20,GOLD);
+            : TextFormat("Onda %d/%d - %s", CampaignWaveCount(e->progress.map)+1,
+                         CampaignWaveCount(e->progress.map)+1, bossLabel)),24,statusY,20,GOLD);
     if (e->notice[0]) DrawGameText(e->notice,24,statusY+27,18,RAYWHITE);
     if (bossVisible) {
         const Enemy *boss=&enemies->list[0];

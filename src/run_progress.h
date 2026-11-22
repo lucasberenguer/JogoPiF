@@ -3,7 +3,10 @@
 
 #include <stdbool.h>
 
-#define CLEARING_WAVES 4
+#define CLEARING_MAP 0
+#define CEMETERY_MAP 1
+#define CLEARING_WAVES 3 /* Clareira do Selo; o chefe vem depois da última onda. */
+#define CEMETERY_WAVES 4 /* Cemitério das Raízes. */
 #define BONELAND_WAVES 3
 #define BONELAND_MAP 6
 #define TEMPLAR_FIELD_MAP 7
@@ -16,6 +19,15 @@
 #define EPIC_DAMAGE_STACK_BONUS 0.5f
 #define BIBLE_L1_DAMAGE_BONUS 0.15f
 #define GUN_L2_DAMAGE_BONUS 0.25f
+
+/* Ondas normais de cada mapa antes do chefe (estágio CLEARING_BOSS_STAGE).
+   Mapas sem ondas numeradas mantêm o valor do Cemitério, como antes da separação. */
+static inline int CampaignWaveCount(int map) {
+    if (map == CLEARING_MAP) return CLEARING_WAVES;
+    if (map == BONELAND_MAP) return BONELAND_WAVES;
+    if (map == TEMPLAR_FIELD_MAP) return TEMPLAR_FIELD_WAVES;
+    return CEMETERY_WAVES;
+}
 
 typedef enum GuardianAftermathState {
     GUARDIAN_UNPURIFIED, GUARDIAN_LIBERATION_PENDING, GUARDIAN_ALTAR_READY,

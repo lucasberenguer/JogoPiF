@@ -214,7 +214,7 @@ int main(void) {
     map.playableBounds=(Rectangle){0,0,1670,942};
     EnemyGroup group={0};
     ResetEnemies(&group,&map);
-    assert(EnemiesRemaining(&group)==7);
+    assert(EnemiesRemaining(&group)==14); /* Clareira, onda 1 */
     CheckGuardianAttacks(&map, &group);
     CheckGuardianMelee(&map, &group);
     for (int i=0;i<ENEMY_COUNT;i++) group.list[i]=(Enemy){.state=ENEMY_GONE};
@@ -433,13 +433,33 @@ int main(void) {
         assert(pose.flip==(face==2));
     }
     Clearing arena=map;arena.cemetery=false;
-    SetRandomSeed(321);StartEnemyWave(&group,&arena,1,target,1);
-    int normalHealth[ENEMY_COUNT];
-    for(int i=0;i<ENEMY_COUNT;i++) normalHealth[i]=group.list[i].maxHealth;
+    /* Clareira: 3 ondas de 14/18/22, vida +10% e dano +15% sobre a base. */
+    for (int wave=1;wave<=3;wave++) {
+        StartEnemyWave(&group,&arena,wave,target,1);
+        assert(EnemiesRemaining(&group)==14+(wave-1)*4);
+        for (int i=0;i<ENEMY_COUNT;i++) {
+            const Enemy *enemy=&group.list[i];
+            if (enemy->state==ENEMY_GONE) continue;
+            int base=(int)((enemy->type==ENEMY_SPECIAL ? 100 : 45)*(1.0f+(wave-1)*.12f)*1.0f);
+            assert(enemy->maxHealth==(int)ceilf(base*1.10f));
+            assert(fabsf(enemy->damageScale-1.15f)<.001f);
+            assert(fabsf(enemy->power-(1.0f+(wave-1)*.09f))<.001f);
+        }
+    }
+    for (int i=0;i<ENEMY_COUNT;i++) group.list[i]=(Enemy){.state=ENEMY_GONE};
+    group.list[0]=(Enemy){.position={500,400},.type=ENEMY_COMMON_RANGED,.state=ENEMY_ATTACK,
+        .stateTime=.54f,.power=1,.damageScale=1.15f,.attackDirection={1,0},.health=60,.maxHealth=60};
+    UpdateEnemies(&group,&arena,target,.02f,false,&health,100);
+    assert(group.projectiles[0].remaining>0 && group.projectiles[0].damage==14); /* 12 x 1,15 = 13,8 */
+    ClearEnemyAttacks(&group);
+    /* Cemitério: sem o ajuste da Clareira; mantém 4 ondas, +10% de vida e +10% de força. */
     SetRandomSeed(321);StartEnemyWave(&group,&map,1,target,1);
-    for (int i=0;i<ENEMY_COUNT;i++) if (normalHealth[i]) {
-        assert(group.list[i].maxHealth==(int)ceilf(normalHealth[i]*1.10f));
+    assert(EnemiesRemaining(&group)==7);
+    for (int i=0;i<ENEMY_COUNT;i++) if (group.list[i].state!=ENEMY_GONE) {
+        int base=group.list[i].type==ENEMY_SPECIAL ? 100 : 45;
+        assert(group.list[i].maxHealth==(int)ceilf(base*1.10f));
         assert(fabsf(group.list[i].power-1.10f)<.001f);
+        assert(group.list[i].damageScale==0.0f);
     }
     for (int wave=1;wave<=4;wave++) {
         StartEnemyWave(&group,&map,wave,target,1);

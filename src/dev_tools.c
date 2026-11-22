@@ -13,8 +13,7 @@ static int PracticeMapIndex(int map) {
 
 static int PracticeWaves(int map) {
     if (map == NECROMANCER_MAP) return 2;
-    if (map == TEMPLAR_FIELD_MAP) return TEMPLAR_FIELD_WAVES;
-    return map == BONELAND_MAP ? BONELAND_WAVES : CLEARING_WAVES;
+    return CampaignWaveCount(map);
 }
 
 static Rectangle Panel(void) {

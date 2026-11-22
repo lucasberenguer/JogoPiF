@@ -295,7 +295,7 @@ static void CheckLegacyCheckpoints(void) {
                rTest.rewards[slot].kind != before[2].kind);
     }
 
-    /* Tela épica (após a última onda de cada mapa: Clareira/Cemitério = 4, Terra dos Ossos = 3, Campo dos Templários = 2):
+    /* Tela épica (após a última onda de cada mapa: Clareira = 3, Cemitério = 4, Terra dos Ossos = 3, Campo dos Templários = 2):
        3 cartões épicos distintos, sem reroll. E nas ondas anteriores desses mapas, tela normal com reroll permitido. */
     static const int epicMapIds[3] = {0, BONELAND_MAP, TEMPLAR_FIELD_MAP};
     static const int epicMapLastWaves[3] = {CLEARING_WAVES, BONELAND_WAVES, TEMPLAR_FIELD_WAVES};
@@ -513,12 +513,12 @@ static void CheckDevTools(Encounter *e, EnemyGroup *enemies, Clearing *map) {
     int health;
     for (int area=0; area<2; area++) {
         tools.map=area;
-        for (int wave=1; wave<=4; wave++) {
+        for (int wave=1; wave<=CampaignWaveCount(area); wave++) {
             tools.wave=wave;
             assert(StartDevEncounter(&tools,DEV_STAGE,e,enemies,map,&player,&health));
             assert(e->practice && e->progress.map==area && e->progress.stage==wave);
             assert(e->progress.weapon==2 && e->progress.weaponLevel[2]==3);
-            assert(health==100 && EnemiesRemaining(enemies)==7+(wave-1)*4);
+            assert(health==100 && EnemiesRemaining(enemies)==(area==CLEARING_MAP ? 14 : 7)+(wave-1)*4);
             assert(!IsMapActorBlocked(map,player));
         }
         assert(StartDevEncounter(&tools,DEV_BOSS_ONE,e,enemies,map,&player,&health));
@@ -820,7 +820,7 @@ int main(void) {
     Capture("audit/clearing_special_directions.png",&encounter,&meleePreview,&clearing,player);
     for (int wave=1;wave<=CLEARING_WAVES;wave++) {
         assert(encounter.progress.stage==wave);
-        assert(EnemiesRemaining(&enemies)==7+(wave-1)*4);
+        assert(EnemiesRemaining(&enemies)==14+(wave-1)*4);
         assert(EncounterPaused(&encounter));
         UpdateStagePresentation(&encounter.presentation,.1f);
         assert(EncounterPaused(&encounter));
@@ -861,12 +861,13 @@ int main(void) {
         assert(encounter.phase==ENCOUNTER_REWARD);
         assert(encounter.rewardCount==3);
         if (wave==1) Capture("audit/rewards.png",&encounter,&enemies,&clearing,player);
-        if (wave==CLEARING_WAVES) Capture("audit/rewards_epic_wave4.png",&encounter,&enemies,&clearing,player);
+        if (wave==CLEARING_WAVES) Capture("audit/rewards_epic_wave3.png",&encounter,&enemies,&clearing,player);
         assert(!ChooseEncounterReward(&encounter,&enemies,&clearing,player,&health,9));
         assert(ChooseEncounterReward(&encounter,&enemies,&clearing,player,&health,0));
         RunProgress saved={0};
         assert(LoadClearingCheckpoint(&saved));
-        assert(saved.stage==wave+1 && saved.weapon==encounter.progress.weapon);
+        assert(saved.stage==(wave==CLEARING_WAVES ? CLEARING_BOSS_STAGE : wave+1) &&
+               saved.weapon==encounter.progress.weapon);
     }
     assert(encounter.progress.stage==CLEARING_BOSS_STAGE && EnemiesRemaining(&enemies)==1);
     assert(encounter.presentation.boss && EncounterPaused(&encounter));
@@ -1062,7 +1063,7 @@ int main(void) {
     UpdateStagePresentation(&encounter.presentation,.6f);
     Capture("audit/cemetery_wave.png",&encounter,&enemies,&clearing,player);
     Capture("audit/cemetery_collision_updated.png",&encounter,&enemies,&clearing,player);
-    for (int wave=1;wave<=CLEARING_WAVES;wave++) {
+    for (int wave=1;wave<=CEMETERY_WAVES;wave++) {
         assert(encounter.progress.stage==wave);
         assert(EnemiesRemaining(&enemies)==7+(wave-1)*4);
         UpdateStagePresentation(&encounter.presentation,10);
@@ -1398,7 +1399,7 @@ int main(void) {
     assert(SaveFileText(saveFile,"PIF-CLEARING-3 1 6 80 100 1 240 1 0 0 0 -1"));
     assert(LoadClearingCheckpoint(&migrated) && migrated.stage==CLEARING_BOSS_STAGE);
     assert(SaveFileText(saveFile,"PIF-CLEARING-4 1 4 80 100 1 240 1 0 0 0 -1"));
-    assert(LoadClearingCheckpoint(&migrated) && migrated.stage==4 && migrated.map==0);
+    assert(LoadClearingCheckpoint(&migrated) && migrated.stage==CLEARING_BOSS_STAGE && migrated.map==0); /* Onda 4 antiga da Clareira -> Guardião */
     assert(SaveFileText(saveFile,"PIF-CLEARING-2 2"));
     assert(LoadClearingCheckpoint(&migrated) && migrated.weapon==2 && migrated.stage==1);
     assert(SaveClearingCheckpoint(&encounter.progress));

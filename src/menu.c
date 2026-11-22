@@ -201,6 +201,10 @@ bool LoadClearingCheckpoint(RunProgress *p) {
         parsedInitWeapon>=0 && parsedInitWeapon<3);
     loaded.initialWeapon=parsedInitWeapon;
     UnloadFileText(data);
+    /* A Clareira passou de 4 para 3 ondas: um checkpoint antigo na onda 4
+       já concluiu as três ondas atuais e segue para o Guardião. */
+    if (loaded.map==CLEARING_MAP && loaded.stage>CLEARING_WAVES && loaded.stage<CLEARING_BOSS_STAGE)
+        loaded.stage=CLEARING_BOSS_STAGE;
     bool valid=initWeaponValid && finalSealValid && angelValid && villageValid && (!currentFormat || seen==0 || seen==1) && loaded.map>=0 &&
         loaded.map<=(aftermathFormat ? NECROMANCER_MAP : BONELAND_MAP - 1) &&
         (loaded.map != BONELAND_MAP || loaded.stage <= BONELAND_WAVES || loaded.stage >= CLEARING_BOSS_STAGE) &&

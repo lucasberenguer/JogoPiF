@@ -54,6 +54,7 @@ typedef struct Enemy {
     int maxHealth;
     float speed;
     float power;
+    float damageScale; /* Ajuste de dano do mapa; 0 = sem ajuste (valor antigo, truncado). */
     Vector2 attackDirection;
     EnemyType type;
     TemplarRole templarRole;

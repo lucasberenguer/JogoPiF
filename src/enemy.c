@@ -1,5 +1,6 @@
 #include "game_text.h"
 #include "enemy.h"
+#include "run_progress.h"
 #include "raymath.h"
 #include <math.h>
 #include <string.h>
@@ -7,6 +8,11 @@
 #define ENEMY_SPEED 98.0f
 #define ENEMY_ATTACK_RANGE 64.0f
 #define ENEMY_ATTACK_DAMAGE 12
+/* Balanceamento das ondas da Clareira do Selo (não afeta outros mapas). */
+#define CLEARING_FIRST_WAVE_ENEMIES 14
+#define CLEARING_WAVE_ENEMY_STEP 4
+#define CLEARING_ENEMY_HEALTH_SCALE 1.10f
+#define CLEARING_ENEMY_DAMAGE_SCALE 1.15f
 #define ENEMY_HURT_RADIUS 20.0f
 #define CLEARING_MELEE_ATTACK_DURATION .62f
 #define CLEARING_MELEE_ATTACK_FRAMES 8
@@ -653,7 +659,9 @@ void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
         for (int i = 0; i < ENEMY_COUNT; i++) group->list[i] = (Enemy){.state = ENEMY_GONE};
         return;
     }
-    int total = 7 + (wave - 1) * 4;
+    bool clearingWave = ClearingMapId(clearing) == CLEARING_MAP;
+    int total = clearingWave ? CLEARING_FIRST_WAVE_ENEMIES + (wave - 1) * CLEARING_WAVE_ENEMY_STEP
+                             : 7 + (wave - 1) * 4;
     if (total > ENEMY_COUNT) total = ENEMY_COUNT;
     int minimumSpecials = 1 + (wave - 1) / 2;
     int specials = GetRandomValue(minimumSpecials, minimumSpecials + (wave >= 3));
@@ -667,9 +675,11 @@ void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
         enemy->maxHealth = (int)((enemy->type == ENEMY_SPECIAL ? 100 : 45) *
                                 (1.0f + (wave-1)*.12f) * adjustment);
         if (clearing->cemetery) enemy->maxHealth=(int)ceilf(enemy->maxHealth*1.10f);
+        else if (clearingWave) enemy->maxHealth=(int)ceilf(enemy->maxHealth*CLEARING_ENEMY_HEALTH_SCALE);
         enemy->health = enemy->maxHealth;
         enemy->speed = ENEMY_SPEED * (1.0f + (wave-1)*.045f);
         enemy->power = (1.0f + (wave-1)*.09f) * (clearing->cemetery ? 1.10f : 1.0f);
+        if (clearingWave) enemy->damageScale = CLEARING_ENEMY_DAMAGE_SCALE;
         enemy->state = ENEMY_SPAWNING;
         enemy->stateTime = -WaveSpawnDelay(wave, i);
         enemy->facing = i%2 ? 2 : 3;
@@ -801,6 +811,14 @@ static float EnemyAttackPower(const EnemyGroup *group, const Enemy *enemy) {
     return enemy->power;
 }
 
+/* Dano de um acerto. Inimigos com ajuste de mapa (damageScale) arredondam para o
+   inteiro mais próximo; os demais mantêm o cálculo antigo, truncado. */
+static int EnemyHitDamage(const EnemyGroup *group, const Enemy *enemy, float base) {
+    float damage = base * EnemyAttackPower(group, enemy);
+    if (enemy->damageScale > 0.0f) return (int)roundf(damage * enemy->damageScale);
+    return (int)damage;
+}
+
 #define CEMETERY_SPELL_LIFETIME 4.0f
 
 static void FireRangedProjectile(EnemyGroup *group, const Enemy *enemy, Vector2 player) {
@@ -813,7 +831,7 @@ static void FireRangedProjectile(EnemyGroup *group, const Enemy *enemy, Vector2 
         if (group->projectiles[i].remaining <= 0.0f) {
             group->projectiles[i] = (EnemyProjectile){origin, Vector2Normalize(toward),
                 group->cemetery ? CEMETERY_SPELL_LIFETIME : 1.5f,
-                (int)(ENEMY_ATTACK_DAMAGE*EnemyAttackPower(group, enemy))};
+                EnemyHitDamage(group, enemy, ENEMY_ATTACK_DAMAGE)};
             return;
         }
     }
@@ -1213,7 +1231,9 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                     if (!enemy->attackConnected && !playerDodging && group->playerHitCooldown <= 0 &&
                         Vector2Distance(player, enemy->position) < 65 && *playerHealth > 0 &&
                         MapHasClearPath(clearing, enemy->position, player)) {
-                        *playerHealth = (int)fmaxf(0, *playerHealth - 18*EnemyAttackPower(group, enemy));
+                        float hit = enemy->damageScale > 0.0f ? (float)EnemyHitDamage(group, enemy, 18)
+                                                              : 18*EnemyAttackPower(group, enemy);
+                        *playerHealth = (int)fmaxf(0, *playerHealth - hit);
                         group->playerHitCooldown = .65f;
                         enemy->attackConnected = true;
                     }
@@ -1252,7 +1272,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                     (!shield || Vector2DotProduct(Vector2Subtract(player, enemy->position),
                                                  enemy->attackDirection) > 0) &&
                     MapHasClearPath(clearing, enemy->position, player)) {
-                    int damage = (int)(ENEMY_ATTACK_DAMAGE * EnemyAttackPower(group, enemy));
+                    int damage = EnemyHitDamage(group, enemy, ENEMY_ATTACK_DAMAGE);
                     if (shield) HurtByTemplar(group, player, playerHealth, playerDodging, damage);
                     else {
                         *playerHealth = damage < *playerHealth ? *playerHealth - damage : 0;
