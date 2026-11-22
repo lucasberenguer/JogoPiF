@@ -59,13 +59,14 @@ static void CheckBoneLordAttacks(void) {
     EnemyGroup group = {0};
     Vector2 origin = {400, 400};
     const struct { int attack, damage; float distance; bool evade; } scenarios[] = {
-        {BONE_CLAW, 19, 85, false},
-        {BONE_RANGED, 22, 280, false},
-        {BONE_RAIN, 24, 270, false},
+        {BONE_CLAW, 22, 85, false},
+        {BONE_RANGED, 25, 280, false},
+        {BONE_RAIN, 28, 270, false},
         {BONE_RAIN, 0, 270, true},
-        {BONE_DASH, 27, 180, false},
+        {BONE_DASH, 32, 180, false},
         {BONE_DASH, 0, 180, true},
-        {BONE_BLAST, 31, 120, false},
+        {BONE_BLAST, 38, 200, false},
+        {BONE_BLAST, 0, 200, true},
     };
     for (unsigned i = 0; i < sizeof(scenarios)/sizeof(scenarios[0]); i++) {
         int attack = scenarios[i].attack;
@@ -82,17 +83,29 @@ static void CheckBoneLordAttacks(void) {
         bool projectile = false;
         for (int frame = 0; frame < 38; frame++) {
             if (attack == BONE_RAIN && scenarios[i].evade && frame == 10) player.y += 130;
-            UpdateEnemies(&group, &map, player, .05f, scenarios[i].evade && attack == BONE_DASH, &health, 100);
+            UpdateEnemies(&group, &map, player, .05f, scenarios[i].evade && attack != BONE_RAIN, &health, 100);
             assert(!IsMapActorBlocked(&map, boss->position));
             if (frame == 13 && attack == BONE_DASH) {
                 assert(fabsf(boss->position.y - origin.y) > 60);
                 assert(health == 100);
             }
             if (group.projectiles[0].remaining > 0 && group.projectiles[0].boneShot) projectile = true;
+            if (boss->state != ENEMY_ATTACK && (attack != BONE_RANGED || !group.projectiles[0].remaining)) break;
         }
         assert(health == 100 - scenarios[i].damage);
         if (attack == BONE_RANGED) assert(projectile);
     }
+    Vector2 player = {origin.x + 330, origin.y};
+    int health = 100;
+    StartArenaBoss(&group, &map, player, 1);
+    Enemy *boss = &group.list[0];
+    boss->position = origin;
+    boss->state = ENEMY_IDLE;
+    boss->bossAttack = BONE_DASH;
+    boss->attackCooldown = 0;
+    for (int i = 0; i < 30 && boss->state != ENEMY_ATTACK; i++)
+        UpdateEnemies(&group, &map, player, .05f, false, &health, 100);
+    assert(boss->state == ENEMY_ATTACK && boss->bossAttack == BONE_BLAST);
 }
 
 static void CheckGuardianAttacks(Clearing *map, EnemyGroup *group) {

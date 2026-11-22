@@ -742,7 +742,7 @@ void StartArenaBoss(EnemyGroup *group, const Clearing *clearing, Vector2 player,
     boss->health = boss->maxHealth;
     if (clearing->boneland) {
         boss->bossAttack = BONE_BLAST;
-        boss->speed = 132;
+        boss->speed = 170;
     }
     if (clearing->templarField) {
         boss->templarRole = TEMPLAR_MARSHAL;
@@ -936,19 +936,19 @@ static void AddEnemyImpact(EnemyGroup *group,Vector2 position,Vector2 direction)
     }
 }
 
-#define BONE_DASH_HIDE .34f
-#define BONE_DASH_REAPPEAR .78f
+#define BONE_DASH_HIDE .26f
+#define BONE_DASH_REAPPEAR .63f
 #define BONE_SHOT_LIFETIME 1.65f
 
 static const struct {
     float range, windup, impactEnd, duration, radius;
     int damage;
 } boneAttacks[BONE_ATTACK_COUNT] = {
-    [BONE_CLAW]   = {115, .43f, .52f, .91f, 115, 19},
-    [BONE_RANGED] = {550, .90f, 1.08f, 1.57f,  27, 22},
-    [BONE_RAIN]   = {520, .92f, 1.37f, 1.86f,  96, 24},
-    [BONE_DASH]   = {440, 1.00f, 1.28f, 1.62f, 62, 27},
-    [BONE_BLAST]  = {175, .85f, 1.20f, 1.68f, 166, 31},
+    [BONE_CLAW]   = {120, .34f, .44f, .72f, 120, 22},
+    [BONE_RANGED] = {550, .70f, .85f, 1.24f,  27, 25},
+    [BONE_RAIN]   = {520, .74f, 1.11f, 1.51f, 104, 28},
+    [BONE_DASH]   = {440, .83f, 1.10f, 1.37f,  64, 32},
+    [BONE_BLAST]  = {220, .72f, 1.03f, 1.40f, 220, 38},
 };
 
 static void MoveEnemyStraight(const Clearing *map, Enemy *boss, float distance) {
@@ -1003,7 +1003,11 @@ static void UpdateBoneLord(EnemyGroup *group, const Clearing *map, Enemy *boss,
         if (boss->attackCooldown <= 0 && MapHasClearPath(map, boss->position, player)) {
             for (int i = 1; i <= BONE_ATTACK_COUNT; i++) {
                 int attack = (boss->bossAttack + i) % BONE_ATTACK_COUNT;
-                if (distance > boneAttacks[attack].range) continue;
+                if (distance > boneAttacks[attack].range) {
+                    /* After the dash, pursue the player until the blast is in range. */
+                    if (attack == BONE_BLAST && i == 1) break;
+                    continue;
+                }
                 boss->bossAttack = attack;
                 boss->attackDirection = distance > .001f ? Vector2Normalize(toPlayer) : (Vector2){0, 1};
                 boss->attackTarget = attack == BONE_DASH ?
@@ -1018,7 +1022,7 @@ static void UpdateBoneLord(EnemyGroup *group, const Clearing *map, Enemy *boss,
         if (boss->state == ENEMY_WALK) {
             boss->walkTime += dt;
             MoveEnemy(map, boss, Vector2Scale(toPlayer, boss->speed *
-                      (GuardianEnraged(boss) ? 1.22f : 1.0f) * dt / distance));
+                      (GuardianEnraged(boss) ? 1.27f : 1.0f) * dt / distance));
         }
         return;
     }
@@ -1042,7 +1046,7 @@ static void UpdateBoneLord(EnemyGroup *group, const Clearing *map, Enemy *boss,
         }
         if (active > 0) {
             Vector2 origin = boss->position;
-            MoveEnemyStraight(map, boss, active * (GuardianEnraged(boss) ? 810 : 720));
+            MoveEnemyStraight(map, boss, active * (GuardianEnraged(boss) ? 1000 : 870));
             Vector2 segment = Vector2Subtract(boss->position, origin);
             float lengthSquared = Vector2LengthSqr(segment);
             float along = lengthSquared > 0 ?
@@ -1068,7 +1072,7 @@ static void UpdateBoneLord(EnemyGroup *group, const Clearing *map, Enemy *boss,
     if (t >= boneAttacks[attack].duration) {
         boss->state = ENEMY_IDLE;
         boss->stateTime = 0;
-        boss->attackCooldown = GuardianEnraged(boss) ? .43f : .72f;
+        boss->attackCooldown = GuardianEnraged(boss) ? .24f : .42f;
     }
 }
 
@@ -2171,6 +2175,12 @@ static void DrawBoneLordWarning(const EnemyGroup *group, const Enemy *boss) {
                 4 + BoneFrameAt(t, windup, boneAttacks[attack].duration, 8);
             DrawBoneGroundEffect(group->boneLordSheets[BONE_BLAST_FX_SHEET], 4, frame,
                                  center, radius * 2.15f);
+            if (t >= windup) {
+                float pulse = Clamp((t - windup) / .30f, 0, 1);
+                float edge = radius * (.25f + .75f * pulse);
+                DrawCircleV(center, edge, Fade(ORANGE, .25f * (1 - pulse)));
+                DrawRing(center, edge - 9, edge, 0, 360, 64, Fade(GOLD, .9f * (1 - pulse)));
+            }
         }
         return;
     }
