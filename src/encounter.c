@@ -65,24 +65,61 @@ static const int mapRarityWeights[MAX_CAMPAIGN_MAPS][RARITY_COUNT] = {
     {RARITY_WEIGHT_COMMON, RARITY_WEIGHT_RARE, RARITY_WEIGHT_EPIC},
 };
 static const char boneLordName[] = "Rasga-Ossos";
-typedef struct SealQuestion {
-    const char *expression;
-    const char *choices[3]; /* correct first; the slot is shuffled */
-} SealQuestion;
 
-static const SealQuestion bossQuestions[] = {
-    {"P e (Q ou nao Q)", {"P", "nao P", "Q"}},
-    {"nao (P ou Q)", {"nao P e nao Q", "nao P ou nao Q", "P e Q"}},
-    {"(P e Q) ou (nao P e Q)", {"Q", "P", "P ou Q"}},
-    {"nao (P e Q)", {"nao P ou nao Q", "nao P e nao Q", "P ou Q"}},
+/* Tabela única de dificuldade dos selos por mapa (LogicDifficultyScore [min, max]).
+   Guarda todas as linhas, inclusive as dormentes (Cemitério V/F, Chã da Tristeza V/F e boss,
+   Terra dos Ossos V/F e Campo dos Templários V/F). Mapas 3, 4 e 5 não possuem linha. */
+static const EncounterSealDifficultyRow sealDifficultyTable[MAX_CAMPAIGN_MAPS] = {
+    [0] = { .map = 0, .hasSpecialVF = true,  .specialMin = 2, .specialMax = 3, .hasBossMC = true, .bossMin = 4,  .bossMax = 5  },
+    [1] = { .map = 1, .hasSpecialVF = true,  .specialMin = 3, .specialMax = 4, .hasBossMC = true, .bossMin = 5,  .bossMax = 6  },
+    [2] = { .map = 2, .hasSpecialVF = true,  .specialMin = 4, .specialMax = 5, .hasBossMC = true, .bossMin = 6,  .bossMax = 7  },
+    [6] = { .map = 6, .hasSpecialVF = true,  .specialMin = 5, .specialMax = 6, .hasBossMC = true, .bossMin = 7,  .bossMax = 8  },
+    [7] = { .map = 7, .hasSpecialVF = true,  .specialMin = 5, .specialMax = 6, .hasBossMC = true, .bossMin = 8,  .bossMax = 9  },
+    [8] = { .map = 8, .hasSpecialVF = false, .specialMin = 0, .specialMax = 0, .hasBossMC = true, .bossMin = 10, .bossMax = 12 },
 };
 
-static const SealQuestion finalQuestions[] = {
-    {"(P ou Q) e (P ou não Q)", {"P", "Q", "P ou Q"}},
-    {"não (P e (Q ou R))", {"não P ou (não Q e não R)", "não P e (não Q ou não R)", "não P ou não Q ou não R"}},
-    {"(P e Q) ou (P e não Q) ou (não P e R)", {"P ou R", "P e R", "Q ou R"}},
-    {"(P e Q) ou (não P e não Q)", {"P e Q têm o mesmo valor", "P e Q têm valores diferentes", "P ou Q"}},
-};
+int EncounterSealTableCount(void) {
+    return MAX_CAMPAIGN_MAPS;
+}
+
+const EncounterSealDifficultyRow *EncounterSealTableRow(int index) {
+    if (index < 0 || index >= MAX_CAMPAIGN_MAPS) return NULL;
+    const EncounterSealDifficultyRow *row = &sealDifficultyTable[index];
+    if (!row->hasSpecialVF && !row->hasBossMC) return NULL;
+    return row;
+}
+
+bool EncounterSealRange(int map, bool isBoss, int *outMin, int *outMax) {
+    int clamped = map < 0 ? 0 : (map >= MAX_CAMPAIGN_MAPS ? MAX_CAMPAIGN_MAPS - 1 : map);
+    for (int m = clamped; m >= 0; m--) {
+        const EncounterSealDifficultyRow *row = &sealDifficultyTable[m];
+        if (!row->hasSpecialVF && !row->hasBossMC) continue;
+        if (isBoss && row->hasBossMC) {
+            if (m != map)
+                TraceLog(LOG_WARNING, "SELO: Mapa %d sem faixa de boss; usando linha do mapa %d [%d..%d].",
+                         map, m, row->bossMin, row->bossMax);
+            if (outMin) *outMin = row->bossMin;
+            if (outMax) *outMax = row->bossMax;
+            return m == map;
+        }
+        if (!isBoss && row->hasSpecialVF) {
+            if (m != map)
+                TraceLog(LOG_WARNING, "SELO: Mapa %d sem faixa V/F; usando linha do mapa %d [%d..%d].",
+                         map, m, row->specialMin, row->specialMax);
+            if (outMin) *outMin = row->specialMin;
+            if (outMax) *outMax = row->specialMax;
+            return m == map;
+        }
+    }
+    if (outMin) *outMin = isBoss ? 4 : 2;
+    if (outMax) *outMax = isBoss ? 5 : 3;
+    return false;
+}
+
+static LogicStyle CurrentEncounterLogicStyle(void) {
+    return (GameTextHasGlyph(0x2227) && GameTextHasGlyph(0x2228))
+           ? LOGIC_STYLE_SYMBOLS : LOGIC_STYLE_WORDS;
+}
 
 static const char *WeaponTitle(int weapon) {
     return weapon == 0 ? "Arma de fogo" : weapon == 1 ? "Bíblia" : "Katana";
@@ -514,9 +551,33 @@ bool OpenEncounterSeal(Encounter *e, const EnemyGroup *enemies, Vector2 player) 
     for (int i=0;i<ENEMY_COUNT;i++) if (enemies->list[i].state==ENEMY_FALLEN &&
         Vector2Distance(enemies->list[i].position,player)<95) {
         e->sealEnemy=i;
-        e->question=e->progress.map==NECROMANCER_MAP ?
-            e->progress.finalSealFailures % 4 : GetRandomValue(0,3);
-        e->answer=GetRandomValue(0,2);
+        bool isBoss = (enemies->list[i].type == ENEMY_BOSS);
+        int minScore = 0, maxScore = 0;
+        EncounterSealRange(e->progress.map, isBoss, &minScore, &maxScore);
+        LogicStyle style = CurrentEncounterLogicStyle();
+        static unsigned sealCounter = 0;
+        sealCounter++;
+        unsigned r0 = (unsigned)GetRandomValue(0, 32767);
+        unsigned r1 = (unsigned)GetRandomValue(0, 32767);
+        unsigned r2 = (unsigned)GetRandomValue(0, 32767);
+        unsigned seed = (r0 | (r1 << 15) | (r2 << 30)) ^
+                        (sealCounter * 2654435761u) ^
+                        ((unsigned)(e->progress.map + 1) * 40503u) ^
+                        ((unsigned)(e->progress.stage + 1) * 65537u) ^
+                        ((unsigned)(e->progress.finalSealFailures + 1) * 131u);
+        LogicRng rng;
+        LogicRngSeed(&rng, seed);
+        e->sealQuestion = (LogicSealQuestion){.isBoss = isBoss};
+        if (isBoss) {
+            LogicGenerateMC(&rng, minScore, maxScore, style, &e->sealQuestion.mc);
+            e->sealQuestion.correct = e->sealQuestion.mc.correct;
+            e->sealQuestion.score = e->sealQuestion.mc.questionScore;
+        } else {
+            LogicGenerateVF(&rng, minScore, maxScore, style, &e->sealQuestion.vf);
+            e->sealQuestion.correct = e->sealQuestion.vf.correct;
+            e->sealQuestion.score = e->sealQuestion.vf.score;
+        }
+        e->answer = e->sealQuestion.correct;
         e->phase=ENCOUNTER_SEAL;
         return true;
     }
@@ -528,7 +589,7 @@ bool AnswerEncounterSeal(Encounter *e, EnemyGroup *enemies, int *health, int cho
     Enemy *enemy=&enemies->list[e->sealEnemy];
     int count=enemy->type==ENEMY_BOSS?3:2;
     if (choice<0 || choice>=count) return false;
-    int correct=enemy->type==ENEMY_BOSS?e->answer:(e->question==0 || e->question==3?0:1);
+    int correct=e->answer;
     ClearEnemyAttacks(enemies);
     if (e->progress.map==NECROMANCER_MAP) {
         if (choice!=correct) e->progress.finalSealFailures++;
@@ -1267,16 +1328,22 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
     }
     int count=e->phase==ENCOUNTER_REWARD ? e->rewardCount :
               enemies->list[e->sealEnemy].type==ENEMY_BOSS ? 3 : 2;
-    static const char *questions[]={"V e V = V", "V e F = V", "nao V = V", "V ou F = V"};
-    const SealQuestion *sealQuestions=e->progress.map==NECROMANCER_MAP ? finalQuestions : bossQuestions;
     if (e->phase==ENCOUNTER_SEAL) {
-        const char *prompt=count==3 ? TextFormat("Qual expressão equivale a: %s ?",sealQuestions[e->question].expression)
-                                    : questions[e->question];
-        if (e->progress.map==NECROMANCER_MAP) {
-            DrawGameTextIn(prompt,(Rectangle){18,titleY+46,GetScreenWidth()-36,35},22,RAYWHITE,false);
-            DrawGameTextIn(TextFormat("Tentativa %d/3",e->progress.finalSealFailures+1),
-                (Rectangle){18,titleY+81,GetScreenWidth()-36,27},18,GOLD,false);
-        } else DrawGameText(prompt,(GetScreenWidth()-MeasureGameText(prompt,22))/2,titleY+60,22,RAYWHITE);
+        if (count == 3) {
+            const char *prompt = TextFormat("Qual expressão equivale a: %s ?", e->sealQuestion.mc.questionText);
+            if (e->progress.map==NECROMANCER_MAP) {
+                DrawGameTextIn(prompt,(Rectangle){18,titleY+46,GetScreenWidth()-36,35},22,RAYWHITE,false);
+                DrawGameTextIn(TextFormat("Tentativa %d/3",e->progress.finalSealFailures+1),
+                    (Rectangle){18,titleY+81,GetScreenWidth()-36,27},18,GOLD,false);
+            } else {
+                DrawGameTextIn(prompt,(Rectangle){18,titleY+56,GetScreenWidth()-36,35},22,RAYWHITE,false);
+            }
+        } else {
+            const char *valuesLine = e->sealQuestion.vf.valuesText;
+            const char *prompt = TextFormat("Qual o valor de: %s?", e->sealQuestion.vf.exprText);
+            DrawGameTextIn(valuesLine, (Rectangle){18, titleY + 46, GetScreenWidth() - 36, 30}, 20, GOLD, false);
+            DrawGameTextIn(prompt, (Rectangle){18, titleY + 78, GetScreenWidth() - 36, 34}, 22, RAYWHITE, false);
+        }
     }
     for (int i=0;i<count;i++) {
         Rectangle box=ChoiceRect(i,count);
@@ -1295,11 +1362,18 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
             DrawRectangleRec(box,hovered?(Color){80,45,50,255}:(Color){40,25,35,255});
             DrawRectangleLinesEx(box,2,GOLD);
             const char *label = count==2 ? (i==0?"Verdadeiro":"Falso")
-                                         : sealQuestions[e->question].choices[(i+3-e->answer)%3];
+                                         : e->sealQuestion.mc.choices[i];
             if (e->phase==ENCOUNTER_SEAL && e->progress.map==NECROMANCER_MAP)
                 DrawGameTextIn(TextFormat("%d. %s",i+1,label),
                     (Rectangle){box.x+8,box.y+6,box.width-16,box.height-12},19,RAYWHITE,false);
-            else DrawGameText(TextFormat("%d. %s",i+1,label),(int)box.x+14,(int)box.y+20,19,RAYWHITE);
+            else {
+                const char *optText = TextFormat("%d. %s", i + 1, label);
+                Rectangle optArea = {box.x + 14.0f, box.y + 16.0f, box.width - 24.0f, 34.0f};
+                if (MeasureGameText(optText, 19) > (int)optArea.width)
+                    DrawGameTextIn(optText, optArea, 19.0f, RAYWHITE, false);
+                else
+                    DrawGameText(optText, (int)box.x + 14, (int)box.y + 20, 19, RAYWHITE);
+            }
         }
     }
 }

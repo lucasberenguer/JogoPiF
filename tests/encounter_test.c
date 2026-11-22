@@ -11,7 +11,7 @@
 
 static void Capture(const char *name, Encounter *encounter, EnemyGroup *enemies,
                     Clearing *clearing, Vector2 player) {
-    RenderTexture2D target=LoadRenderTexture(1280,720);
+    RenderTexture2D target=LoadRenderTexture(GetScreenWidth(),GetScreenHeight());
     BeginTextureMode(target);
     ClearBackground(BLACK);
     Camera2D camera={.zoom=.72f};
@@ -637,6 +637,139 @@ static void CheckDevTools(Encounter *e, EnemyGroup *enemies, Clearing *map) {
     Capture("audit/boneland_boss_attack.png", e, enemies, map, player);
 }
 
+static void CheckSealDifficultyTableAndGlyphFallback(Encounter *e, EnemyGroup *enemies, Clearing *map) {
+    /* 1. Verifica detecção de glifos com LogicSymbols.ttf presente e simulação de ausência */
+    assert(GameTextHasGlyph(0x2227) && GameTextHasGlyph(0x2228));
+    LoadGameFontsWithSymbolsPath("assets/fonts/DoesNotExist_LogicSymbols.ttf");
+    assert(!GameTextHasGlyph(0x2227) && !GameTextHasGlyph(0x2228));
+
+    /* Sem os glifos, OpenEncounterSeal deve gerar no estilo por extenso (sem ∧/∨) */
+    Encounter fallbackEnc = *e;
+    fallbackEnc.phase = ENCOUNTER_FIGHT;
+    fallbackEnc.presentation = (StagePresentation){0};
+    fallbackEnc.progress.map = 0;
+    fallbackEnc.progress.stage = 1;
+    enemies->list[0] = (Enemy){.type = ENEMY_SPECIAL, .state = ENEMY_FALLEN, .position = {400, 400}, .maxHealth = 100};
+    assert(OpenEncounterSeal(&fallbackEnc, enemies, (Vector2){400, 400}));
+    assert(strstr(fallbackEnc.sealQuestion.vf.exprText, LOGIC_SYM_AND) == NULL);
+    assert(strstr(fallbackEnc.sealQuestion.vf.exprText, LOGIC_SYM_OR) == NULL);
+    assert(strstr(fallbackEnc.sealQuestion.vf.exprText, "~") == NULL);
+
+    enemies->list[0] = (Enemy){.type = ENEMY_BOSS, .state = ENEMY_FALLEN, .position = {400, 400}, .maxHealth = 2200};
+    fallbackEnc.phase = ENCOUNTER_FIGHT;
+    assert(OpenEncounterSeal(&fallbackEnc, enemies, (Vector2){400, 400}));
+    assert(strstr(fallbackEnc.sealQuestion.mc.questionText, LOGIC_SYM_AND) == NULL);
+    assert(strstr(fallbackEnc.sealQuestion.mc.questionText, LOGIC_SYM_OR) == NULL);
+    assert(strstr(fallbackEnc.sealQuestion.mc.questionText, "~") == NULL);
+
+    /* Restaura as fontes com LogicSymbols.ttf */
+    LoadGameFonts();
+    assert(GameTextHasGlyph(0x2227) && GameTextHasGlyph(0x2228));
+
+    /* 2. Testes estruturais para TODAS as linhas da tabela de dificuldade */
+    int tableCount = EncounterSealTableCount();
+    int prevBossMin = -1;
+    int maxBossMin = -1, maxBossMax = -1;
+    int necroMin = -1, necroMax = -1;
+    LogicRng rng;
+    LogicRngSeed(&rng, 20261122u);
+
+    for (int m = 0; m < tableCount; m++) {
+        const EncounterSealDifficultyRow *row = EncounterSealTableRow(m);
+        if (m == 3 || m == 4 || m == 5) {
+            assert(row == NULL);
+            /* Mapa sem linha usa a linha de ID menor mais próxima (mapa 2) sem falhar */
+            int fbMin = 0, fbMax = 0;
+            assert(!EncounterSealRange(m, true, &fbMin, &fbMax));
+            assert(fbMin == 6 && fbMax == 7);
+            assert(!EncounterSealRange(m, false, &fbMin, &fbMax));
+            assert(fbMin == 4 && fbMax == 5);
+            continue;
+        }
+        assert(row != NULL && row->map == m);
+        assert(row->hasBossMC);
+        if (row->hasSpecialVF) {
+            assert(row->specialMin <= row->specialMax);
+            /* Boss > especiais no mesmo mapa */
+            assert(row->bossMin > row->specialMax || (row->bossMin >= row->specialMax && row->bossMax > row->specialMax));
+            assert(row->bossMin > row->specialMin && row->bossMax > row->specialMax);
+            /* Faixa V/F atingível pelo gerador */
+            LogicVFQuestion vfq;
+            assert(LogicGenerateVF(&rng, row->specialMin, row->specialMax, LOGIC_STYLE_SYMBOLS, &vfq));
+            assert(vfq.score >= row->specialMin && vfq.score <= row->specialMax);
+        }
+        assert(row->bossMin <= row->bossMax);
+        /* O mínimo dos bosses cresce a cada mapa */
+        assert(row->bossMin > prevBossMin);
+        prevBossMin = row->bossMin;
+        if (row->bossMin > maxBossMin) maxBossMin = row->bossMin;
+        if (row->bossMax > maxBossMax) maxBossMax = row->bossMax;
+        if (m == NECROMANCER_MAP) {
+            necroMin = row->bossMin;
+            necroMax = row->bossMax;
+        }
+        /* Faixa de boss atingível pelo gerador */
+        LogicMCQuestion mcq;
+        assert(LogicGenerateMC(&rng, row->bossMin, row->bossMax, LOGIC_STYLE_SYMBOLS, &mcq));
+        assert(mcq.questionScore >= row->bossMin && mcq.questionScore <= row->bossMax);
+    }
+    /* O Necromante é o mais difícil */
+    assert(necroMin == maxBossMin && necroMax == maxBossMax);
+
+    /* 3. Capturas visuais de auditoria dos selos em 1280x720 e 800x450:
+       V/F, 3 opções de boss e selo final (incluindo ~, ~~, ∧, ∨ e pior caso de texto) */
+    const int res[2][2] = {{1280, 720}, {800, 450}};
+    for (int r = 0; r < 2; r++) {
+        SetWindowSize(res[r][0], res[r][1]);
+        Encounter vis = *e;
+        vis.presentation = (StagePresentation){0};
+        vis.phase = ENCOUNTER_SEAL;
+        vis.sealEnemy = 0;
+
+        /* V/F com ~, ~~, ∧ e ∨ */
+        vis.progress.map = 0;
+        enemies->list[0] = (Enemy){.type = ENEMY_SPECIAL, .state = ENEMY_FALLEN, .position = {640, 360}, .maxHealth = 100};
+        vis.sealQuestion.isBoss = false;
+        snprintf(vis.sealQuestion.vf.valuesText, sizeof(vis.sealQuestion.vf.valuesText), "P = V   Q = F   R = V");
+        snprintf(vis.sealQuestion.vf.exprText, sizeof(vis.sealQuestion.vf.exprText),
+                 "~(~~P " LOGIC_SYM_AND " (~Q " LOGIC_SYM_OR " R))");
+        char capPath[64];
+        snprintf(capPath, sizeof(capPath), "audit/seal_vf_symbols_%dx%d.png", res[r][0], res[r][1]);
+        Capture(capPath, &vis, enemies, map, (Vector2){640, 360});
+
+        /* Múltipla escolha de boss (3 opções) com ~, ~~, ∧, ∨ */
+        vis.progress.map = 0;
+        enemies->list[0] = (Enemy){.type = ENEMY_BOSS, .state = ENEMY_FALLEN, .position = {640, 360}, .maxHealth = 2200};
+        vis.sealQuestion.isBoss = true;
+        snprintf(vis.sealQuestion.mc.questionText, sizeof(vis.sealQuestion.mc.questionText),
+                 "~(~~P " LOGIC_SYM_AND " (Q " LOGIC_SYM_OR " ~R))");
+        snprintf(vis.sealQuestion.mc.choices[0], sizeof(vis.sealQuestion.mc.choices[0]),
+                 "~P " LOGIC_SYM_OR " (~Q " LOGIC_SYM_AND " R)");
+        snprintf(vis.sealQuestion.mc.choices[1], sizeof(vis.sealQuestion.mc.choices[1]),
+                 "~P " LOGIC_SYM_AND " (~Q " LOGIC_SYM_OR " R)");
+        snprintf(vis.sealQuestion.mc.choices[2], sizeof(vis.sealQuestion.mc.choices[2]),
+                 "~~P " LOGIC_SYM_OR " (~Q " LOGIC_SYM_AND " ~R)");
+        snprintf(capPath, sizeof(capPath), "audit/seal_boss_symbols_%dx%d.png", res[r][0], res[r][1]);
+        Capture(capPath, &vis, enemies, map, (Vector2){640, 360});
+
+        /* Selo final (Necromante) - pior caso de comprimento de texto */
+        vis.progress.map = NECROMANCER_MAP;
+        vis.progress.finalSealFailures = 1;
+        snprintf(vis.sealQuestion.mc.questionText, sizeof(vis.sealQuestion.mc.questionText),
+                 "~(P " LOGIC_SYM_AND " Q) " LOGIC_SYM_AND " ~(P " LOGIC_SYM_AND " ~Q) " LOGIC_SYM_AND " (Q " LOGIC_SYM_OR " R)");
+        snprintf(vis.sealQuestion.mc.choices[0], sizeof(vis.sealQuestion.mc.choices[0]),
+                 "~P " LOGIC_SYM_AND " (Q " LOGIC_SYM_OR " R)");
+        snprintf(vis.sealQuestion.mc.choices[1], sizeof(vis.sealQuestion.mc.choices[1]),
+                 "~P " LOGIC_SYM_OR " (Q " LOGIC_SYM_AND " ~R)");
+        snprintf(vis.sealQuestion.mc.choices[2], sizeof(vis.sealQuestion.mc.choices[2]),
+                 "(~P " LOGIC_SYM_AND " Q) " LOGIC_SYM_OR " (~P " LOGIC_SYM_AND " ~R)");
+        snprintf(capPath, sizeof(capPath), "audit/seal_final_symbols_%dx%d.png", res[r][0], res[r][1]);
+        Capture(capPath, &vis, enemies, map, (Vector2){640, 360});
+    }
+    for (int i = 0; i < ENEMY_COUNT; i++) enemies->list[i] = (Enemy){.state = ENEMY_GONE};
+    SetWindowSize(1280, 720);
+}
+
 int main(void) {
     SetTraceLogLevel(LOG_WARNING);
     SetConfigFlags(FLAG_WINDOW_HIDDEN);
@@ -653,6 +786,7 @@ int main(void) {
     assert(clearing.exit.width == 0);
     assert(InitEnemies(&enemies));
     Encounter encounter={0};
+    CheckSealDifficultyTableAndGlyphFallback(&encounter, &enemies, &clearing);
     Vector2 player={835,540};
     int health=100;
     BeginEncounter(&encounter,&enemies,&clearing,NewRunProgress(0),player);
@@ -710,7 +844,7 @@ int main(void) {
             Enemy *enemy=&enemies.list[i];
             assert(OpenEncounterSeal(&encounter,&enemies,enemy->position));
             assert(EncounterPaused(&encounter));
-            int correct=encounter.question==0 || encounter.question==3?0:1;
+            int correct=encounter.answer;
             if (wave==1) {
                 int old=enemy->maxHealth;
                 assert(AnswerEncounterSeal(&encounter,&enemies,&health,1-correct));
@@ -718,7 +852,7 @@ int main(void) {
                 DamageEnemy(enemy,enemy->health);
                 UpdateEnemies(&enemies,&clearing,player,.9f,true,&health,100);
                 assert(OpenEncounterSeal(&encounter,&enemies,enemy->position));
-                correct=encounter.question==0 || encounter.question==3?0:1;
+                correct=encounter.answer;
             }
             assert(AnswerEncounterSeal(&encounter,&enemies,&health,correct));
         }
@@ -935,7 +1069,7 @@ int main(void) {
         UpdateEnemies(&enemies,&clearing,player,.9f,true,&health,encounter.progress.maxHealth);
         for (int i=0;i<ENEMY_COUNT;i++) if (enemies.list[i].state==ENEMY_FALLEN) {
             assert(OpenEncounterSeal(&encounter,&enemies,enemies.list[i].position));
-            int correct=encounter.question==0 || encounter.question==3?0:1;
+            int correct=encounter.answer;
             assert(AnswerEncounterSeal(&encounter,&enemies,&health,correct));
         }
         UpdateEncounter(&encounter,&enemies,&clearing,player,&health);

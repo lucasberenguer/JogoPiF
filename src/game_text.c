@@ -1,11 +1,17 @@
 #include "game_text.h"
 #include <math.h>
+#include <stddef.h>
+#include <string.h>
+
+#define GAME_FONT_BASE_SIZE 64
+#define GAME_FONT_PADDING 4
+#define LOGIC_SYMBOLS_FONT_PATH "assets/fonts/LogicSymbols.ttf"
 
 static Font bodyFont;
 static Font titleFont;
 
-static Font LoadGameFont(const char *path) {
-    if (!FileExists(path)) return (Font){0};
+static Font LoadGameFont(const char *path, const char *donorSymbolsPath) {
+    if (!path || !FileExists(path)) return (Font){0};
     // ASCII, Latin-1 (incluindo acentos do português) e pontuação editorial.
     int codepoints[256];
     int count = 0;
@@ -14,15 +20,79 @@ static Font LoadGameFont(const char *path) {
     const int punctuation[] = {0x2013, 0x2014, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2026};
     for (unsigned int i = 0; i < sizeof(punctuation)/sizeof(*punctuation); i++)
         codepoints[count++] = punctuation[i];
-    Font font = LoadFontEx(path, 64, codepoints, count);
-    if (font.texture.id == GetFontDefault().texture.id) return (Font){0};
-    if (font.texture.id) SetTextureFilter(font.texture, TEXTURE_FILTER_BILINEAR);
+
+    int dataSize = 0;
+    unsigned char *fileData = LoadFileData(path, &dataSize);
+    if (!fileData) return (Font){0};
+
+    GlyphInfo *baseGlyphs = LoadFontData(fileData, dataSize, GAME_FONT_BASE_SIZE, codepoints, count, FONT_DEFAULT);
+    UnloadFileData(fileData);
+    if (!baseGlyphs) return (Font){0};
+
+    GlyphInfo *mergedGlyphs = baseGlyphs;
+    int totalCount = count;
+
+    if (donorSymbolsPath && donorSymbolsPath[0] && FileExists(donorSymbolsPath)) {
+        int donorSize = 0;
+        unsigned char *donorData = LoadFileData(donorSymbolsPath, &donorSize);
+        if (donorData) {
+            int logicCps[2] = {0x2227, 0x2228}; // ∧ e ∨
+            GlyphInfo *donorGlyphs = LoadFontData(donorData, donorSize, GAME_FONT_BASE_SIZE, logicCps, 2, FONT_DEFAULT);
+            UnloadFileData(donorData);
+            if (donorGlyphs) {
+                if (donorGlyphs[0].image.data != NULL && donorGlyphs[1].image.data != NULL) {
+                    GlyphInfo *combined = (GlyphInfo *)MemAlloc((unsigned int)(count + 2) * sizeof(GlyphInfo));
+                    if (combined) {
+                        memcpy(combined, baseGlyphs, (size_t)count * sizeof(GlyphInfo));
+                        combined[count] = donorGlyphs[0];
+                        combined[count + 1] = donorGlyphs[1];
+                        MemFree(baseGlyphs);
+                        MemFree(donorGlyphs);
+                        mergedGlyphs = combined;
+                        totalCount = count + 2;
+                    } else {
+                        UnloadFontData(donorGlyphs, 2);
+                    }
+                } else {
+                    UnloadFontData(donorGlyphs, 2);
+                }
+            }
+        }
+    }
+
+    Font font = {0};
+    font.baseSize = GAME_FONT_BASE_SIZE;
+    font.glyphCount = totalCount;
+    font.glyphPadding = GAME_FONT_PADDING;
+    font.glyphs = mergedGlyphs;
+
+    Image atlas = GenImageFontAtlas(font.glyphs, &font.recs, font.glyphCount, font.baseSize, font.glyphPadding, 0);
+    if (atlas.data) {
+        font.texture = LoadTextureFromImage(atlas);
+        for (int i = 0; i < font.glyphCount; i++) {
+            UnloadImage(font.glyphs[i].image);
+            font.glyphs[i].image = ImageFromImage(atlas, font.recs[i]);
+        }
+        UnloadImage(atlas);
+    }
+
+    if (!font.texture.id || font.texture.id == GetFontDefault().texture.id) {
+        UnloadFontData(font.glyphs, font.glyphCount);
+        if (font.recs) MemFree(font.recs);
+        return (Font){0};
+    }
+    SetTextureFilter(font.texture, TEXTURE_FILTER_BILINEAR);
     return font;
 }
 
+void LoadGameFontsWithSymbolsPath(const char *symbolsPath) {
+    UnloadGameFonts();
+    bodyFont = LoadGameFont("assets/fonts/CrimsonText-SemiBold.ttf", symbolsPath);
+    titleFont = LoadGameFont("assets/fonts/UnifrakturMaguntia-Book.ttf", NULL);
+}
+
 void LoadGameFonts(void) {
-    bodyFont = LoadGameFont("assets/fonts/CrimsonText-SemiBold.ttf");
-    titleFont = LoadGameFont("assets/fonts/UnifrakturMaguntia-Book.ttf");
+    LoadGameFontsWithSymbolsPath(LOGIC_SYMBOLS_FONT_PATH);
 }
 
 void UnloadGameFonts(void) {
@@ -30,6 +100,19 @@ void UnloadGameFonts(void) {
     if (titleFont.texture.id) UnloadFont(titleFont);
     bodyFont = (Font){0};
     titleFont = (Font){0};
+}
+
+bool GameTextHasGlyph(int codepoint) {
+    if (!bodyFont.texture.id || !bodyFont.glyphs || bodyFont.glyphCount <= 0)
+        return false;
+    for (int i = 0; i < bodyFont.glyphCount; i++) {
+        if (bodyFont.glyphs[i].value == codepoint &&
+            bodyFont.glyphs[i].image.data != NULL &&
+            bodyFont.recs && bodyFont.recs[i].width > 0 && bodyFont.recs[i].height > 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 static Font TextFont(bool title) {

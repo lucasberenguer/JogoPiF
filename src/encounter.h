@@ -3,8 +3,17 @@
 #include "enemy.h"
 #include "run_progress.h"
 #include "presentation.h"
+#include "logica.h"
 
 enum { ENCOUNTER_BOSS_HUD_HEIGHT = 58 };
+
+typedef struct EncounterSealDifficultyRow {
+    int map;
+    bool hasSpecialVF;
+    int specialMin, specialMax;
+    bool hasBossMC;
+    int bossMin, bossMax;
+} EncounterSealDifficultyRow;
 
 typedef enum EncounterPhase { ENCOUNTER_FIGHT, ENCOUNTER_REWARD, ENCOUNTER_SEAL,
                              ENCOUNTER_VILLAGE_CINEMATIC, ENCOUNTER_LETTER, ENCOUNTER_ANGEL_CINEMATIC, ENCOUNTER_CHAPEL_TEXT, ENCOUNTER_BASEMENT_PILLAR,
@@ -33,7 +42,8 @@ typedef struct Encounter {
     StagePresentation presentation;
     EncounterPhase phase;
     Reward rewards[3];
-    int rewardCount, sealEnemy, question, answer;
+    int rewardCount, sealEnemy, answer;
+    LogicSealQuestion sealQuestion;
     bool rerolled;
     bool villageHordeStarted;
     bool chapelPortalOpen;
@@ -81,5 +91,8 @@ bool ChooseEncounterReward(Encounter *encounter, EnemyGroup *enemies, const Clea
                            Vector2 player, int *health, int choice);
 bool OpenEncounterSeal(Encounter *encounter, const EnemyGroup *enemies, Vector2 player);
 bool AnswerEncounterSeal(Encounter *encounter, EnemyGroup *enemies, int *health, int choice);
+bool EncounterSealRange(int map, bool isBoss, int *outMin, int *outMax);
+int EncounterSealTableCount(void);
+const EncounterSealDifficultyRow *EncounterSealTableRow(int index);
 void DrawEncounter(const Encounter *encounter, const EnemyGroup *enemies);
 #endif

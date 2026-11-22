@@ -1,6 +1,6 @@
 # Jogo PIF — continuidade entre computadores e chats
 
-Atualizado em 20/11/2026. Leia junto do código e de `git status` antes de retomar.
+Atualizado em 22/11/2026. Leia junto do código e de `git status` antes de retomar.
 
 ## Retomada rápida
 
@@ -298,3 +298,16 @@ Na entrega do pós-boss de 18/11, build em `out/review` concluído e seis testes
     - Equalizados o brilho e a temperatura de cor do corpo/roupas do Coveiro (`R×1,168`, `G×1,215`, `B×1,099`, preservando os olhos e o arco violeta do golpe) para coincidir com a paleta de `assets/coveiro_walk_v4.png` e `assets/coveiro_throw_v4.png`.
     - Ajustada a escala de renderização do atlas `CEM_BOSS_MELEE` em `CemeteryDrawEnemies` (`src/cemetery_enemy.c`) de `190` para `220` (`220 * 0,754 ≈ 166 px` de altura corporal na tela, igualando os `190 * 0,875 ≈ 166 px` de `coveiro_walk_v4.png`), eliminando o encolhimento do chefe ao atacar de perto.
   - **Validação:** compilado e aprovado com 6/6 testes em `out/review` (`enemy_audit`, `map_connectivity`, `player_collision`, `clearing_encounter`, `guardian_cutscene`, `guardian_story_flow`) e verificada a captura `out/review/audit/cemetery_melee_poses_v4.png`.
+
+- **22/11 — Módulo de lógica proposicional dos selos (`src/logica.h`, `src/logica.c`, `tests/logica_test.c`, `src/game_text.h`, `src/game_text.c`, `src/encounter.h`, `src/encounter.c`, `tests/encounter_test.c`, `CMakeLists.txt`):**
+  - **Notação com símbolos lógicos:** os selos usam `~` (negação), `∧` (`U+2227`, conjunção) e `∨` (`U+2228`, disjunção), substituindo `"e"`, `"ou"` e `"não"` por extenso quando os glifos estão presentes na fonte do corpo. O estilo por extenso (`"não"`, `"e"`, `"ou"`) permanece como fallback automático caso `LogicSymbols.ttf` não esteja disponível, garantindo que nunca apareça `?` na tela.
+  - **Fonte de símbolos (`assets/fonts/LogicSymbols.ttf` e `src/game_text.c`):** `LoadGameFont` carrega os glifos `∧` e `∨` de `assets/fonts/LogicSymbols.ttf` no mesmo `baseSize` (`64`) da fonte do corpo (`CrimsonText-SemiBold.ttf`) via `LoadFontData`, junta ao array de glifos existentes e gera um único atlas com `GenImageFontAtlas`. Adicionada `GameTextHasGlyph(codepoint)` e `LoadGameFontsWithSymbolsPath(path)` para consulta e teste do fallback.
+  - **Módulo puro `src/logica.h` / `src/logica.c` (C99 puro, sem raylib, sem `malloc`, sem estado global):**
+    - AST em pool fixo (`LogicExpr`, `LOGIC_MAX_NODES = 32`), PRNG determinístico `xorshift32` (`LogicRng`), `LogicEval`, `LogicTruthMask` (8 linhas sobre `P, Q, R`), `LogicEquivalent`, `LogicParse` (descida recursiva com precedência `~ > ∧ > ∨`, aceitando `~`, `¬`, `∧`, `∨`, `"não"`/`"nao"`, `"e"`, `"ou"`, `~~` e parênteses) e `LogicFormat` nos estilos símbolos e por extenso.
+    - `LogicDifficultyScore(expr)` = nº de `∧`/`∨` + $\sum$ custo de cada `~` (`1` em variável, `2` em grupo ou outro `~`) + `(variáveis distintas - 1)`.
+    - Gerador V/F (`LogicGenerateVF`) balanceado por faixa `[min, max]` e gerador de múltipla escolha (`LogicGenerateMC`) com banco de 89 leis (`kLaws`, tipos `S` simplificação e `R` reescrita, $\ge 60\%$ `S`), instanciadas com permutação de `(P, Q, R)` e literais opcionalmente negados, mais 2 distratores por mutação comprovadamente não equivalentes à pergunta e distintos entre si e da correta (por máscara e texto), respeitando os limites de `<= 44` codepoints na pergunta e `<= 32` codepoints nas opções nos dois estilos.
+  - **Tabela única de dificuldade (`sealDifficultyTable` em `src/encounter.c`) e `EncounterSealRange(map, isBoss, &min, &max)`:**
+    - Mantém todas as linhas configuradas, inclusive as dormentes: Clareira (`0`: V/F `2–3` ativo, boss `4–5` ativo), Cemitério (`1`: V/F `3–4` dormente, boss `5–6` ativo), Chã da Tristeza (`2`: V/F `4–5` dormente, boss `6–7` dormente), Terra dos Ossos (`6`: V/F `5–6` dormente, boss `7–8` ativo), Campo dos Templários (`7`: V/F `5–6` dormente, boss `8–9` ativo) e Necromante (`8`: boss `10–12` ativo, gerando pergunta nova a cada uma das 3 tentativas). Mapas `3, 4, 5` sem linha usam fallback para a linha de ID menor mais próxima com aviso em log.
+    - Removidos `questions`, `bossQuestions` e `finalQuestions` fixos de `src/encounter.c`; `Encounter` agora guarda `LogicSealQuestion sealQuestion` por valor e `answer` guarda o slot correto (`0..1` no V/F, `0..2` no boss).
+  - **Validação:** compilado sem avisos com `-Wall -Wextra -Wshadow` e aprovado com **7/7 testes** no CTest em `out/review` (`logica`, `enemy_audit`, `map_connectivity`, `player_collision`, `clearing_encounter`, `guardian_cutscene`, `guardian_story_flow`). Verificadas visualmente as capturas em `1280×720` e `800×450` (`out/review/audit/seal_vf_symbols_*.png`, `seal_boss_symbols_*.png` e `seal_final_symbols_*.png`).
+  - **Pendências / próximos passos do grupo:** ativação futura dos selos dormentes (como Chã da Tristeza) pelo grupo — `EncounterSealRange` já está pronta e testada para responder assim que o selo for ligado.
