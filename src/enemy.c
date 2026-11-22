@@ -310,11 +310,17 @@ bool InitEnemies(EnemyGroup *group) {
         "assets/zumbi_lanterna_idle.png", "assets/zumbi_lanterna_walk.png",
         "assets/zumbi_lanterna_attack.png"
     };
+    const char *specialSheets[]={
+        "assets/cemiterio_especial_idle.png", "assets/cemiterio_especial_walk.png",
+        "assets/cemiterio_especial_attack.png"
+    };
     for (int i=0;i<3;i++) {
         group->cemeteryZombie[i]=LoadTexture(zombieSheets[i]);
         if (group->cemeteryZombie[i].id) SetTextureFilter(group->cemeteryZombie[i],TEXTURE_FILTER_POINT);
         group->cemeteryLantern[i]=LoadTexture(lanternSheets[i]);
         if (group->cemeteryLantern[i].id) SetTextureFilter(group->cemeteryLantern[i],TEXTURE_FILTER_POINT);
+        group->cemeterySpecial[i]=LoadTexture(specialSheets[i]);
+        if (group->cemeterySpecial[i].id) SetTextureFilter(group->cemeterySpecial[i],TEXTURE_FILTER_POINT);
     }
     group->coveiroWalk=LoadTexture("assets/coveiro_walk_v4.png");
     group->coveiroMelee=LoadTexture("assets/coveiro_melee_v4.png");
@@ -327,6 +333,7 @@ bool InitEnemies(EnemyGroup *group) {
     group->effects[2]=LoadTexture("assets/coveiro_efeito_investida.png");
     if (!group->cemeteryZombie[0].id || !group->cemeteryZombie[1].id || !group->cemeteryZombie[2].id ||
         !group->cemeteryLantern[0].id || !group->cemeteryLantern[1].id || !group->cemeteryLantern[2].id ||
+        !group->cemeterySpecial[0].id || !group->cemeterySpecial[1].id || !group->cemeterySpecial[2].id ||
         !group->coveiroWalk.id || !group->coveiroMelee.id || !group->cemeterySpell.id || !group->boss[0].id ||
         !group->boss[1].id || !group->boss[2].id || !group->effects[0].id ||
         !group->effects[1].id || !group->effects[2].id) {
@@ -466,6 +473,7 @@ void UnloadEnemies(EnemyGroup *group) {
     UnloadNecromancerSprites(group);
     for (int i=0;i<3;i++) if (group->cemeteryZombie[i].id) UnloadTexture(group->cemeteryZombie[i]);
     for (int i=0;i<3;i++) if (group->cemeteryLantern[i].id) UnloadTexture(group->cemeteryLantern[i]);
+    for (int i=0;i<3;i++) if (group->cemeterySpecial[i].id) UnloadTexture(group->cemeterySpecial[i]);
     if (group->coveiroWalk.id) UnloadTexture(group->coveiroWalk);
     if (group->coveiroMelee.id) UnloadTexture(group->coveiroMelee);
     if (group->cemeterySpell.id) UnloadTexture(group->cemeterySpell);
@@ -654,17 +662,14 @@ void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
         *enemy = (Enemy){.state = ENEMY_GONE};
         if (i >= total) continue;
         enemy->position = SpawnPosition(clearing, player);
-        if (i < specials)
-            enemy->type = clearing->cemetery ? ENEMY_COMMON_MELEE : ENEMY_SPECIAL;
-        else
-            enemy->type = i%3 == 0 ? ENEMY_COMMON_RANGED : ENEMY_COMMON_MELEE;
+        enemy->type = i < specials ? ENEMY_SPECIAL : i%3 == 0 ? ENEMY_COMMON_RANGED : ENEMY_COMMON_MELEE;
         float adjustment = 1.0f + fminf(.15f, fmaxf(0, playerPower - 1.0f) * .05f);
         enemy->maxHealth = (int)((enemy->type == ENEMY_SPECIAL ? 100 : 45) *
                                 (1.0f + (wave-1)*.12f) * adjustment);
         if (clearing->cemetery) enemy->maxHealth=(int)ceilf(enemy->maxHealth*1.10f);
         enemy->health = enemy->maxHealth;
         enemy->speed = ENEMY_SPEED * (1.0f + (wave-1)*.045f);
-        enemy->power = 1.0f + (wave-1)*.09f;
+        enemy->power = (1.0f + (wave-1)*.09f) * (clearing->cemetery ? 1.10f : 1.0f);
         enemy->state = ENEMY_SPAWNING;
         enemy->stateTime = -WaveSpawnDelay(wave, i);
         enemy->facing = i%2 ? 2 : 3;
@@ -808,7 +813,7 @@ static void FireRangedProjectile(EnemyGroup *group, const Enemy *enemy, Vector2 
         if (group->projectiles[i].remaining <= 0.0f) {
             group->projectiles[i] = (EnemyProjectile){origin, Vector2Normalize(toward),
                 group->cemetery ? CEMETERY_SPELL_LIFETIME : 1.5f,
-                (int)((group->cemetery ? 10 : ENEMY_ATTACK_DAMAGE)*EnemyAttackPower(group, enemy))};
+                (int)(ENEMY_ATTACK_DAMAGE*EnemyAttackPower(group, enemy))};
             return;
         }
     }
@@ -1155,6 +1160,10 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             CemeteryUpdateBoss(group, clearing, enemy, player, dt, playerDodging, playerHealth);
             continue;
         }
+        if (group->cemetery && enemy->type == ENEMY_SPECIAL) {
+            CemeteryUpdateSpecial(group, clearing, enemy, player, dt, playerDodging, playerHealth);
+            continue;
+        }
         if (enemy->templarRole == TEMPLAR_MARSHAL) {
             UpdateMarshal(group, clearing, enemy, player, dt, playerDodging, playerHealth);
             continue;
@@ -1337,7 +1346,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
     for (int i = 0; i < ENEMY_PROJECTILE_COUNT; i++) {
         EnemyProjectile *shot = &group->projectiles[i];
         if (shot->remaining <= 0.0f) continue;
-        float speed = group->cemetery ? 210 : group->boneland ? CULTIST_SHOT_SPEED : RANGED_SHOT_SPEED;
+        float speed = group->cemetery ? 273.0f : group->boneland ? CULTIST_SHOT_SPEED : RANGED_SHOT_SPEED;
         Vector2 movement = Vector2Scale(shot->direction, speed * dt);
         int steps = (int)(Vector2Length(movement) / 6.0f) + 1;
         Vector2 step = Vector2Scale(movement, 1.0f / steps);

@@ -1024,6 +1024,13 @@ int main(void) {
     enemies.impacts[0]=(EnemyImpact){.position={920,450},.remaining=.27f,.direction={1,0}};
     Capture("audit/cemetery_lantern_cast.png",&encounter,&enemies,&clearing,(Vector2){30,30});
     ClearEnemyAttacks(&enemies);
+    const EnemyState specialStates[]={ENEMY_IDLE, ENEMY_WALK, ENEMY_ATTACK, ENEMY_ATTACK};
+    for (int row=0;row<4;row++) for (int face=0;face<4;face++) {
+        enemies.list[row*4+face]=(Enemy){.position={430+face*250,290+row*155},
+            .type=ENEMY_SPECIAL,.state=specialStates[row],.facing=face,.walkTime=.3f,
+            .stateTime=row==3?CEM_SPECIAL_IMPACT_TIME:.35f,.health=110,.maxHealth=110};
+    }
+    Capture("audit/cemetery_special_directions.png",&encounter,&enemies,&clearing,(Vector2){30,30});
     for(int i=0;i<ENEMY_COUNT;i++) enemies.list[i]=(Enemy){.state=ENEMY_GONE};
     for(int attack=0;attack<3;attack++) for(int beat=0;beat<4;beat++) {
         enemies.list[attack*4+beat]=(Enemy){.position={380+beat*270,300+attack*185},
@@ -1067,8 +1074,10 @@ int main(void) {
             DamageEnemy(enemy,enemy->health);
         }
         UpdateEnemies(&enemies,&clearing,player,.9f,true,&health,encounter.progress.maxHealth);
+        assert(enemies.list[0].type==ENEMY_SPECIAL && enemies.list[0].state==ENEMY_FALLEN);
         for (int i=0;i<ENEMY_COUNT;i++) if (enemies.list[i].state==ENEMY_FALLEN) {
             assert(OpenEncounterSeal(&encounter,&enemies,enemies.list[i].position));
+            assert(encounter.sealQuestion.score>=3 && encounter.sealQuestion.score<=4);
             int correct=encounter.answer;
             assert(AnswerEncounterSeal(&encounter,&enemies,&health,correct));
         }

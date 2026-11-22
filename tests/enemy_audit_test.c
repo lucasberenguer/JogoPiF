@@ -326,11 +326,11 @@ int main(void) {
         .type=ENEMY_COMMON_RANGED,.state=ENEMY_ATTACK,.stateTime=.54f,
         .power=2,.attackDirection={1,0},.health=60,.maxHealth=60};
     UpdateEnemies(&group,&map,target,.02f,false,&health,100);
-    assert(group.projectiles[0].remaining>0 && group.projectiles[0].damage==20);
+    assert(group.projectiles[0].remaining>0 && group.projectiles[0].damage==24);
     group.projectiles[0].position=(Vector2){target.x,target.y-35};
     group.playerHitCooldown=0;health=100;
     UpdateEnemies(&group,&map,target,.01f,false,&health,100);
-    assert(health==80);
+    assert(health==76);
     for (int i=0;i<ENEMY_COUNT;i++) group.list[i]=(Enemy){.state=ENEMY_GONE};
     group.list[0]=(Enemy){.position={500,400},
         .type=ENEMY_COMMON_MELEE,.state=ENEMY_IDLE,.speed=20,.power=1,
@@ -411,6 +411,20 @@ int main(void) {
         poseEnemy.stateTime=.9f;
         assert(CemeteryAnimationPose(&poseEnemy).frame==5);
     }
+    poseEnemy.type=ENEMY_SPECIAL;
+    for (int facing=0;facing<4;facing++) {
+        poseEnemy.facing=facing;
+        poseEnemy.state=ENEMY_IDLE;
+        CemeteryPose idle=CemeteryAnimationPose(&poseEnemy);
+        assert(idle.atlas==CEM_SPECIAL_IDLE && idle.columns==4 && idle.row==zombieRows[facing] && !idle.flip);
+        poseEnemy.state=ENEMY_WALK;
+        CemeteryPose walk=CemeteryAnimationPose(&poseEnemy);
+        assert(walk.atlas==CEM_SPECIAL_WALK && walk.columns==6 && walk.row==zombieRows[facing] && !walk.flip);
+        poseEnemy.state=ENEMY_ATTACK;
+        poseEnemy.stateTime=CEM_SPECIAL_IMPACT_TIME;
+        CemeteryPose impact=CemeteryAnimationPose(&poseEnemy);
+        assert(impact.atlas==CEM_SPECIAL_ATTACK && impact.frame==3 && impact.row==zombieRows[facing] && !impact.flip);
+    }
     poseEnemy.type=ENEMY_BOSS;poseEnemy.state=ENEMY_ATTACK;
     for(int attack=0;attack<3;attack++) for(int face=0;face<4;face++) for(int f=0;f<220;f++) {
         poseEnemy.bossAttack=attack;poseEnemy.facing=face;poseEnemy.stateTime=f*.01f;
@@ -424,22 +438,46 @@ int main(void) {
     for(int i=0;i<ENEMY_COUNT;i++) normalHealth[i]=group.list[i].maxHealth;
     SetRandomSeed(321);StartEnemyWave(&group,&map,1,target,1);
     for (int i=0;i<ENEMY_COUNT;i++) if (normalHealth[i]) {
-        int baseHealth=normalHealth[i]==100?45:normalHealth[i];
-        assert(group.list[i].maxHealth==(int)ceilf(baseHealth*1.10f));
+        assert(group.list[i].maxHealth==(int)ceilf(normalHealth[i]*1.10f));
+        assert(fabsf(group.list[i].power-1.10f)<.001f);
     }
     for (int wave=1;wave<=4;wave++) {
         StartEnemyWave(&group,&map,wave,target,1);
-        int melee=0, ranged=0;
+        int melee=0, ranged=0, specials=0;
         for (int i=0;i<ENEMY_COUNT;i++) {
             if (group.list[i].state==ENEMY_GONE) continue;
             if (group.list[i].type==ENEMY_COMMON_MELEE) melee++;
             if (group.list[i].type==ENEMY_COMMON_RANGED) ranged++;
+            if (group.list[i].type==ENEMY_SPECIAL) specials++;
         }
-        assert(melee>0 && ranged>0 && melee+ranged==7+(wave-1)*4);
+        assert(melee>0 && ranged>0 && specials>=1+(wave-1)/2);
+        assert(melee+ranged+specials==7+(wave-1)*4);
     }
     StartArenaBoss(&group,&map,target,1);assert(group.list[0].maxHealth==2420);
     for (int i=0;i<ENEMY_COUNT;i++) group.list[i]=(Enemy){.state=ENEMY_GONE};
     ClearEnemyAttacks(&group);
+    Enemy *special=&group.list[0];
+    for (int scenario=0;scenario<3;scenario++) {
+        *special=(Enemy){.position={target.x-50,target.y},.type=ENEMY_SPECIAL,.state=ENEMY_IDLE,
+            .health=110,.maxHealth=110,.power=1};
+        group.playerHitCooldown=0;
+        health=100;
+        UpdateEnemies(&group,&map,target,.01f,false,&health,100);
+        assert(special->state==ENEMY_ATTACK && special->facing==3);
+        UpdateEnemies(&group,&map,target,CEM_SPECIAL_IMPACT_TIME-.01f,false,&health,100);
+        assert(health==100 && !special->attackConnected && CemeteryAnimationPose(special).frame==2);
+        Vector2 impactTarget=scenario==2?(Vector2){target.x+100,target.y}:target;
+        UpdateEnemies(&group,&map,impactTarget,.02f,scenario==1,&health,100);
+        assert(health==(scenario==0?82:100) && special->attackConnected);
+        assert(CemeteryAnimationPose(special).frame==3);
+        group.playerHitCooldown=0;
+        UpdateEnemies(&group,&map,target,.10f,false,&health,100);
+        assert(health==(scenario==0?82:100));
+    }
+    DamageEnemy(special,special->health);
+    UpdateEnemies(&group,&map,target,.9f,false,&health,100);
+    assert(special->state==ENEMY_FALLEN && EnemiesRemaining(&group)==1);
+    *special=(Enemy){.state=ENEMY_GONE};
     Enemy *lantern=&group.list[0];
     *lantern=(Enemy){.position={target.x-120,target.y},.type=ENEMY_COMMON_RANGED,
         .state=ENEMY_ATTACK,.health=50,.maxHealth=50,.power=1,.facing=3,
