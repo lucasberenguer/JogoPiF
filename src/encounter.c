@@ -9,9 +9,8 @@
 #define COMMON_HEALTH_BONUS 20
 #define COMMON_SPEED_BONUS 15.0f
 #define EPIC_STATUS_DAMAGE_BONUS 0.25f
-#define EPIC_STATUS_SPEED_BONUS 60.0f
-#define EPIC_STATUS_MIN_TENS 3
-#define EPIC_STATUS_MAX_TENS 6
+#define EPIC_STATUS_SPEED_BONUS 51.0f
+#define EPIC_STATUS_HEALTH_BONUS 50
 #define EPIC_FULL_HEAL_MAX_HP_BONUS 50
 #define RARITY_WEIGHT_COMMON 70
 #define RARITY_WEIGHT_RARE 25
@@ -353,7 +352,7 @@ static Reward MakeReward(const Encounter *e, int rarity, int kind) {
         r.bonus[0] = first;
         r.bonus[1] = second;
     } else if (kind == REWARD_EPIC_STATUS) {
-        r.amount = GetRandomValue(EPIC_STATUS_MIN_TENS, EPIC_STATUS_MAX_TENS) * 10;
+        r.amount = EPIC_STATUS_HEALTH_BONUS;
     }
     return r;
 }
@@ -481,7 +480,7 @@ static void ApplyReward(Encounter *e, Reward reward, int *health) {
             e->progress.epicDamageStacks++;
             break;
         case REWARD_EPIC_STATUS: {
-            int added = reward.amount > 0 ? reward.amount : EPIC_STATUS_MIN_TENS * 10;
+            int added = reward.amount > 0 ? reward.amount : EPIC_STATUS_HEALTH_BONUS;
             e->progress.maxHealth += added;
             *health += added;
             e->progress.damage += EPIC_STATUS_DAMAGE_BONUS;
@@ -853,7 +852,7 @@ static const char *RewardText(const Encounter *e, Reward reward) {
                               WeaponTitle(e->progress.weapon), before, after);
         }
         case REWARD_EPIC_STATUS:
-            return TextFormat("Status\nVida +%d / dano +25%%\nVelocidade +25%%", reward.amount);
+            return "Status\nVida +50 / dano +25%\nVelocidade +25%";
         case REWARD_EPIC_FULL_HEAL:
             return "Vida plena\nCura toda a vida\nVida máxima +50";
         default:

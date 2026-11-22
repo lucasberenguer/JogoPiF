@@ -105,7 +105,7 @@ static void CheckLegacyCheckpoints(void) {
         assert(LoadClearingCheckpoint(&restored) && restored.guardianAftermath==state);
     }
     /* Fase 1: Migração PIF-RUN-7 -> PIF-RUN-8, nível único, strongWeapon -> epicDamageStacks, EncounterDamage e WeaponBaseDamage */
-    assert(WeaponBaseDamage(0) == 5 && WeaponBaseDamage(1) == 12 && WeaponBaseDamage(2) == 20);
+    assert(WeaponBaseDamage(0) == 5 && WeaponBaseDamage(1) == 12 && WeaponBaseDamage(2) == 17);
     assert(SaveFileText(path, "PIF-RUN-7 1 3 80 120 1.3 255 1 1 4 2 1 1 0 4\n"));
     RunProgress mig7 = {0};
     assert(LoadClearingCheckpoint(&mig7));
@@ -256,7 +256,7 @@ static void CheckLegacyCheckpoints(void) {
             } else if (rw.rarity == RARITY_EPIC) {
                 assert(rw.kind >= REWARD_WEAPON_UPGRADE && rw.kind <= REWARD_EPIC_FULL_HEAL);
                 if (rw.kind == REWARD_EPIC_STATUS) {
-                    assert(rw.amount >= 30 && rw.amount <= 60 && (rw.amount % 10) == 0);
+                    assert(rw.amount == 50);
                 }
             }
         }
@@ -366,7 +366,7 @@ static void CheckLegacyCheckpoints(void) {
     rTest.rewardCount = 1;
     rTest.rewards[0] = (Reward){.kind = REWARD_SPEED, .rarity = RARITY_COMMON};
     assert(ChooseEncounterReward(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth, 0));
-    assert(fabsf(rTest.progress.speed - 255.0f) < 0.0001f);
+    assert(fabsf(rTest.progress.speed - 219.0f) < 0.0001f);
     /* Raro: troca de arma mantendo o nível e concedendo 2 buffs comuns distintos */
     SetRunWeaponLevel(&rTest.progress, 3);
     rTest.progress.stage = 1;
@@ -376,7 +376,7 @@ static void CheckLegacyCheckpoints(void) {
                                 .bonus = {REWARD_DAMAGE, REWARD_SPEED}};
     assert(ChooseEncounterReward(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth, 0));
     assert(rTest.progress.weapon == 2 && rTest.progress.initialWeapon == 0 && rTest.progress.weaponLevel[2] == 3);
-    assert(fabsf(rTest.progress.damage - 1.30f) < 0.0001f && fabsf(rTest.progress.speed - 270.0f) < 0.0001f);
+    assert(fabsf(rTest.progress.damage - 1.30f) < 0.0001f && fabsf(rTest.progress.speed - 234.0f) < 0.0001f);
     assert(rTest.notice[0] == 0); /* Bônus surpresa antigo removido */
     /* Persistência de initialWeapon no save e reset completo ao morrer/repetir (NewRunProgress(initialWeapon)) */
     rTest.practice = false;
@@ -388,7 +388,7 @@ static void CheckLegacyCheckpoints(void) {
     assert(resetAfterDeath.weapon == 0 && resetAfterDeath.initialWeapon == 0);
     assert(resetAfterDeath.stage == 1 && resetAfterDeath.map == 0);
     assert(resetAfterDeath.health == 100 && resetAfterDeath.maxHealth == 100);
-    assert(fabsf(resetAfterDeath.damage - 1.0f) < 0.0001f && fabsf(resetAfterDeath.speed - 240.0f) < 0.0001f);
+    assert(fabsf(resetAfterDeath.damage - 1.0f) < 0.0001f && fabsf(resetAfterDeath.speed - 204.0f) < 0.0001f);
     assert(resetAfterDeath.epicDamageStacks == 0 && resetAfterDeath.angelBlessingUses == 0);
     assert(resetAfterDeath.weaponLevel[0] == 0 && resetAfterDeath.weaponLevel[1] == 0 && resetAfterDeath.weaponLevel[2] == 0);
     rTest.practice = true;
@@ -406,15 +406,15 @@ static void CheckLegacyCheckpoints(void) {
     rTest.rewards[0] = (Reward){.kind = REWARD_EPIC_DAMAGE, .rarity = RARITY_EPIC, .weapon = 2};
     assert(ChooseEncounterReward(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth, 0));
     assert(rTest.progress.epicDamageStacks == 1);
-    /* Épico (c): status (+30..60 vida máx e cura, +0.25 dano, +60 velocidade [+25% da base 240]) */
+    /* Épico (c): status (+50 vida máx e cura, +0.25 dano, +51 velocidade [+25% da base 204]) */
     rHealth = 50;
     rTest.progress.stage = 1;
     rTest.phase = ENCOUNTER_REWARD;
     rTest.rewardCount = 1;
-    rTest.rewards[0] = (Reward){.kind = REWARD_EPIC_STATUS, .rarity = RARITY_EPIC, .amount = 40};
+    rTest.rewards[0] = (Reward){.kind = REWARD_EPIC_STATUS, .rarity = RARITY_EPIC, .amount = 50};
     assert(ChooseEncounterReward(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth, 0));
-    assert(rTest.progress.maxHealth == 160 && rHealth == 90);
-    assert(fabsf(rTest.progress.damage - 1.55f) < 0.0001f && fabsf(rTest.progress.speed - 330.0f) < 0.0001f);
+    assert(rTest.progress.maxHealth == 170 && rHealth == 100);
+    assert(fabsf(rTest.progress.damage - 1.55f) < 0.0001f && fabsf(rTest.progress.speed - 285.0f) < 0.0001f);
     /* Épico (d): vida plena (+50 de vida máxima e cura toda a vida) */
     rHealth = 35;
     rTest.progress.stage = 1;
@@ -422,11 +422,11 @@ static void CheckLegacyCheckpoints(void) {
     rTest.rewardCount = 1;
     rTest.rewards[0] = (Reward){.kind = REWARD_EPIC_FULL_HEAL, .rarity = RARITY_EPIC};
     assert(ChooseEncounterReward(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth, 0));
-    assert(rTest.progress.maxHealth == 210 && rHealth == 210);
+    assert(rTest.progress.maxHealth == 220 && rHealth == 220);
 
     /* Fase 4: Renderização visual das 3 raridades (comum, raro com 2 buffs, épico de +50% antes->depois) e reroll ativo/desativado */
     rTest = (Encounter){.progress = NewRunProgress(2), .phase = ENCOUNTER_REWARD, .rewardCount = 3, .sealEnemy = -1};
-    SetRunWeaponLevel(&rTest.progress, 1); /* N1: mult = 1.2 => ceil(20 * 1.2) = 24; após +50% => mult = 1.7 => ceil(20 * 1.7) = 34 */
+    SetRunWeaponLevel(&rTest.progress, 1); /* N1: mult = 1.2 => ceil(17 * 1.2) = 21; após +50% => mult = 1.7 => ceil(17 * 1.7) = 29 */
     rTest.progress.stage = 2;
     rTest.rewards[0] = (Reward){.kind = REWARD_DAMAGE, .rarity = RARITY_COMMON};
     rTest.rewards[1] = (Reward){.kind = REWARD_SWAP, .rarity = RARITY_RARE, .weapon = 1, .bonus = {REWARD_HEALTH, REWARD_SPEED}};

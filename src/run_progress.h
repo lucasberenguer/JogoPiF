@@ -47,12 +47,12 @@ static inline void SetRunWeaponLevel(RunProgress *p, int level) {
 }
 
 static inline int WeaponBaseDamage(int weapon) {
-    static const int baseDamages[3] = {5, 12, 20};
+    static const int baseDamages[3] = {5, 12, 17};
     return (weapon >= 0 && weapon < 3) ? baseDamages[weapon] : 0;
 }
 
 static inline RunProgress NewRunProgress(int weapon) {
     return (RunProgress){.weapon=weapon, .initialWeapon=weapon, .stage=1, .health=100, .maxHealth=100,
-        .damage=1, .speed=240, .bossPower=1, .strongWeapon=-1, .epicDamageStacks=0};
+        .damage=1, .speed=204, .bossPower=1, .strongWeapon=-1, .epicDamageStacks=0};
 }
 #endif

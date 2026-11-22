@@ -224,7 +224,7 @@ int main(void) {
     Vector2 player = clearing.spawn;
     int playerHealth = 100;
     int playerMaxHealth = 100;
-    float playerSpeed = 240.0f;
+    float playerSpeed = 204.0f;
     const float dodgeSpeed = 460.0f;
     const float dodgeDuration = 0.36f;
     const float dodgeRecovery = 5.0f;
