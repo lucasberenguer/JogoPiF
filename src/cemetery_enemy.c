@@ -254,8 +254,9 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
         Texture2D tex=atlases[pose.atlas];
         int frame=pose.frame,row=pose.row;
         float cw=(float)tex.width/pose.columns,ch=(float)tex.height/pose.rows;
-        float height=(boss?190:96)*(1.0f-.22f*collapse);
-        float width=(boss?190:96)*cw/ch;
+        float baseSize=boss?(pose.atlas==CEM_BOSS_MELEE?220:190):96;
+        float height=baseSize*(1.0f-.22f*collapse);
+        float width=baseSize*cw/ch;
         float bob=0;
         float lean=0;
         if(boss && !fallen && enemy->state!=ENEMY_DIE) {
