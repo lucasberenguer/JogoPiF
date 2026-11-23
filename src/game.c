@@ -57,13 +57,13 @@ static Vector2 RotateVector2(Vector2 dir, float radians) {
 }
 
 #define KATANA_BASE_RANGE 105.0f
-#define KATANA_L2_RANGE 123.0f
+#define KATANA_L1_RANGE 123.0f
 #define KATANA_BASE_RECOVERY 0.45f
-#define KATANA_L2_RECOVERY 0.40f
+#define KATANA_L1_RECOVERY 0.40f
 #define KATANA_BASE_ARC_DOT 0.4462f
 #define KATANA_L3_ARC_DOT 0.3007f
 #define KATANA_L3_KNOCKBACK 42.0f
-#define KATANA_L1_DODGE_REDUCTION 0.8f
+#define KATANA_L2_DODGE_REDUCTION 0.8f
 #define KATANA_MAX_SHOCKWAVES 12
 #define KATANA_SHOCKWAVE_COOLDOWN 2.5f
 #define KATANA_L5_SHOCKWAVE_COOLDOWN 1.8f
@@ -1031,10 +1031,10 @@ int main(void) {
         }
         int weaponLevel = (currentWeapon >= 0 && currentWeapon < 3)
             ? encounter.progress.weaponLevel[currentWeapon] : 0;
-        float katanaAttackRange = (currentWeapon == WEAPON_KATANA && weaponLevel >= 2)
-            ? KATANA_L2_RANGE : KATANA_BASE_RANGE;
-        float katanaAttackRecovery = (currentWeapon == WEAPON_KATANA && weaponLevel >= 2)
-            ? KATANA_L2_RECOVERY : KATANA_BASE_RECOVERY;
+        float katanaAttackRange = (currentWeapon == WEAPON_KATANA && weaponLevel >= 1)
+            ? KATANA_L1_RANGE : KATANA_BASE_RANGE;
+        float katanaAttackRecovery = (currentWeapon == WEAPON_KATANA && weaponLevel >= 1)
+            ? KATANA_L1_RECOVERY : KATANA_BASE_RECOVERY;
         float katanaArcDot = (currentWeapon == WEAPON_KATANA && weaponLevel >= 3)
             ? KATANA_L3_ARC_DOT : KATANA_BASE_ARC_DOT;
 
@@ -1223,8 +1223,8 @@ int main(void) {
                             MapHasClearPath(&clearing,player,enemy->position)) {
                             DamageEnemyFrom(enemy, (int)ceilf(WeaponBaseDamage(WEAPON_KATANA)*EncounterDamage(&encounter)), player);
                             enemy->lastKatanaSwing = katanaAttackId;
-                            if (weaponLevel >= 1 && !katanaDashReducedThisSwing) {
-                                dodgeCooldown = fmaxf(0.0f, dodgeCooldown - KATANA_L1_DODGE_REDUCTION);
+                            if (weaponLevel >= 2 && !katanaDashReducedThisSwing) {
+                                dodgeCooldown = fmaxf(0.0f, dodgeCooldown - KATANA_L2_DODGE_REDUCTION);
                                 katanaDashReducedThisSwing = true;
                             }
                             if (weaponLevel >= 3) {

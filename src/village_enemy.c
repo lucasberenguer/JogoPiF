@@ -1,4 +1,5 @@
 #include "enemy.h"
+#include "game_text.h"
 #include "raymath.h"
 #include <math.h>
 #include <stddef.h>
@@ -32,7 +33,7 @@ static void SpawnNecroticVillager(Enemy *enemy, const Clearing *clearing,
     bool brute = (spawnIndex+1) % (VILLAGE_COMMON_PER_BRUTE+1) == 0;
     int health = brute ? VILLAGE_BRUTE_HEALTH : VILLAGE_ZOMBIE_HEALTH;
     *enemy = (Enemy){
-        .type = ENEMY_COMMON_MELEE,
+        .type = brute ? ENEMY_SPECIAL : ENEMY_COMMON_MELEE,
         .state = ENEMY_SPAWNING,
         .position = VillageHordeSpot(clearing, player),
         .health = health,
@@ -352,11 +353,14 @@ static void DrawVillageBrute(const EnemyGroup *group,const Enemy *brute) {
     }
     float w=texture.width/6.0f, h=texture.height/4.0f;
     float alpha=brute->state==ENEMY_DIE ? Clamp(1-t/.45f,0,1) :
+                brute->state==ENEMY_FALLEN ? 0.75f :
                 brute->state==ENEMY_SPAWNING ? Clamp(t/VILLAGE_ZOMBIE_EMERGE_TIME,0,1) : 1;
     const float height=128, width=height*w/h, feetAnchor=height*(246.0f/256.0f);
     DrawTexturePro(texture,(Rectangle){frame*w,rows[brute->facing]*h,w,h},
                    (Rectangle){brute->position.x,brute->position.y,width,height},
                    (Vector2){width*.5f,feetAnchor},0,Fade(brute->state==ENEMY_HURT ? PINK : WHITE,alpha));
+    if (brute->state==ENEMY_FALLEN)
+        DrawGameText("E: selar",(int)brute->position.x-30,(int)brute->position.y+10,16,GOLD);
     DrawEnemyHealthBar(brute,brute->position.y-feetAnchor-3);
 }
 
