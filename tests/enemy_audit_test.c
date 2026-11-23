@@ -29,6 +29,34 @@ static void CheckCoveiroWalk(void) {
     }
 }
 
+static void CheckCoveiroChoices(void) {
+    Clearing map = {.cemetery=true,.background={.width=1600,.height=1200},
+                    .playableBounds={0,0,1600,1200}};
+    EnemyGroup group={0};
+    Enemy *boss=&group.list[0];
+    Vector2 player={800,600};
+    int health=100;
+    const struct {float distance; int previous, expected;} cases[] = {
+        {350,COVEIRO_ROOTS,COVEIRO_CHARGE},
+        {220,COVEIRO_SHOVEL,COVEIRO_ROOTS},
+        {220,COVEIRO_ROOTS,COVEIRO_SHOVEL},
+        {145,COVEIRO_ROOTS,COVEIRO_SHOVEL},
+    };
+    for (unsigned i=0;i<sizeof(cases)/sizeof(cases[0]);i++) {
+        *boss=(Enemy){.type=ENEMY_BOSS,.state=ENEMY_IDLE,
+            .position={player.x-cases[i].distance,player.y},.speed=160,
+            .health=100,.maxHealth=100,.power=1,.bossAttack=cases[i].previous};
+        CemeteryUpdateBoss(&group,&map,boss,player,.01f,false,&health);
+        assert(boss->state==ENEMY_ATTACK && boss->bossAttack==cases[i].expected);
+    }
+    map.obstacles[0]=(Rectangle){610,570,40,60};
+    map.obstacleCount=1;
+    *boss=(Enemy){.type=ENEMY_BOSS,.state=ENEMY_IDLE,.position={450,600},
+        .speed=160,.health=100,.maxHealth=100,.power=1,.bossAttack=COVEIRO_SHOVEL};
+    CemeteryUpdateBoss(&group,&map,boss,player,.01f,false,&health);
+    assert(boss->state==ENEMY_ATTACK && boss->bossAttack==COVEIRO_ROOTS);
+}
+
 static void CheckBonelandWaves(void) {
     Clearing map = {.boneland = true, .background = {.width = 1672, .height = 941},
                     .playableBounds = {0, 0, 1672, 941}, .spawn = {835, 840}};
@@ -213,6 +241,24 @@ static void CheckGuardianMelee(Clearing *map, EnemyGroup *group) {
         UpdateEnemies(group, map, player, .2f, false, &health, 100);
         assert(health == (scenario == 0 ? 74 : 100));
     }
+}
+
+static void CheckGuardianDodge(Clearing *map, EnemyGroup *group) {
+    Vector2 player={500,400};
+    int health=100;
+    StartArenaBoss(group,map,player,1);
+    Enemy *boss=&group->list[0];
+    boss->position=(Vector2){340,400};
+    boss->state=ENEMY_IDLE;
+    boss->attackCooldown=1;
+    boss->guardianMeleeCooldown=1;
+    UpdateEnemies(group,map,player,.01f,false,&health,100);
+    assert(boss->guardianDodgeTime>0 && boss->guardianDodgeCooldown>3);
+    UpdateEnemies(group,map,player,.05f,false,&health,100);
+    assert(fabsf(boss->position.y-400)>1 && health==100);
+    boss->attackCooldown=0;
+    UpdateEnemies(group,map,player,.01f,false,&health,100);
+    assert(boss->state==ENEMY_ATTACK && boss->guardianDodgeTime==0);
 }
 
 static void CheckTemplarBalance(void) {
@@ -404,6 +450,7 @@ static void CheckNecromancerPressure(void) {
 
 int main(void) {
     CheckCoveiroWalk();
+    CheckCoveiroChoices();
     CheckNecromancerPressure();
     CheckTemplarBalance();
     const int expected[] = {20, 25, 45, 65, 100};
@@ -449,6 +496,7 @@ int main(void) {
     assert(EnemiesRemaining(&group)==10); /* Clareira, onda 1 */
     CheckGuardianAttacks(&map, &group);
     CheckGuardianMelee(&map, &group);
+    CheckGuardianDodge(&map, &group);
     for (int i=0;i<ENEMY_COUNT;i++) group.list[i]=(Enemy){.state=ENEMY_GONE};
     Enemy *melee = &group.list[0];
     *melee = (Enemy){.type=ENEMY_COMMON_MELEE,.state=ENEMY_IDLE,

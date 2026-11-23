@@ -920,6 +920,63 @@ void MoveEnemy(const Clearing *clearing, Enemy *enemy, Vector2 delta) {
     MoveMapActor(clearing, &enemy->position, delta);
 }
 
+/* Escolhe um passo que avança até o objetivo sem ocupar o espaço dos aliados. */
+static bool MoveEnemyTactically(const EnemyGroup *group, const Clearing *map,
+                                Enemy *enemy, Vector2 goal, float distance) {
+    if (distance <= 0) return false;
+    Vector2 origin = enemy->position;
+    Vector2 toward = Vector2Subtract(goal, origin);
+    float length = Vector2Length(toward);
+    if (length < .001f) return false;
+    toward = Vector2Scale(toward, 1.0f/length);
+    int index = (int)(enemy-group->list);
+    float spacing = enemy->type == ENEMY_COMMON_RANGED ? 58.0f : 34.0f;
+    Vector2 best = {0};
+    float bestScore = -1e9f;
+    static const float angles[] = {0, 30, -30, 60, -60, 90, -90, 120, -120, 180};
+    for (int k=0; k<(int)(sizeof(angles)/sizeof(angles[0])); k++) {
+        float angle = angles[k] * (index%2 ? 1.0f : -1.0f) * DEG2RAD;
+        Vector2 step = Vector2Scale(Vector2Rotate(toward, angle), distance);
+        Vector2 next = Vector2Add(origin, step);
+        if (IsMapActorBlocked(map,next)) continue;
+        float score = Vector2DotProduct(step,toward) * 1.3f;
+        for (int j=0; j<ENEMY_COUNT; j++) {
+            const Enemy *other = &group->list[j];
+            if (j==index || other->state==ENEMY_GONE || other->state==ENEMY_FALLEN ||
+                other->state==ENEMY_DIE || other->state==ENEMY_SPAWNING) continue;
+            float gap = Vector2Distance(next,other->position);
+            if (gap < spacing) score -= (spacing-gap)*2.2f;
+        }
+        if (score > bestScore) { bestScore=score; best=step; }
+    }
+    if (bestScore < -1e8f) return false;
+    MoveEnemy(map,enemy,best);
+    return Vector2DistanceSqr(origin,enemy->position) > .01f;
+}
+
+static bool MoveRangedTactically(const EnemyGroup *group, const Clearing *map,
+                                 Enemy *enemy, Vector2 player, float maxDistance, float dt) {
+    Vector2 away = Vector2Subtract(enemy->position,player);
+    float distance = Vector2Length(away);
+    if (distance < .001f) away=(Vector2){1,0},distance=1;
+    away=Vector2Scale(away,1/distance);
+    float preferred = fminf(235.0f,maxDistance-35.0f);
+    bool clear = MapHasClearPath(map,enemy->position,player);
+    Vector2 goal;
+    if (distance < RANGED_MIN_DISTANCE+18.0f) {
+        goal=Vector2Add(enemy->position,Vector2Scale(away,100));
+    } else if (distance > preferred+25.0f) {
+        goal=player;
+    } else if (!clear) {
+        Vector2 side={-away.y,away.x};
+        if ((enemy-group->list)%2) side=Vector2Negate(side);
+        goal=Vector2Add(enemy->position,Vector2Scale(side,90));
+    } else {
+        return false;
+    }
+    return MoveEnemyTactically(group,map,enemy,goal,enemy->speed*dt);
+}
+
 void KnockbackEnemy(Enemy *enemy, const Clearing *clearing,
                     Vector2 source, float distance) {
     if (!EnemyCanBeHit(enemy)) return;
@@ -984,7 +1041,7 @@ static void PlaceGuardianRoot(EnemyGroup *group, Vector2 position, GuardianAttac
 
 static void StartGuardianCast(EnemyGroup *group, const Clearing *clearing,
                               Enemy *enemy, Vector2 player) {
-    enemy->attackCooldown = GuardianEnraged(enemy) ? 1.95f : 3.0f;
+    enemy->attackCooldown = GuardianEnraged(enemy) ? 1.55f : 2.25f;
     enemy->bossAttack = (enemy->bossAttack + 1) % GUARDIAN_ATTACK_COUNT;
     if (enemy->bossAttack == GUARDIAN_ROOTS) {
         Vector2 flank = Vector2Scale(Vector2Rotate(enemy->attackDirection, PI / 2), 120);
@@ -1486,6 +1543,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 /* The Coveiro opens with a charge and the Guardian with a curse. */
                 enemy->bossAttack = enemy->templarRole == TEMPLAR_MARSHAL ? IGRIS_MELEE :
                     group->boneland ? BONE_CLAW : group->cemetery ? COVEIRO_SHOVEL : GUARDIAN_ROOT_WAVE;
+                enemy->coveiroPhaseOpening = group->cemetery;
                 enemy->attackCooldown = .20f;
                 enemy->guardianMeleeCooldown = .90f;
             }
@@ -1502,6 +1560,9 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         enemy->attackCooldown = fmaxf(0.0f, enemy->attackCooldown-dt);
         if (enemy->type == ENEMY_BOSS)
             enemy->guardianMeleeCooldown = fmaxf(0.0f, enemy->guardianMeleeCooldown - dt);
+        if (enemy->type == ENEMY_BOSS && !group->cemetery && !group->boneland &&
+            !group->village && enemy->templarRole == TEMPLAR_NONE)
+            enemy->guardianDodgeCooldown = fmaxf(0.0f,enemy->guardianDodgeCooldown-dt);
         enemy->bibleHitCooldown = fmaxf(0.0f, enemy->bibleHitCooldown-dt);
         if (enemy->state == ENEMY_DIE) {
             if (enemy->type == ENEMY_BOSS) ClearEnemyAttacks(group);
@@ -1645,9 +1706,33 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         if (distance > 0.001f) enemy->facing = FacingToward(toPlayer);
         if (enemy->type == ENEMY_BOSS || enemy->type == ENEMY_SPECIAL) {
             float range = enemy->type == ENEMY_BOSS ? 560 : 280;
-            bool melee = enemy->type == ENEMY_BOSS && distance <= GUARDIAN_MELEE_RANGE &&
+            bool guardian = enemy->type == ENEMY_BOSS;
+            bool melee = guardian && distance <= 105.0f &&
                          enemy->guardianMeleeCooldown <= 0;
-            if (melee || (distance <= range && enemy->attackCooldown <= 0)) {
+            if (guardian && (melee || enemy->attackCooldown <= 0))
+                enemy->guardianDodgeTime = 0;
+            if (guardian && enemy->guardianDodgeTime > 0) {
+                enemy->guardianDodgeTime = fmaxf(0,enemy->guardianDodgeTime-dt);
+                enemy->state = ENEMY_WALK;
+                enemy->walkTime += dt;
+                MoveEnemy(clearing,enemy,Vector2Scale(enemy->guardianDodgeDirection,
+                          enemy->speed*2.2f*dt));
+            } else if (guardian && !melee && enemy->guardianDodgeCooldown <= 0 &&
+                       enemy->attackCooldown > .35f && distance > 95 && distance < 215) {
+                Vector2 side = Vector2Normalize((Vector2){-toPlayer.y,toPlayer.x});
+                if (enemy->attackBurst++%2) side=Vector2Negate(side);
+                Vector2 destination=Vector2Add(enemy->position,Vector2Scale(side,48));
+                if (IsMapActorBlocked(clearing,destination)) {
+                    side=Vector2Negate(side);
+                    destination=Vector2Add(enemy->position,Vector2Scale(side,48));
+                }
+                enemy->guardianDodgeCooldown = GuardianEnraged(enemy) ? 3.4f : 4.4f;
+                if (!IsMapActorBlocked(clearing,destination)) {
+                    enemy->guardianDodgeDirection=side;
+                    enemy->guardianDodgeTime=.22f;
+                    enemy->state=ENEMY_WALK;
+                }
+            } else if (melee || (distance <= range && enemy->attackCooldown <= 0)) {
                 enemy->state = ENEMY_ATTACK;
                 enemy->stateTime = 0;
                 enemy->attackConnected = false;
@@ -1663,29 +1748,32 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                     enemy->attackCooldown = enemy->templarRole == TEMPLAR_EXECUTIONER ? 1.78f :
                         2.75f / fminf(enemy->power, 1.36f);
                 }
-            } else if (distance > (enemy->type == ENEMY_BOSS ? 110 : 100)) {
+            } else if (guardian && distance < 135.0f && !melee) {
+                enemy->state = ENEMY_WALK;
+                enemy->walkTime += dt;
+                Vector2 away=Vector2Negate(Vector2Normalize(toPlayer));
+                MoveEnemyTactically(group,clearing,enemy,
+                    Vector2Add(enemy->position,Vector2Scale(away,100)),enemy->speed*dt);
+            } else if (distance > (guardian ? 230 : 100)) {
                 enemy->state = ENEMY_WALK;
                 enemy->walkTime += dt;
                 float speed = enemy->speed * (GuardianEnraged(enemy) ? 1.5f : 1.0f);
-                MoveEnemy(clearing, enemy, Vector2Scale(Vector2Normalize(toPlayer), speed*dt));
+                MoveEnemyTactically(group,clearing,enemy,player,speed*dt);
             } else enemy->state = ENEMY_IDLE;
         } else if (enemy->type == ENEMY_COMMON_RANGED) {
-            bool canSeePlayer = (!group->boneland && enemy->templarRole != TEMPLAR_CROSSBOW) ||
-                                MapHasClearPath(clearing, enemy->position, player);
+            bool canSeePlayer = MapHasClearPath(clearing, enemy->position, player);
             float maxDistance = group->boneland ? 350.0f : RANGED_MAX_DISTANCE;
-            if (distance <= maxDistance && enemy->attackCooldown <= 0.0f && canSeePlayer) {
+            if (distance >= RANGED_MIN_DISTANCE && distance <= maxDistance &&
+                enemy->attackCooldown <= 0.0f && canSeePlayer) {
                 enemy->state = ENEMY_ATTACK;
                 enemy->stateTime = 0.0f;
                 enemy->attackConnected = false;
                 enemy->attackDirection = Vector2Normalize(toPlayer);
                 enemy->attackCooldown = enemy->templarRole == TEMPLAR_CROSSBOW ? 1.59f :
                     group->boneland ? 2.15f : 1.5f / fminf(enemy->power, 1.36f);
-            } else if (distance < RANGED_MIN_DISTANCE || distance > maxDistance || !canSeePlayer) {
+            } else if (MoveRangedTactically(group,clearing,enemy,player,maxDistance,dt)) {
                 enemy->state = ENEMY_WALK;
                 enemy->walkTime += dt;
-                Vector2 step = Vector2Scale(Vector2Normalize(toPlayer), enemy->speed * dt);
-                MoveEnemy(clearing, enemy, canSeePlayer && distance < RANGED_MIN_DISTANCE ?
-                          Vector2Negate(step) : step);
             } else {
                 enemy->state = ENEMY_IDLE;
             }
@@ -1700,7 +1788,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         } else if (distance > ENEMY_ATTACK_RANGE*0.85f) {
             enemy->state = ENEMY_WALK;
             enemy->walkTime += dt;
-            MoveEnemy(clearing, enemy, Vector2Scale(Vector2Normalize(toPlayer), enemy->speed*dt));
+            MoveEnemyTactically(group,clearing,enemy,player,enemy->speed*dt);
         } else {
             enemy->state = ENEMY_IDLE;
         }
