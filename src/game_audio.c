@@ -41,7 +41,8 @@ void InitGameAudio(GameAudio *audio) {
         [TRACK_MENU] = "assets/audio/menu.ogg",
         [TRACK_COMBAT] = "assets/audio/combate.ogg",
         [TRACK_MINIBOSS] = "assets/audio/miniboss.ogg",
-        [TRACK_CHAPEL] = "assets/audio/capela.wav"
+        [TRACK_CHAPEL] = "assets/audio/capela.wav",
+        [TRACK_NECROMANCER] = "assets/audio/necromante_rock.wav"
     };
     for (int i = 0; i < TRACK_COUNT; i++) {
         if (!FileExists(paths[i])) continue;
@@ -53,7 +54,10 @@ void InitGameAudio(GameAudio *audio) {
 }
 
 void UpdateGameMusic(GameAudio *audio, GameTrack track, float strength, float dt) {
-    static const float mix[TRACK_COUNT] = {.66f, .66f, .61f, .66f};
+    static const float mix[TRACK_COUNT] = {
+        [TRACK_MENU]=.66f, [TRACK_COMBAT]=.66f, [TRACK_MINIBOSS]=.61f,
+        [TRACK_CHAPEL]=.66f, [TRACK_NECROMANCER]=.64f
+    };
     float step = fminf(1.0f, dt*2.5f);
     for (int i = 0; i < TRACK_COUNT; i++) {
         Music stream = audio->tracks[i];

@@ -1534,7 +1534,7 @@ int main(void) {
     for (int i = 0; i < IGRIS_ART_COUNT; i++) assert(!enemies.igrisArt[i].id);
     for (int role = TEMPLAR_SHIELD; role < TEMPLAR_MARSHAL; role++)
         assert(!enemies.templarWalk[role].id && !enemies.templarAttack[role].id);
-    assert(enemies.necromancerPortrait.id);
+    assert(enemies.necromancerPortrait.id && enemies.necromancerCombo.id && enemies.necromancerCollapse.id);
     Enemy *necromancer=&enemies.list[0];
     assert(necromancer->necromancerForm==1 && !EnemyCanBeHit(necromancer));
     assert(final.presentation.areaEntry && final.presentation.wave==0);
@@ -1542,7 +1542,7 @@ int main(void) {
     int seenSkills=0;
     for (int form=1;form<=3;form++) {
         assert(necromancer->necromancerForm==form);
-        for (int tick=0;tick<530;tick++) {
+        for (int tick=0;tick<900;tick++) {
             UpdateEnemies(&enemies,&palace,palace.pedestal,.035f,true,&finalHealth,100);
             if (necromancer->state==ENEMY_ATTACK) seenSkills|=1<<necromancer->bossAttack;
         }
@@ -1556,7 +1556,7 @@ int main(void) {
         UpdateEnemies(&enemies,&palace,palace.pedestal,1.3f,true,&finalHealth,100);
         assert(enemies.necromancer.shots[0].life==0);
     }
-    assert(seenSkills==(1<<8)-1 && necromancer->state==ENEMY_FALLEN);
+    assert(seenSkills==(1<<12)-1 && necromancer->state==ENEMY_FALLEN);
     for (int miss=0;miss<3;miss++) {
         float power=final.progress.bossPower;
         necromancer->state=ENEMY_FALLEN;

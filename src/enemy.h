@@ -115,6 +115,7 @@ typedef struct EnemyGroup {
     Texture2D backSprites;
     Texture2D frontSprites;
     Texture2D clearingMelee[3], clearingArcher[3], clearingSpecial[3];
+    Texture2D necromancerCombo, necromancerCollapse;
     Texture2D necromancerWalk[NECROMANCER_FORMS], necromancerSkills[NECROMANCER_FORMS];
     Texture2D necromancerBlade, necromancerEffects, necromancerThrone, necromancerPortrait;
     NecromancerFight necromancer;
