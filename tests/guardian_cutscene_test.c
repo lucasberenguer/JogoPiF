@@ -176,8 +176,8 @@ static void CheckAftermath(void) {
         "Que esta luz alcance aqueles que ainda podem ser salvos.",
         "Os mortos não descansam... enquanto seus nomes forem lembrados."
     };
-    const char *speakers[]={"Guardião","Protagonista","Guardião","Guardião","Protagonista",
-        "Guardião","Guardião","Protagonista","Protagonista","Voz desconhecida"};
+    const char *speakers[]={"Guardião","Você","Guardião","Guardião","Você",
+        "Guardião","Guardião","Você","Você","Voz desconhecida"};
     int spoken=0;
     for (int part=0; part<2; part++) {
         GuardianCutscene scene={0};

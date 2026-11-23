@@ -403,3 +403,4 @@ Na entrega do pós-boss de 18/11, build em `out/review` concluído e seis testes
 - A proporção da infestação passou a um Gordão após cada dez zumbis comuns, contando o grupo inicial e os reforços. São 59 comuns e cinco Gordões no total. A auditoria verificou a ordem dos 64 spawns, a reutilização de vagas e o golpe único com os novos atlas carregados.
 - Gordão reduzido para a altura de renderização do golem do Cemitério (128 unidades), com proporção do atlas e área atingível ajustada. Build compilada.
 - Integração com cc23d8e: os atlas da marcha e da pancada do Gordão são carregados ao entrar na Vila e liberados ao sair. A compilação e o teste de encontro passaram, incluindo a conferência dos atlas na transição para a Capela.
+- O nome exibido nas falas do jogador passou a ser Você. Foram atualizadas 22 falas na apresentação do Guardião, na libertação, na passagem e na Capela. Os roteiros do build local foram sincronizados e o teste de cutscenes passou.
