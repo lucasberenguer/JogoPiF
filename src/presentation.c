@@ -75,9 +75,8 @@ void DrawStagePresentation(const StagePresentation *p,Texture2D sprite,int colum
         return;
     }
     const Color headline = {255, 232, 190, 255};
-    const char *waveLabel = gothic ? "Onda" : "ONDA";
     const char *waveTitle = p->waveTotal > 0
-        ? TextFormat("%s %d/%d", waveLabel, p->wave, p->waveTotal) : TextFormat("%s %d", waveLabel, p->wave);
+        ? TextFormat("Onda %d/%d", p->wave, p->waveTotal) : TextFormat("Onda %d", p->wave);
     DrawRectangle(0,0,(int)w,(int)h,Fade(BLACK,alpha*(p->boss?.88f:.22f)));
     if (!p->boss) {
         float y=h*.42f;
@@ -85,9 +84,9 @@ void DrawStagePresentation(const StagePresentation *p,Texture2D sprite,int colum
         DrawLine(0,(int)y,(int)w,(int)y,Fade(GOLD,alpha));
         DrawLine(0,(int)y+118,(int)w,(int)y+118,Fade(GOLD,alpha));
         const char *title=p->announcement?p->announcement:waveTitle;
-        DrawGameTextIn(title,(Rectangle){w*.06f+slide,y+8,w*.88f,68},58,Fade(headline,alpha),gothic);
+        DrawGameTextIn(title,(Rectangle){w*.06f+slide,y+8,w*.88f,68},58,Fade(headline,alpha),true);
         const char *subtitle = p->announcement && p->waveTotal > 0 && p->wave > 0 ? waveTitle : p->mapName;
-        DrawGameTextIn(subtitle,(Rectangle){w*.06f,y+77,w*.88f,30},gothic?26:22,Fade(RAYWHITE,alpha),gothic);
+        DrawGameTextIn(subtitle,(Rectangle){w*.06f,y+77,w*.88f,30},26,Fade(RAYWHITE,alpha),true);
     } else {
         DrawRectangle(0,0,(int)w,(int)(h*.10f),Fade(BLACK,alpha));
         DrawRectangle(0,(int)(h*.90f),(int)w,(int)(h*.10f+1),Fade(BLACK,alpha));
@@ -113,7 +112,7 @@ void DrawStagePresentation(const StagePresentation *p,Texture2D sprite,int colum
         float textX=w*.13f-offset;
         if (!p->separateBossWave && p->wave>0)
             DrawGameTextEx(TextFormat("%s - %s",waveTitle,gothic?"Chefe":"MINI-BOSS"),(Vector2){textX,h*.37f},
-                           gothic?27:24,Fade(headline,alpha),gothic);
+                           27,Fade(headline,alpha),true);
         float bossSize=fminf(gothic?56:48, w*.42f/MeasureGameTextEx(p->bossName,1,gothic).x);
         DrawGameTextEx(p->bossName,(Vector2){textX,h*(p->separateBossWave?.43f:.44f)},
                        bossSize,Fade(RAYWHITE,alpha),gothic);

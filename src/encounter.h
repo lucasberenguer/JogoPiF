@@ -5,8 +5,6 @@
 #include "presentation.h"
 #include "logica.h"
 
-enum { ENCOUNTER_BOSS_HUD_HEIGHT = 58 };
-
 typedef struct EncounterSealDifficultyRow {
     int map;
     bool hasSpecialVF;

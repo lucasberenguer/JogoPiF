@@ -382,11 +382,8 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
             (Vector2){width/2,boss?height*(272.0f/288.0f):height*.914f}, lean, tint);
 
         if (fallen) DrawGameText("E: selar", (int)enemy->position.x-30, (int)enemy->position.y+10, 16, GOLD);
-        if (!boss && EnemyCanBeHit(enemy) && enemy->health < enemy->maxHealth) {
-            int x = (int)enemy->position.x-24, y = (int)(enemy->position.y-height)-8;
-            DrawRectangle(x, y, 48, 5, DARKGRAY);
-            DrawRectangle(x, y, 48*enemy->health/enemy->maxHealth, 5, RED);
-        }
+        if (!boss && enemy->health < enemy->maxHealth)
+            DrawEnemyHealthBar(enemy, (int)(enemy->position.y-height)-8);
         if (boss && enemy->state == ENEMY_ATTACK && !enemy->guardianMelee) {
             Color warning = enemy->stateTime < COVEIRO_WINDUP ? Fade(VIOLET, .45f) : VIOLET;
             bool phaseTwo = enemy->guardianPhase == GUARDIAN_PHASE_TWO;

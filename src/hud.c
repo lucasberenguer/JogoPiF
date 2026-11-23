@@ -5,6 +5,72 @@
 #define HUD_WIDTH 2082.0f
 #define HUD_HEIGHT 640.0f
 
+static const Rectangle bossFrameSource = {0, 96, 2172, 530};
+static const float bossFrameTop = 31;
+static Texture2D bossHealthFrame;
+static bool bossHealthFrameAttempted;
+
+static float BossHealthHudScale(void) {
+    return fminf(600, GetScreenWidth() * .56f) / bossFrameSource.width;
+}
+
+int BossHealthHudHeight(void) {
+    return (int)ceilf(bossFrameTop + bossFrameSource.height * BossHealthHudScale() + 4);
+}
+
+void DrawBossHealthHud(const char *name, const char *phase, int health, int maxHealth,
+                       Color fill, const float *phaseMarkers, int markerCount) {
+    if (maxHealth <= 0) return;
+    if (!bossHealthFrameAttempted) {
+        bossHealthFrameAttempted = true;
+        bossHealthFrame = LoadTexture("assets/ui/boss_health_frame.png");
+        if (bossHealthFrame.id) SetTextureFilter(bossHealthFrame, TEXTURE_FILTER_BILINEAR);
+    }
+
+    float scale = BossHealthHudScale();
+    float width = bossFrameSource.width * scale;
+    float x = (GetScreenWidth() - width) * .5f;
+    Rectangle track = {x + 249 * scale, bossFrameTop + (299 - bossFrameSource.y) * scale,
+                       1674 * scale, 125 * scale};
+    float ratio = fmaxf(0, fminf(1, (float)health / maxHealth));
+    DrawRectangleRounded(track, .45f, 8, (Color){24, 13, 17, 255});
+    if (ratio > 0) {
+        Rectangle filled = {track.x, track.y, track.width * ratio, track.height};
+        DrawRectangleGradientEx(filled, ColorBrightness(fill, .27f), fill,
+                                fill, ColorBrightness(fill, .27f));
+    }
+    for (int i = 0; i < markerCount; i++) {
+        float markerX = track.x + track.width * phaseMarkers[i];
+        DrawRectangleRec((Rectangle){markerX - 1, track.y, 2, track.height}, Fade(GOLD, .68f));
+    }
+    if (bossHealthFrame.id) {
+        DrawTexturePro(bossHealthFrame, bossFrameSource,
+            (Rectangle){x, bossFrameTop, width, bossFrameSource.height * scale},
+            (Vector2){0}, 0, WHITE);
+    } else {
+        DrawRectangleLinesEx(track, 2, (Color){170, 105, 84, 255});
+    }
+    Rectangle title = {x, 4, width, 31};
+    Rectangle shadow = title;
+    shadow.y += 2;
+    DrawGameTextIn(name, shadow, 30, BLACK, true);
+    DrawGameTextIn(name, title, 30, (Color){255, 221, 183, 255}, true);
+
+    const char *status = phase && *phase ? TextFormat("%d/%d  |  %s", health, maxHealth, phase)
+                                         : TextFormat("%d/%d", health, maxHealth);
+    Rectangle label = {track.x + track.width * .10f, track.y + 2, track.width * .80f, track.height - 4};
+    shadow = label;
+    shadow.y += 1;
+    DrawGameTextIn(status, shadow, 17, BLACK, false);
+    DrawGameTextIn(status, label, 17, RAYWHITE, false);
+}
+
+void UnloadBossHealthHud(void) {
+    if (bossHealthFrame.id) UnloadTexture(bossHealthFrame);
+    bossHealthFrame = (Texture2D){0};
+    bossHealthFrameAttempted = false;
+}
+
 bool InitHud(Hud *hud) {
     hud->base = LoadTexture("assets/hud_base.png");
     hud->medium = LoadTexture("assets/hud_media.png");

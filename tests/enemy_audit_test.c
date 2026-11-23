@@ -1,4 +1,5 @@
 #include "enemy.h"
+#include "raymath.h"
 #include <assert.h>
 #include <math.h>
 #include <string.h>
@@ -235,15 +236,90 @@ static void CheckTemplarBalance(void) {
     marshal->guardianPhase = GUARDIAN_PHASE_TWO;
     marshal->state = ENEMY_IDLE;
     marshal->attackCooldown = 0;
-    marshal->attackBurst = 1;
     Vector2 player = {955, 500};
+    const int skills[] = {IGRIS_ECLIPSE, IGRIS_SPEARS, IGRIS_VORTEX, IGRIS_ERUPTION, IGRIS_MELEE};
+    const int damage[] = {28,25,32,33,20};
+    for (int i = 0; i < IGRIS_SKILL_COUNT; i++) {
+        marshal->state = ENEMY_IDLE;
+        marshal->attackCooldown = 0;
+        marshal->attackBurst = i;
+        group.playerHitCooldown = 0;
+        int playerHealth = 100;
+        UpdateEnemies(&group,&map,player,.01f,false,&playerHealth,100);
+        assert(marshal->bossAttack == skills[i] && playerHealth == 100);
+        for (int j = 0; j < 22; j++) {
+            UpdateEnemies(&group,&map,player,.05f,false,&playerHealth,100);
+            if (skills[i] == IGRIS_SPEARS && marshal->attackConnected && playerHealth == 100) {
+                assert(group.projectiles[0].umbraSpear && group.projectiles[1].umbraSpear &&
+                       group.projectiles[2].umbraSpear);
+            }
+        }
+        assert(playerHealth == 100-damage[i]);
+        ClearEnemyAttacks(&group);
+    }
+    marshal->igrisFinalForm = true;
+    marshal->state = ENEMY_IDLE;
+    marshal->attackCooldown = 0;
+    marshal->attackBurst = 1;
+    group.playerHitCooldown = 0;
     int playerHealth = 100;
-    UpdateEnemies(&group, &map, player, .01f, false, &playerHealth, 100);
-    assert(marshal->bossAttack == MARSHAL_SHOCKWAVE);
-    UpdateEnemies(&group, &map, player, .90f, false, &playerHealth, 100);
+    UpdateEnemies(&group,&map,player,.01f,false,&playerHealth,100);
+    assert(marshal->state == ENEMY_ATTACK && marshal->facing == 3);
+    Vector2 origin = marshal->position;
+    UpdateEnemies(&group,&map,player,.73f,false,&playerHealth,100);
+    assert(marshal->position.x > origin.x+150 && fabsf(marshal->position.y-origin.y)<.1f);
+    assert(playerHealth == 68);
+    Vector2 pivot = marshal->position;
+    UpdateEnemies(&group,&map,player,.08f,false,&playerHealth,100);
+    assert(Vector2Distance(pivot,marshal->position)<.1f);
+    UpdateEnemies(&group,&map,player,.36f,false,&playerHealth,100);
+    assert(fabsf(marshal->position.x-origin.x)<.1f && marshal->position.y>origin.y+100);
+    pivot = marshal->position;
+    UpdateEnemies(&group,&map,player,.09f,false,&playerHealth,100);
+    assert(Vector2Distance(pivot,marshal->position)<.1f && marshal->facing == 3);
+    UpdateEnemies(&group,&map,player,.27f,false,&playerHealth,100);
+    assert(marshal->position.x>origin.x+150 && fabsf(marshal->position.y-pivot.y)<.1f);
+    UpdateEnemies(&group,&map,player,.40f,false,&playerHealth,100);
+    assert(marshal->state == ENEMY_IDLE && playerHealth == 68);
+    for (int dodge = 0; dodge < 2; dodge++) {
+        marshal->position = origin;
+        marshal->attackCooldown = 0;
+        marshal->attackBurst = 2;
+        group.playerHitCooldown = 0;
+        Vector2 victim = {origin.x+250,origin.y};
+        playerHealth = 100;
+        UpdateEnemies(&group,&map,victim,.01f,false,&playerHealth,100);
+        UpdateEnemies(&group,&map,victim,.57f,dodge,&playerHealth,100);
+        assert(IgrisHoldingPlayer(&group) == !dodge);
+        assert(playerHealth == (dodge ? 100 : 76));
+        UpdateEnemies(&group,&map,victim,.20f,false,&playerHealth,100);
+        ApplyIgrisGrab(&group,&map,&victim,.20f);
+        assert(dodge ? victim.x == origin.x+250 : victim.x < origin.x+200);
+        UpdateEnemies(&group,&map,victim,.6f,false,&playerHealth,100);
+        assert(!IgrisHoldingPlayer(&group));
+    }
+    marshal->position = origin;
+    marshal->attackCooldown = 0;
+    marshal->attackBurst = 3;
+    group.playerHitCooldown = 0;
+    playerHealth = 100;
+    UpdateEnemies(&group,&map,player,.01f,false,&playerHealth,100);
+    assert(marshal->state == ENEMY_ATTACK);
+    for (int i = 0; i < 3; i++) {
+        assert(!IsMapActorBlocked(&map,marshal->igrisEchoFrom[i]));
+        for (int j = 0; j < i; j++)
+            assert(Vector2Distance(marshal->igrisEchoFrom[i],marshal->igrisEchoFrom[j]) >= 94);
+    }
+    UpdateEnemies(&group,&map,player,.80f,false,&playerHealth,100);
     assert(playerHealth == 100);
-    UpdateEnemies(&group, &map, player, .20f, false, &playerHealth, 100);
-    assert(playerHealth == 67);
+    UpdateEnemies(&group,&map,player,.39f,false,&playerHealth,100);
+    assert(playerHealth == 72 && marshal->igrisEchoHits == 1u);
+    UpdateEnemies(&group,&map,player,.65f,false,&playerHealth,100);
+    assert(playerHealth == 44 && marshal->igrisEchoHits == 3u);
+    UpdateEnemies(&group,&map,player,.60f,true,&playerHealth,100);
+    assert(playerHealth == 44 && marshal->igrisEchoHits == 3u);
+    UpdateEnemies(&group,&map,player,.5f,false,&playerHealth,100);
+    assert(marshal->state == ENEMY_IDLE);
 }
 
 static int CountNecromancerShots(const EnemyGroup *group) {

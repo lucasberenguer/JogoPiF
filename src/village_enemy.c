@@ -414,11 +414,7 @@ void VillageDrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground
         Color tint = enemy->state == ENEMY_HURT ? (Color){255, 165, 165, 255}
             : (enemy->state == ENEMY_DIE ? Fade(WHITE, fmaxf(0.0f, 1.0f - enemy->stateTime / 0.45f)) : WHITE);
         DrawTexturePro(texture, src, dst, (Vector2){0}, 0.0f, tint);
-        if (EnemyCanBeHit(enemy) && enemy->health < enemy->maxHealth) {
-            int healthY = (int)enemy->position.y - 85;
-            DrawRectangle((int)enemy->position.x - 24, healthY, 48, 5, DARKGRAY);
-            DrawRectangle((int)enemy->position.x - 24, healthY,
-                          48 * enemy->health / enemy->maxHealth, 5, RED);
-        }
+        if (enemy->health < enemy->maxHealth)
+            DrawEnemyHealthBar(enemy, (int)enemy->position.y - 85);
     }
 }

@@ -287,16 +287,38 @@ static const float crossbowAttackDuration = .99f;
 static const float shieldAttackDuration = .73f;
 static const float executionerAttackDuration = 1.25f;
 static const struct {
-    float impact, activeEnd, duration, reach, arcDot;
-    int damage;
-} marshalSkills[] = {
-    [MARSHAL_SLASH] = {.48f, .64f, .84f, 155, .34f, 20},
-    [MARSHAL_CHARGE] = {.55f, 1.12f, 1.30f, 63, 0, 22},
-    [MARSHAL_RETURN] = {.50f, .68f, .95f, 168, -.14f, 22},
-    [MARSHAL_RUPTURE] = {.71f, .93f, 1.24f, 209, .50f, 33},
-    [MARSHAL_SPIN] = {.56f, .79f, 1.01f, 165, -1, 28},
-    [MARSHAL_SHOCKWAVE] = {.84f, 1.46f, 1.69f, 295, -1, 33},
+    float impact, duration, reach, arcDot;
+    int damage, art;
+} igrisSkills[IGRIS_SKILL_COUNT + 1] = {
+    [IGRIS_MELEE]    = {.42f, .86f, 140, .34f, 20, IGRIS_MELEE_ART},
+    [IGRIS_ECLIPSE]  = {.62f, 1.19f, 225, .50f, 28, IGRIS_ECLIPSE_ART},
+    [IGRIS_ERUPTION] = {.79f, 1.64f, 120, -1, 33, IGRIS_ERUPTION_ART},
+    [IGRIS_SPEARS]   = {.59f, 1.26f, 520, -1, 25, IGRIS_SPEARS_ART},
+    [IGRIS_VORTEX]   = {.68f, 1.41f, 182, -1, 32, IGRIS_VORTEX_ART},
+    [IGRIS_SKILL_COUNT] = {.37f, .79f, 178, .27f, 36, IGRIS_FINAL_MELEE},
 };
+#define IGRIS_FINAL_CLAW IGRIS_SKILL_COUNT
+#define IGRIS_Z_RIP (IGRIS_FINAL_CLAW + 1)
+#define IGRIS_ABYSS_GRAB (IGRIS_Z_RIP + 1)
+#define IGRIS_ECLIPSE_ECHOES (IGRIS_ABYSS_GRAB + 1)
+#define IGRIS_ECHO_PLANT .40f
+#define IGRIS_ECHO_WARNING .44f
+#define IGRIS_ECHO_GAP .58f
+#define IGRIS_ECHO_TRAVEL .40f
+#define IGRIS_ECHO_FADE 2.64f
+#define IGRIS_ECHO_END 2.90f
+#define IGRIS_ECHO_WIDTH 48.0f
+#define IGRIS_GRAB_REACH 295.0f
+#define IGRIS_GRAB_HALF_WIDTH 48.0f
+#define IGRIS_GRAB_IMPACT .56f
+#define IGRIS_GRAB_RELEASE 1.01f
+#define IGRIS_GRAB_END 1.30f
+#define IGRIS_Z_RADIUS 64.0f
+static const float igrisZFrames[] = {0,.50f,.58f,.72f,.84f,.91f,1.00f,1.16f,1.28f,1.35f,1.51f,1.73f,1.90f};
+static const int igrisZLegStart[] = {1,4,8};
+static const int igrisZLegEnd[] = {3,7,10};
+#define UMBRA_SPEAR_SPEED 540.0f
+#define UMBRA_SPEAR_LIFETIME 1.25f
 
 static void UnloadTexIfLoaded(Texture2D *texture) {
     if (texture->id) {
@@ -326,7 +348,7 @@ static void UnloadEnemyMapAssets(EnemyGroup *group) {
     UnloadTexIfLoaded(&group->sprites);
     UnloadTexIfLoaded(&group->backSprites);
     UnloadTexIfLoaded(&group->frontSprites);
-    for (int role = TEMPLAR_SHIELD; role <= TEMPLAR_MARSHAL; role++) {
+    for (int role = TEMPLAR_SHIELD; role < TEMPLAR_MARSHAL; role++) {
         UnloadTexIfLoaded(&group->templarWalk[role]);
         UnloadTexIfLoaded(&group->templarAttack[role]);
     }
@@ -342,10 +364,9 @@ static void UnloadEnemyMapAssets(EnemyGroup *group) {
     UnloadTexIfLoaded(&group->cemeteryPortrait);
     UnloadTexIfLoaded(&group->boneLordPortrait);
     UnloadTexIfLoaded(&group->templarEffects);
-    UnloadTexIfLoaded(&group->marshalSlam);
-    UnloadTexIfLoaded(&group->marshalCharge);
+    for (int i = 0; i < IGRIS_ART_COUNT; i++)
+        UnloadTexIfLoaded(&group->igrisArt[i]);
     UnloadTexIfLoaded(&group->templarDust);
-    UnloadTexIfLoaded(&group->marshalPortrait);
     UnloadTexIfLoaded(&group->bossAttack);
     UnloadTexIfLoaded(&group->roots);
     UnloadTexIfLoaded(&group->rootWave);
@@ -533,33 +554,33 @@ static bool LoadTemplarEnemyAssets(EnemyGroup *group) {
         [TEMPLAR_EXECUTIONER] = "assets/templario_carrasco.png",
         [TEMPLAR_CROSSBOW] = "assets/templario_besteiro.png",
         [TEMPLAR_STANDARD] = "assets/templario_estandarte.png",
-        [TEMPLAR_MARSHAL] = "assets/templario_marechal.png",
     };
     static const char *const attackFiles[] = {
         [TEMPLAR_SHIELD] = "assets/templario_escudo_ataque_v2.png",
         [TEMPLAR_EXECUTIONER] = "assets/templario_carrasco_ataque_v2.png",
         [TEMPLAR_CROSSBOW] = "assets/templario_besteiro_ataque_v2.png",
         [TEMPLAR_STANDARD] = "assets/templario_estandarte_ataque_v2.png",
-        [TEMPLAR_MARSHAL] = "assets/templario_marechal_corte_v2.png",
     };
-    for (int role = TEMPLAR_SHIELD; role <= TEMPLAR_MARSHAL; role++) {
+    for (int role = TEMPLAR_SHIELD; role < TEMPLAR_MARSHAL; role++) {
         group->templarWalk[role] = LoadTexture(templarFiles[role]);
         group->templarAttack[role] = LoadTexture(attackFiles[role]);
         if (!group->templarWalk[role].id || !group->templarAttack[role].id) return false;
         SetTextureFilter(group->templarWalk[role], TEXTURE_FILTER_POINT);
         SetTextureFilter(group->templarAttack[role], TEXTURE_FILTER_POINT);
     }
-    group->marshalSlam = LoadTexture("assets/templario_marechal_ruptura_v2.png");
-    group->marshalCharge = LoadTexture("assets/templario_marechal_investida_v2.png");
+    static const char *const igrisFiles[IGRIS_ART_COUNT] = {
+        "idle", "walk", "melee", "eclipse", "eclipse_fx", "eruption", "eruption_fx",
+        "spears", "spears_fx", "vortex", "vortex_fx", "final_idle", "final_walk", "final_melee",
+        "z_down", "z_up", "z_left", "z_right", "abyss_grab", "abyss_grab_fx", "echoes", "echoes_fx"
+    };
+    for (int i = 0; i < IGRIS_ART_COUNT; i++) {
+        group->igrisArt[i] = LoadTexture(TextFormat("assets/igris/%s.png", igrisFiles[i]));
+        if (!group->igrisArt[i].id) return false;
+        SetTextureFilter(group->igrisArt[i], TEXTURE_FILTER_POINT);
+    }
     group->templarDust = LoadTexture("assets/templario_poeira.png");
-    group->marshalPortrait = LoadTexture("assets/templario_marechal_retrato.png");
-    if (!group->marshalSlam.id || !group->marshalCharge.id ||
-        !group->templarDust.id || !group->marshalPortrait.id)
-        return false;
-    SetTextureFilter(group->marshalSlam, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->marshalCharge, TEXTURE_FILTER_POINT);
+    if (!group->templarDust.id) return false;
     SetTextureFilter(group->templarDust, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->marshalPortrait, TEXTURE_FILTER_POINT);
     if (FileExists("assets/templario_efeitos.png")) {
         group->templarEffects = LoadTexture("assets/templario_efeitos.png");
         if (group->templarEffects.id) SetTextureFilter(group->templarEffects, TEXTURE_FILTER_POINT);
@@ -809,7 +830,7 @@ void StartArenaBoss(EnemyGroup *group, const Clearing *clearing, Vector2 player,
     }
     if (clearing->templarField) {
         boss->templarRole = TEMPLAR_MARSHAL;
-        boss->bossAttack = MARSHAL_SLASH;
+        boss->bossAttack = IGRIS_MELEE;
         boss->attackCooldown = .25f;
     }
 }
@@ -853,7 +874,16 @@ void DamageEnemyFrom(Enemy *enemy, int damage, Vector2 source) {
         }
     }
     enemy->health -= enemy->villageLeader ? enemy->health : damage;
-    if (enemy->type == ENEMY_BOSS && !enemy->villageLeader && enemy->guardianPhase == GUARDIAN_PHASE_ONE &&
+    int finalThreshold = enemy->maxHealth * IGRIS_FINAL_HEALTH_PERCENT / 100;
+    if (enemy->templarRole == TEMPLAR_MARSHAL && enemy->guardianPhase == GUARDIAN_PHASE_TWO &&
+        !enemy->igrisFinalForm && enemy->health <= finalThreshold) {
+        enemy->health = finalThreshold;
+        enemy->igrisFinalForm = true;
+        enemy->attackBurst = 0;
+        enemy->guardianPhase = GUARDIAN_PHASE_TRANSITION;
+        enemy->state = ENEMY_IDLE;
+        enemy->stateTime = 0;
+    } else if (enemy->type == ENEMY_BOSS && !enemy->villageLeader && enemy->guardianPhase == GUARDIAN_PHASE_ONE &&
         enemy->health <= enemy->maxHealth / 2) {
         enemy->health = enemy->maxHealth / 2;
         enemy->guardianPhase = GUARDIAN_PHASE_TRANSITION;
@@ -921,7 +951,7 @@ static void FireRangedProjectile(EnemyGroup *group, const Enemy *enemy, Vector2 
         if (group->projectiles[i].remaining <= 0.0f) {
             group->projectiles[i] = (EnemyProjectile){origin, Vector2Normalize(toward),
                 group->cemetery ? CEMETERY_SPELL_LIFETIME : 1.5f,
-                EnemyHitDamage(group, enemy, ENEMY_ATTACK_DAMAGE), false};
+                EnemyHitDamage(group, enemy, ENEMY_ATTACK_DAMAGE), false, false};
             return;
         }
     }
@@ -1150,83 +1180,261 @@ static void HurtByTemplar(EnemyGroup *group, Vector2 player, int *health, bool d
     group->templarBlood = (EnemyImpact){.position={player.x, player.y - 36}, .remaining=.36f};
 }
 
-static void StartMarshalSkill(Enemy *boss, int skill, Vector2 direction) {
-    boss->state = ENEMY_ATTACK;
-    boss->bossAttack = skill;
-    boss->stateTime = 0;
-    boss->attackConnected = false;
-    boss->attackDirection = direction;
-    boss->facing = FacingToward(direction);
+static void FireUmbraSpears(EnemyGroup *group, const Enemy *boss, int damage) {
+    Vector2 direction = boss->attackDirection;
+    Vector2 normal = {-direction.y,direction.x};
+    Vector2 origin = Vector2Add(boss->position,Vector2Scale(direction,36));
+    origin.y -= 35;
+    int lane = -1;
+    for (int i = 0; i < ENEMY_PROJECTILE_COUNT && lane <= 1; i++) {
+        if (group->projectiles[i].remaining > 0) continue;
+        group->projectiles[i] = (EnemyProjectile){
+            .position = Vector2Add(origin,Vector2Scale(normal,lane*42)),
+            .direction = direction, .remaining = UMBRA_SPEAR_LIFETIME,
+            .damage = damage, .umbraSpear = true};
+        lane++;
+    }
 }
 
-static void UpdateMarshal(EnemyGroup *group, const Clearing *map, Enemy *boss, Vector2 player,
-                          float dt, bool dodging, int *health) {
-    Vector2 delta = Vector2Subtract(player, boss->position);
+static bool PlanIgrisZ(const Clearing *map, Enemy *boss, int facing, float distance) {
+    static const Vector2 directions[] = {{0,1},{0,-1},{-1,0},{1,0}};
+    Vector2 forward = directions[facing];
+    float side = facing < 2 ? -1 : 1;
+    Vector2 across = {-forward.y*side,forward.x*side};
+    Vector2 start = boss->position;
+    for (float scale = 1; scale >= .54f; scale -= .15f) {
+        Vector2 along = Vector2Scale(forward,Clamp(distance+55,190,305)*scale);
+        Vector2 offset = Vector2Scale(across,172*scale);
+        Vector2 points[] = {start,Vector2Add(start,along),Vector2Add(start,offset),
+                            Vector2Add(Vector2Add(start,offset),along)};
+        bool clear = true;
+        for (int i = 0; i < 3 && clear; i++) {
+            int steps = (int)ceilf(Vector2Distance(points[i],points[i+1])/4);
+            clear = MapHasClearPath(map,points[i],points[i+1]);
+            for (int j = 1; j <= steps && clear; j++)
+                clear = !IsMapActorBlocked(map,Vector2Lerp(points[i],points[i+1],(float)j/steps));
+        }
+        if (!clear) continue;
+        memcpy(boss->igrisZPath,points,sizeof(points));
+        return true;
+    }
+    return false;
+}
+
+static void UpdateIgrisZ(EnemyGroup *group, const Clearing *map, Enemy *boss,
+                         Vector2 player, float dt, bool dodging, int *health) {
+    float t = boss->stateTime;
+    for (int leg = 0; leg < 3; leg++) {
+        float start = igrisZFrames[igrisZLegStart[leg]], end = igrisZFrames[igrisZLegEnd[leg]];
+        if (t <= start || t-dt >= end) continue;
+        float fraction = Clamp((t-start)/(end-start),0,1);
+        Vector2 from = boss->position;
+        Vector2 next = Vector2Lerp(boss->igrisZPath[leg],boss->igrisZPath[leg+1],fraction);
+        MoveEnemy(map,boss,Vector2Subtract(next,from));
+        Vector2 traveled = Vector2Subtract(boss->position,from);
+        float length = Vector2LengthSqr(traveled);
+        float nearest = length > 0 ? Clamp(Vector2DotProduct(Vector2Subtract(player,from),traveled)/length,0,1) : 0;
+        Vector2 contact = Vector2Add(from,Vector2Scale(traveled,nearest));
+        if (!boss->attackConnected && !dodging && Vector2Distance(player,contact) <= IGRIS_Z_RADIUS &&
+            MapHasClearPath(map,contact,player)) {
+            boss->attackConnected = true;
+            HurtByTemplar(group,player,health,false,(int)(32*boss->power));
+        }
+    }
+    if (!boss->attackConnected && t >= igrisZFrames[10] && t-dt < igrisZFrames[10]) {
+        boss->attackConnected = true;
+        if (Vector2Distance(boss->position,player) <= 104 && MapHasClearPath(map,boss->position,player))
+            HurtByTemplar(group,player,health,dodging,(int)(40*boss->power));
+    }
+    if (t >= igrisZFrames[12]) {
+        boss->state = ENEMY_IDLE;
+        boss->stateTime = 0;
+        boss->attackCooldown = .24f;
+    }
+}
+
+static bool IgrisGrabConnected(const Enemy *boss) {
+    return boss->templarRole == TEMPLAR_MARSHAL && boss->state == ENEMY_ATTACK &&
+           boss->bossAttack == IGRIS_ABYSS_GRAB && boss->attackConnected;
+}
+
+bool IgrisHoldingPlayer(const EnemyGroup *group) {
+    const Enemy *boss = &group->list[0];
+    return IgrisGrabConnected(boss) && boss->stateTime < IGRIS_GRAB_RELEASE;
+}
+
+void ApplyIgrisGrab(const EnemyGroup *group, const Clearing *map, Vector2 *player, float dt) {
+    const Enemy *boss = &group->list[0];
+    if (!IgrisGrabConnected(boss)) return;
+    float active = fminf(boss->stateTime,IGRIS_GRAB_RELEASE) -
+                   fmaxf(boss->stateTime-dt,IGRIS_GRAB_IMPACT);
+    if (active <= 0) return;
+    Vector2 delta = Vector2Subtract(boss->position,*player);
     float distance = Vector2Length(delta);
-    Vector2 toward = distance > .001f ? Vector2Scale(delta, 1 / distance) : (Vector2){0,1};
+    if (distance > 72)
+        MoveMapActor(map,player,Vector2Scale(delta,fminf(distance-72,570*active)/distance));
+}
+
+static void UpdateAbyssGrab(EnemyGroup *group, const Clearing *map, Enemy *boss,
+                            Vector2 player, float dt, bool dodging, int *health) {
+    float t = boss->stateTime;
+    if (t >= IGRIS_GRAB_IMPACT && t-dt < IGRIS_GRAB_IMPACT &&
+        !dodging && !group->practiceInvincible && group->playerHitCooldown <= 0 && *health > 0) {
+        Vector2 delta = Vector2Subtract(player,boss->position);
+        float along = Vector2DotProduct(delta,boss->attackDirection);
+        Vector2 side = Vector2Subtract(delta,Vector2Scale(boss->attackDirection,along));
+        if (along >= 0 && along <= IGRIS_GRAB_REACH && Vector2LengthSqr(side) <= IGRIS_GRAB_HALF_WIDTH*IGRIS_GRAB_HALF_WIDTH &&
+            MapHasClearPath(map,boss->position,player)) {
+            boss->attackConnected = true;
+            HurtByTemplar(group,player,health,false,(int)(24*boss->power));
+        }
+    }
+    if (t >= IGRIS_GRAB_END) {
+        boss->state = ENEMY_IDLE;
+        boss->stateTime = 0;
+        boss->attackCooldown = .27f;
+    }
+}
+
+static bool PlanIgrisEchoes(const Clearing *map, Enemy *boss, Vector2 target, Vector2 direction) {
+    int count = 0;
+    for (int attempt = 0; attempt < 18 && count < 3; attempt++) {
+        float angle = (attempt%9) * (2*PI/9);
+        float radius = attempt < 9 ? 175 : 115;
+        Vector2 start = Vector2Add(target,Vector2Scale(Vector2Rotate(direction,angle),radius));
+        if (IsMapActorBlocked(map,start) || !MapHasClearPath(map,start,target) ||
+            Vector2Distance(start,boss->position) < 76) continue;
+        bool separated = true;
+        for (int i = 0; i < count; i++)
+            if (Vector2Distance(start,boss->igrisEchoFrom[i]) < 94) separated = false;
+        if (!separated) continue;
+        Vector2 aim = Vector2Normalize(Vector2Subtract(target,start));
+        Vector2 end = target;
+        for (int j = 1; j <= 12; j++) {
+            Vector2 next = Vector2Add(target,Vector2Scale(aim,j*8));
+            if (IsMapActorBlocked(map,next) || !MapHasClearPath(map,end,next)) break;
+            end = next;
+        }
+        boss->igrisEchoFrom[count] = start;
+        boss->igrisEchoTo[count++] = end;
+    }
+    boss->igrisEchoHits = 0;
+    return count == 3;
+}
+
+static float IgrisEchoLaunch(int index) {
+    return IGRIS_ECHO_PLANT + IGRIS_ECHO_WARNING + index*IGRIS_ECHO_GAP;
+}
+
+static void UpdateIgrisEchoes(EnemyGroup *group, const Clearing *map, Enemy *boss,
+                              Vector2 player, float dt, bool dodging, int *health) {
+    for (int i = 0; i < 3; i++) {
+        float launch = IgrisEchoLaunch(i);
+        float age = boss->stateTime-launch;
+        unsigned hit = 1u << i;
+        if (age < 0 || age-dt >= IGRIS_ECHO_TRAVEL || (boss->igrisEchoHits & hit)) continue;
+        Vector2 a = Vector2Lerp(boss->igrisEchoFrom[i],boss->igrisEchoTo[i],Clamp((age-dt)/IGRIS_ECHO_TRAVEL,0,1));
+        Vector2 b = Vector2Lerp(boss->igrisEchoFrom[i],boss->igrisEchoTo[i],Clamp(age/IGRIS_ECHO_TRAVEL,0,1));
+        Vector2 step = Vector2Subtract(b,a);
+        float length = Vector2LengthSqr(step);
+        float progress = length > 0 ? Clamp(Vector2DotProduct(Vector2Subtract(player,a),step)/length,0,1) : 0;
+        Vector2 contact = Vector2Add(a,Vector2Scale(step,progress));
+        if (!dodging && group->playerHitCooldown <= 0 &&
+            Vector2Distance(player,contact) <= IGRIS_ECHO_WIDTH && MapHasClearPath(map,contact,player)) {
+            boss->igrisEchoHits |= hit;
+            HurtByTemplar(group,player,health,false,(int)(28*boss->power));
+        }
+    }
+    if (boss->stateTime >= IGRIS_ECHO_END) {
+        boss->state = ENEMY_IDLE;
+        boss->stateTime = 0;
+        boss->attackCooldown = .30f;
+    }
+}
+
+static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vector2 player,
+                        float dt, bool dodging, int *health) {
+    Vector2 delta = Vector2Subtract(player,boss->position);
+    float distance = Vector2Length(delta);
+    Vector2 direction = distance > .001f ? Vector2Scale(delta,1/distance) : (Vector2){0,1};
     bool enraged = GuardianEnraged(boss);
     if (boss->state != ENEMY_ATTACK) {
         if (*health <= 0) return;
-        boss->facing = FacingToward(toward);
-        if (boss->attackCooldown <= 0 && (boss->attackBurst == 0 || distance < 415) &&
-            MapHasClearPath(map, boss->position, player)) {
-            static const int opening[] = {MARSHAL_CHARGE, MARSHAL_SLASH, MARSHAL_SPIN};
-            static const int enragedPattern[] = {
-                MARSHAL_CHARGE, MARSHAL_SHOCKWAVE, MARSHAL_SPIN, MARSHAL_RUPTURE,
-            };
-            int skill = enraged ? enragedPattern[boss->attackBurst % 4] : opening[boss->attackBurst % 3];
-            boss->attackBurst = boss->attackBurst % 12 + 1;
-            if (distance > 220 && skill != MARSHAL_SHOCKWAVE) skill = MARSHAL_CHARGE;
-            StartMarshalSkill(boss, skill, toward);
-            return;
+        boss->facing = FacingToward(direction);
+        if (boss->attackCooldown <= 0 && MapHasClearPath(map,boss->position,player)) {
+            static const int pattern[] = {IGRIS_ECLIPSE, IGRIS_SPEARS, IGRIS_VORTEX, IGRIS_ERUPTION, IGRIS_MELEE};
+            int choices = boss->igrisFinalForm ? 1 : IGRIS_SKILL_COUNT;
+            for (int offset = 0; offset < choices; offset++) {
+                int index = (boss->attackBurst+offset)%IGRIS_SKILL_COUNT;
+                int skill = boss->igrisFinalForm ? IGRIS_FINAL_CLAW : pattern[index];
+                if (boss->igrisFinalForm) {
+                    if (boss->attackBurst == 3 && distance <= 420 && PlanIgrisEchoes(map,boss,player,direction))
+                        skill = IGRIS_ECLIPSE_ECHOES;
+                    else if (boss->attackBurst == 2 && distance <= IGRIS_GRAB_REACH)
+                        skill = IGRIS_ABYSS_GRAB;
+                    else if ((boss->attackBurst == 1 || distance > 178) &&
+                        distance <= 340 && PlanIgrisZ(map,boss,boss->facing,distance))
+                        skill = IGRIS_Z_RIP;
+                    else if (distance > 178 && distance <= IGRIS_GRAB_REACH)
+                        skill = IGRIS_ABYSS_GRAB;
+                }
+                float reach = skill == IGRIS_ECLIPSE_ECHOES ? 420 : skill == IGRIS_ABYSS_GRAB ? IGRIS_GRAB_REACH :
+                    skill == IGRIS_Z_RIP ? 340 : skill == IGRIS_ERUPTION ? 420 : igrisSkills[skill].reach;
+                if (distance > reach) continue;
+                boss->attackBurst = boss->igrisFinalForm ?
+                    (boss->attackBurst == 3 ? 0 : skill == IGRIS_ABYSS_GRAB ? 3 :
+                     skill == IGRIS_Z_RIP || boss->attackBurst == 1 ? 2 : 1) :
+                    (index+1)%IGRIS_SKILL_COUNT;
+                boss->bossAttack = skill;
+                boss->attackDirection = direction;
+                boss->attackTarget = player;
+                boss->state = ENEMY_ATTACK;
+                boss->stateTime = 0;
+                boss->attackConnected = false;
+                return;
+            }
         }
-        boss->state = boss->attackBurst != 0 && distance > 93 ? ENEMY_WALK : ENEMY_IDLE;
-        if (boss->state == ENEMY_WALK) {
+        if (distance > 90) {
+            boss->state = ENEMY_WALK;
             boss->walkTime += dt;
-            MoveEnemy(map, boss, Vector2Scale(toward, boss->speed * dt * (enraged ? 1.13f : 1)));
-        }
+            float speedScale = boss->igrisFinalForm ? 1.30f : enraged ? 1.13f : 1;
+            MoveEnemy(map,boss,Vector2Scale(direction,boss->speed*dt*speedScale));
+        } else boss->state = ENEMY_IDLE;
         return;
     }
+
     int skill = boss->bossAttack;
-    float time = boss->stateTime, impact = marshalSkills[skill].impact;
-    float active = fmaxf(0, fminf(time, marshalSkills[skill].activeEnd) - fmaxf(time - dt, impact));
-    float reach = marshalSkills[skill].reach;
-    if (skill == MARSHAL_CHARGE && active > 0) {
-        Vector2 origin = boss->position;
-        MoveEnemyStraight(map, boss, active * (enraged ? 620 : 555));
-        Vector2 segment = Vector2Subtract(boss->position, origin);
-        float lengthSquared = Vector2LengthSqr(segment);
-        float along = lengthSquared > 0 ? Clamp(Vector2DotProduct(delta, segment) / lengthSquared, 0, 1) : 0;
-        Vector2 nearest = Vector2Add(origin, Vector2Scale(segment, along));
-        if (!boss->attackConnected && Vector2DistanceSqr(nearest, player) <= reach * reach &&
-            MapHasClearPath(map, nearest, player)) {
-            boss->attackConnected = true;
-            HurtByTemplar(group, player, health, dodging, (int)(marshalSkills[skill].damage * boss->power));
-        }
-    } else if (skill == MARSHAL_SHOCKWAVE) {
-        float travel = marshalSkills[skill].activeEnd - impact;
-        float inner = reach * Clamp((time - dt - impact) / travel, 0, 1) - 22;
-        float outer = reach * Clamp((time - impact) / travel, 0, 1) + 22;
-        if (!boss->attackConnected && time >= impact && time - dt <= marshalSkills[skill].activeEnd &&
-            distance >= inner && distance <= outer && MapHasClearPath(map, boss->position, player)) {
-            boss->attackConnected = true;
-            HurtByTemplar(group, player, health, dodging, (int)(marshalSkills[skill].damage * boss->power));
-        }
-    } else if (skill != MARSHAL_CHARGE && !boss->attackConnected && time >= impact) {
-        boss->attackConnected = true;
-        if (distance <= reach && Vector2DotProduct(toward, boss->attackDirection) >= marshalSkills[skill].arcDot &&
-            MapHasClearPath(map, boss->position, player)) {
-            HurtByTemplar(group, player, health, dodging, (int)(marshalSkills[skill].damage * boss->power));
-        }
-    }
-    if (time < marshalSkills[skill].duration) return;
-    if (enraged && skill == MARSHAL_CHARGE && *health > 0) {
-        StartMarshalSkill(boss, MARSHAL_RETURN, toward);
+    if (skill == IGRIS_Z_RIP) {
+        UpdateIgrisZ(group,map,boss,player,dt,dodging,health);
         return;
     }
-    boss->state = ENEMY_IDLE;
-    boss->stateTime = 0;
-    boss->attackCooldown = enraged ? .17f : .34f;
+    if (skill == IGRIS_ABYSS_GRAB) {
+        UpdateAbyssGrab(group,map,boss,player,dt,dodging,health);
+        return;
+    }
+    if (skill == IGRIS_ECLIPSE_ECHOES) {
+        UpdateIgrisEchoes(group,map,boss,player,dt,dodging,health);
+        return;
+    }
+    float time = boss->stateTime;
+    if (!boss->attackConnected && time >= igrisSkills[skill].impact) {
+        boss->attackConnected = true;
+        int damage = (int)(igrisSkills[skill].damage*boss->power);
+        if (skill == IGRIS_SPEARS) {
+            FireUmbraSpears(group,boss,damage);
+        } else {
+            Vector2 center = skill == IGRIS_ERUPTION ? boss->attackTarget : boss->position;
+            if (Vector2Distance(center,player) <= igrisSkills[skill].reach &&
+                Vector2DotProduct(direction,boss->attackDirection) >= igrisSkills[skill].arcDot &&
+                MapHasClearPath(map,boss->position,player))
+                HurtByTemplar(group,player,health,dodging,damage);
+        }
+    }
+    if (time >= igrisSkills[skill].duration) {
+        boss->state = ENEMY_IDLE;
+        boss->stateTime = 0;
+        boss->attackCooldown = boss->igrisFinalForm ? .16f : enraged ? .22f : .43f;
+    }
 }
 
 void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
@@ -1264,7 +1472,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 enemy->guardianPhase = GUARDIAN_PHASE_TWO;
                 enemy->stateTime = 0;
                 /* The Coveiro opens with a charge and the Guardian with a curse. */
-                enemy->bossAttack = enemy->templarRole == TEMPLAR_MARSHAL ? MARSHAL_SLASH :
+                enemy->bossAttack = enemy->templarRole == TEMPLAR_MARSHAL ? IGRIS_MELEE :
                     group->boneland ? BONE_CLAW : group->cemetery ? COVEIRO_SHOVEL : GUARDIAN_ROOT_WAVE;
                 enemy->attackCooldown = .20f;
                 enemy->guardianMeleeCooldown = .90f;
@@ -1312,7 +1520,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             continue;
         }
         if (enemy->templarRole == TEMPLAR_MARSHAL) {
-            UpdateMarshal(group, clearing, enemy, player, dt, playerDodging, playerHealth);
+            UpdateIgris(group, clearing, enemy, player, dt, playerDodging, playerHealth);
             continue;
         }
         if (group->village && enemy->type == ENEMY_BOSS) {
@@ -1502,14 +1710,14 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
     for (int i = 0; i < ENEMY_PROJECTILE_COUNT; i++) {
         EnemyProjectile *shot = &group->projectiles[i];
         if (shot->remaining <= 0.0f) continue;
-        float speed = shot->boneShot ? BONE_SHOT_SPEED : group->cemetery ? 273.0f : group->boneland ? CULTIST_SHOT_SPEED : RANGED_SHOT_SPEED;
+        float speed = shot->umbraSpear ? UMBRA_SPEAR_SPEED : shot->boneShot ? BONE_SHOT_SPEED : group->cemetery ? 273.0f : group->boneland ? CULTIST_SHOT_SPEED : RANGED_SHOT_SPEED;
         Vector2 movement = Vector2Scale(shot->direction, speed * dt);
         int steps = (int)(Vector2Length(movement) / 6.0f) + 1;
         Vector2 step = Vector2Scale(movement, 1.0f / steps);
         for (int j = 0; j < steps && shot->remaining > 0.0f; j++) {
             Vector2 next = Vector2Add(shot->position, step);
             Vector2 collisionPoint=next;
-            if (group->cemetery || group->boneland) collisionPoint.y+=35;
+            if (group->cemetery || group->boneland || shot->umbraSpear) collisionPoint.y+=35;
             if (IsClearingBlocked(clearing, collisionPoint)) {
                 if (group->cemetery || group->boneland) AddEnemyImpact(group,next,shot->direction);
                 shot->remaining = 0.0f;
@@ -1619,6 +1827,16 @@ static void DrawRangedProjectiles(const EnemyGroup *group) {
             int step=(int)((CEMETERY_SPELL_LIFETIME-shot->remaining)*16);
             int frame=step<2?step:2+(step-2)%4;
             DrawCemeterySpell(group->cemeterySpell,shot->position,shot->direction,frame,WHITE);
+            continue;
+        }
+        if (shot->umbraSpear) {
+            Texture2D art = group->igrisArt[IGRIS_SPEARS_FX];
+            float age = UMBRA_SPEAR_LIFETIME-shot->remaining;
+            int frame = age < .14f ? 1 : shot->remaining < .12f ? 5 : 2+(int)(age*16)%3;
+            float w = art.width/6.0f, h = art.height/4.0f;
+            float angle = atan2f(shot->direction.y,shot->direction.x)*RAD2DEG;
+            DrawTexturePro(art,(Rectangle){frame*w,h+h*.425f,w,h*.18f},
+                           (Rectangle){shot->position.x,shot->position.y,142,25},(Vector2){104,12.5f},angle,WHITE);
             continue;
         }
         if (shot->boneShot) {
@@ -1854,20 +2072,7 @@ static const float templarSizes[] = {
 };
 static const int templarRows[] = {0, 3, 1, 2};
 
-static void DrawTemplarDust(Vector2 center, Vector2 direction, float progress, float scale) {
-    if (progress < 0 || progress >= 1) return;
-    Vector2 normal = {-direction.y, direction.x};
-    for (int i = 0; i < 9; i++) {
-        float side = (float)(i - 4) / 4;
-        Vector2 p = Vector2Add(center, Vector2Scale(normal, side * scale * (11 + 29 * progress)));
-        p = Vector2Subtract(p, Vector2Scale(direction, scale * (5 + (20 + 4 * (i % 3)) * progress)));
-        p.y -= sinf(PI * progress) * (i % 3) * 8 * scale;
-        float radius = (3.0f + i % 3 + 4 * progress) * scale;
-        DrawEllipse((int)p.x, (int)p.y, radius * 1.45f, radius,
-                    Fade(i % 2 ? (Color){215, 166, 119, 255} : (Color){137, 84, 66, 255},
-                         .52f * (1 - progress)));
-    }
-}
+
 
 static void DrawTemplarEffect(Texture2D texture, int row, Vector2 center,
                               Vector2 direction, float age, float size) {
@@ -1893,38 +2098,146 @@ static void DrawTemplarBlood(const EnemyGroup *group) {
     }
 }
 
-static void DrawMarshalAttackPose(const EnemyGroup *group, const Enemy *enemy, Color tint) {
-    static const int clockwise[] = {0, 2, 1, 3};
-    static const Vector2 anchors[] = {{128, 244}, {130, 242}, {112, 242}, {150, 240}};
-    int skill = enemy->bossAttack;
-    int facing = enemy->facing;
-    bool slam = skill == MARSHAL_RUPTURE || skill == MARSHAL_SHOCKWAVE;
-    Texture2D texture = skill == MARSHAL_CHARGE ? group->marshalCharge :
-                        slam ? group->marshalSlam : group->templarAttack[TEMPLAR_MARSHAL];
-    float time = enemy->stateTime;
-    float impact = marshalSkills[skill].impact;
-    float activeEnd = marshalSkills[skill].activeEnd;
-    float recovery = marshalSkills[skill].duration - activeEnd;
-    int frame;
-    if (time < impact) {
-        frame = (int)Clamp(3 * time / impact, 0, 2);
-    } else if (time < activeEnd) {
-        float progress = Clamp((time - impact) / (activeEnd - impact), 0, .999f);
-        frame = progress < .55f ? 3 : 4;
-        if (skill == MARSHAL_SPIN) {
-            int turn = (int)(4 * progress);
-            facing = clockwise[(clockwise[facing] + turn) % 4];
-        }
-    } else {
-        frame = time < activeEnd + .36f * recovery ? 4 : 5;
+static void DrawIgrisCell(Texture2D art, int columns, int rows, int col, int row,
+                          Vector2 feet, float height, float anchorX, float anchorY,
+                          bool flip, float tilt, Color tint) {
+    float w = (float)art.width/columns, h = (float)art.height/rows;
+    float width = height*w/h;
+    DrawTexturePro(art,(Rectangle){col*w,row*h,flip ? -w : w,h},
+                   (Rectangle){feet.x,feet.y,width,height},
+                   (Vector2){width*anchorX,height*anchorY},tilt,tint);
+}
+
+static void DrawIgrisEclipsePose(Texture2D art, int frame, int row, Vector2 feet, Color tint) {
+    static const int edges[4][9] = {
+        {0,182,360,548,751,974,1188,1363,1536},
+        {0,181,367,550,745,973,1180,1362,1536},
+        {0,197,395,566,766,1012,1203,1371,1536},
+        {0,170,352,527,715,929,1155,1354,1536},
+    };
+    static const int body[4][8] = {
+        {100,269,454,639,844,1062,1272,1441},
+        {101,270,456,622,814,1030,1259,1447},
+        {114,287,474,664,883,1080,1280,1471},
+        {96,259,431,611,814,1029,1243,1446},
+    };
+    int left = edges[row][frame], width = edges[row][frame+1]-left;
+    const float scale = .80f;
+    DrawTexturePro(art,(Rectangle){left,row*256,width,256},
+                   (Rectangle){feet.x,feet.y,width*scale,256*scale},
+                   (Vector2){(body[row][frame]-left)*scale,239*scale},0,tint);
+}
+
+static void DrawIgrisEruption(Texture2D art, int frame, Vector2 center) {
+    static const int edges[4][7] = {
+        {0,224,448,686,925,1168,1451},
+        {0,231,459,695,936,1193,1536},
+        {0,242,477,716,956,1216,1536},
+        {0,283,525,776,1020,1280,1536},
+    };
+    static const int top[] = {0,224,501,740};
+    static const int ground[] = {214,490,729,970};
+    int row = frame/6, col = frame%6;
+    int left = edges[row][col], width = edges[row][col+1]-left;
+    int height = ground[row]+9-top[row];
+    const float scale = .88f;
+    DrawTexturePro(art,(Rectangle){left,top[row],width,height},
+                   (Rectangle){center.x,center.y,width*scale,height*scale},
+                   (Vector2){width*scale*.5f,(height-9)*scale},0,WHITE);
+}
+
+static int IgrisRow(int art, int facing) {
+    static const int basicRows[] = {0,2,3,1};
+    static const int spellRows[] = {0,3,2,1};
+    static const int eruptionRows[] = {0,3,1,2};
+    if (art == IGRIS_ERUPTION_ART) return eruptionRows[facing];
+    if (art >= IGRIS_SPEARS_ART) return spellRows[facing];
+    return basicRows[facing];
+}
+
+static void DrawTemplarSprite(const EnemyGroup *group, const Enemy *enemy,
+                              Vector2 position, int facing, int frame, float tilt, Color tint);
+
+static void DrawIgris(const EnemyGroup *group, const Enemy *enemy) {
+    int art = IGRIS_IDLE_ART, columns = 8, facing = enemy->facing;
+    if (enemy->igrisFinalForm) {
+        art = IGRIS_FINAL_IDLE;
+        columns = 4;
     }
-    // Use the fully contained overhead pose with either impact animation.
-    if (slam && frame == 2) texture = group->templarAttack[TEMPLAR_MARSHAL];
-    const float tile = 256;
-    float size = templarSizes[TEMPLAR_MARSHAL];
-    Vector2 anchor = Vector2Scale(anchors[facing], size / tile);
-    DrawTexturePro(texture, (Rectangle){frame * tile, templarRows[facing] * tile, tile, tile},
-                   (Rectangle){enemy->position.x, enemy->position.y, size, size}, anchor, 0, tint);
+    int frame = (int)(enemy->stateTime*7)%columns;
+    Vector2 feet = enemy->position;
+    if (enemy->state == ENEMY_SPAWNING) {
+        if (enemy->stateTime < 0) return;
+        float arrival = Clamp(enemy->stateTime/templarArrivalTime,0,1);
+        Vector2 landing = {835 + Clamp((feet.x-835)*.26f,-83,83),284};
+        Vector2 origin = {landing.x,70};
+        feet = arrival < .76f ? Vector2Lerp(origin,landing,arrival/.76f) :
+            Vector2Lerp(landing,feet,(arrival-.76f)/.24f);
+        Enemy escort = {.templarRole = TEMPLAR_SHIELD};
+        float exit = Clamp((arrival-.53f)/.47f,0,1);
+        for (int side = -1; side <= 1; side += 2) {
+            Vector2 escortFeet = {feet.x+side*(57+130*exit),feet.y+22+42*exit};
+            DrawTemplarSprite(group,&escort,escortFeet,exit > 0 ? (side < 0 ? 2 : 3) : 0,
+                              (int)(enemy->stateTime*10)%6,0,Fade(WHITE,1-exit));
+        }
+        facing = 0;
+    }
+    if (enemy->state == ENEMY_WALK || enemy->state == ENEMY_SPAWNING) {
+        art = enemy->igrisFinalForm ? IGRIS_FINAL_WALK : IGRIS_WALK_ART;
+        columns = enemy->igrisFinalForm ? 4 : 7;
+        frame = (int)((enemy->state == ENEMY_WALK ? enemy->walkTime : enemy->stateTime)*11)%columns;
+    }
+    if (enemy->state == ENEMY_ATTACK) {
+        int skill = enemy->bossAttack;
+        if (skill == IGRIS_ECLIPSE_ECHOES) {
+            float t = enemy->stateTime;
+            int cel = t < IGRIS_ECHO_PLANT ? 0 : t >= IGRIS_ECHO_FADE ? 5 :
+                t < IgrisEchoLaunch(0) ? 1 : t < IgrisEchoLaunch(1) ? 2 : t < IgrisEchoLaunch(2) ? 3 : 4;
+            DrawIgrisCell(group->igrisArt[IGRIS_ECHO_ART],6,4,cel,IgrisRow(IGRIS_FINAL_MELEE,facing),
+                          feet,238,.5f,.85f,false,0,WHITE);
+            return;
+        }
+        if (skill == IGRIS_Z_RIP) {
+            int cel = 0;
+            while (cel < 11 && enemy->stateTime >= igrisZFrames[cel+1]) cel++;
+            DrawIgrisCell(group->igrisArt[IGRIS_Z_DOWN+facing],4,3,cel%4,cel/4,
+                          feet,248,.5f,.88f,false,0,WHITE);
+            return;
+        }
+        if (skill == IGRIS_ABYSS_GRAB) {
+            float t = enemy->stateTime;
+            int cel = t < .22f ? 0 : t < .40f ? 1 : t < IGRIS_GRAB_IMPACT ? 2 :
+                t < .78f ? 3 : t < IGRIS_GRAB_RELEASE ? 4 : 5;
+            DrawIgrisCell(group->igrisArt[IGRIS_GRAB_ART],6,4,cel,IgrisRow(IGRIS_FINAL_MELEE,facing),
+                          feet,238,.5f,.82f,false,0,WHITE);
+            return;
+        }
+        art = igrisSkills[skill].art;
+        columns = skill == IGRIS_FINAL_CLAW ? 4 : skill <= IGRIS_ECLIPSE ? 8 : 6;
+        int impactFrame = skill <= IGRIS_ECLIPSE ? 4 :
+            (skill == IGRIS_ERUPTION || skill == IGRIS_FINAL_CLAW) ? 2 : 3;
+        float t = enemy->stateTime, impact = igrisSkills[skill].impact;
+        frame = t < impact ? (int)(t/impact*impactFrame) :
+            impactFrame+(int)((t-impact)/(igrisSkills[skill].duration-impact)*(columns-impactFrame));
+        frame = (int)Clamp(frame,0,columns-1);
+    }
+    bool flip = (art <= IGRIS_MELEE_ART && facing == 3) ||
+                (art == IGRIS_SPEARS_ART && facing == 2);
+    float anchorX = art <= IGRIS_MELEE_ART ? (facing == 2 ? .50f : facing == 3 ? .50f : .61f) : .50f;
+    float ground = enemy->igrisFinalForm ? .84f : art == IGRIS_SPEARS_ART && facing == 0 ? .84f : .94f;
+    if (enemy->igrisFinalForm && art == IGRIS_FINAL_WALK && facing == 0) ground = .92f;
+    bool fallen = enemy->state == ENEMY_FALLEN;
+    float fall = fallen ? 1 : enemy->state == ENEMY_DIE ? Clamp(enemy->stateTime/1.2f,0,1) : 0;
+    if (fallen) DrawBossGroundSeal(group->sealMarker,feet);
+    Color tint = fall > 0 ? Fade(WHITE,.82f) : WHITE;
+    if (enemy->guardianPhase == GUARDIAN_PHASE_TRANSITION) {
+        DrawCircleV(feet,52,Fade(PURPLE,.35f+.18f*sinf(enemy->stateTime*17)));
+        tint = (Color){255,174,226,255};
+    }
+    if (art == IGRIS_ECLIPSE_ART) DrawIgrisEclipsePose(group->igrisArt[art],frame,IgrisRow(art,facing),feet,tint);
+    else DrawIgrisCell(group->igrisArt[art],columns,4,frame,IgrisRow(art,facing),feet,
+                       enemy->igrisFinalForm ? 238 : 190,anchorX,ground,flip,fall*72,tint);
+    if (fallen) DrawGameText("E: selar",(int)feet.x-30,(int)feet.y+12,18,GOLD);
 }
 
 static void DrawTemplarAttackPose(const EnemyGroup *group, const Enemy *enemy, Vector2 feet,
@@ -1956,6 +2269,7 @@ static void DrawTemplarSprite(const EnemyGroup *group, const Enemy *enemy,
 
 static void DrawTemplar(const EnemyGroup *group, const Enemy *enemy) {
     TemplarRole role = enemy->templarRole;
+    if (role == TEMPLAR_MARSHAL) { DrawIgris(group,enemy); return; }
     if (enemy->state == ENEMY_SPAWNING) {
         if (enemy->stateTime < 0) return;
         if (role == TEMPLAR_STANDARD && enemy->stateTime >= templarArrivalTime) {
@@ -1971,42 +2285,23 @@ static void DrawTemplar(const EnemyGroup *group, const Enemy *enemy) {
             return;
         }
         float t = Clamp(enemy->stateTime / templarArrivalTime, 0, 1);
-        float descent = role == TEMPLAR_MARSHAL ? .76f : .52f;
+        float descent = .52f;
         Vector2 landing = {835 + Clamp((enemy->position.x - 835) * .26f, -83, 83), 284};
         Vector2 origin = {landing.x, 70};
         Vector2 position = t < descent ? Vector2Lerp(origin, landing, t / descent) :
             Vector2Lerp(landing, enemy->position, (t - descent) / (1 - descent));
         int facing = t < descent ? 0 : FacingToward(Vector2Subtract(enemy->position, landing));
         int frame = (int)(enemy->stateTime * 10) % 6;
-        if (role == TEMPLAR_MARSHAL) {
-            Enemy escort = {.templarRole = TEMPLAR_SHIELD};
-            float exit = Clamp((t - .53f) / .47f, 0, 1);
-            for (int side = -1; side <= 1; side += 2) {
-                Vector2 feet = {position.x + side * (57 + 130 * exit), position.y + 22 + 42 * exit};
-                DrawTemplarSprite(group, &escort, feet, exit > 0 ? (side < 0 ? 2 : 3) : 0,
-                                 frame, 0, Fade(WHITE, 1 - exit));
-            }
-            facing = 0;
-            if (t > .83f) {
-                frame = 0;
-                float trail = Clamp((t - .83f) / .17f, 0, 1);
-                DrawLineEx((Vector2){position.x - 44, position.y - 4},
-                    (Vector2){position.x - 44 + 29 * trail, position.y - 7}, 3, Fade(ORANGE, 1 - trail));
-            }
-        }
         DrawTemplarSprite(group, enemy, position, facing, frame, 0, WHITE);
         return;
     }
     float fall = enemy->state == ENEMY_FALLEN ? 1.0f :
                  enemy->state == ENEMY_DIE ? Clamp(enemy->stateTime / 1.2f, 0, 1) : 0;
-    float walkRate = role == TEMPLAR_MARSHAL ? 9 : 9 * enemy->speed / 100;
+    float walkRate = 9 * enemy->speed / 100;
     int frame = enemy->state == ENEMY_WALK ? (int)(enemy->walkTime * walkRate) % 6 : 0;
     float tilt = (enemy->facing == 2 ? -1.0f : 1.0f) * 72 * fall;
     Color tint = enemy->state == ENEMY_HURT ? (Color){255, 173, 173, 255} :
-                 role == TEMPLAR_MARSHAL && fall > 0 ? Fade((Color){215, 185, 195, 255}, .80f) :
                  Fade(WHITE, 1 - fall);
-    if (role == TEMPLAR_MARSHAL && enemy->state == ENEMY_FALLEN)
-        DrawBossGroundSeal(group->sealMarker, enemy->position);
     if (enemy->guardianPhase == GUARDIAN_PHASE_TRANSITION) {
         float pulse = .55f + .25f * sinf(17 * enemy->stateTime);
         DrawCircleV(enemy->position, 47, Fade(MAROON, pulse));
@@ -2019,14 +2314,11 @@ static void DrawTemplar(const EnemyGroup *group, const Enemy *enemy) {
     }
     if (enemy->state == ENEMY_ATTACK) {
         float t = enemy->stateTime;
-        bool marshal = role == TEMPLAR_MARSHAL;
-        int skill = marshal ? enemy->bossAttack : 0;
-        bool charge = marshal && skill == MARSHAL_CHARGE;
-        float impact = marshal ? marshalSkills[skill].impact : role == TEMPLAR_EXECUTIONER ?
-            executionerImpact : role == TEMPLAR_CROSSBOW ? crossbowRelease : shieldImpact;
-        float activeEnd = marshal ? marshalSkills[skill].activeEnd : impact + .17f;
-        float duration = marshal ? marshalSkills[skill].duration : role == TEMPLAR_EXECUTIONER ?
-            executionerAttackDuration : role == TEMPLAR_CROSSBOW ? crossbowAttackDuration : shieldAttackDuration;
+        float impact = role == TEMPLAR_EXECUTIONER ? executionerImpact :
+                       role == TEMPLAR_CROSSBOW ? crossbowRelease : shieldImpact;
+        float activeEnd = impact + .17f;
+        float duration = role == TEMPLAR_EXECUTIONER ? executionerAttackDuration :
+                         role == TEMPLAR_CROSSBOW ? crossbowAttackDuration : shieldAttackDuration;
         float preparation = Clamp(t / impact, 0, 1);
         float followThrough = Clamp((t - impact) / (duration - impact), 0, 1);
         int pose = t < impact ? (preparation < .24f ? 0 : preparation < .64f ? 1 : 2) :
@@ -2035,44 +2327,22 @@ static void DrawTemplar(const EnemyGroup *group, const Enemy *enemy) {
         float recoilEnd = role == TEMPLAR_CROSSBOW ? impact + .12f : activeEnd;
         float recoilAge = Clamp((t - impact) / (recoilEnd - impact), 0, 1);
         float recoil = sinf(PI * recoilAge);
-        if (!marshal && role != TEMPLAR_CROSSBOW && t < impact) {
+        if (role != TEMPLAR_CROSSBOW && t < impact) {
             float brace = sinf(PI * preparation) * (role == TEMPLAR_EXECUTIONER ? 5 : 3);
             feet = Vector2Subtract(feet, Vector2Scale(enemy->attackDirection, brace));
         }
         if (role == TEMPLAR_CROSSBOW) {
-            feet = Vector2Subtract(feet, Vector2Scale(enemy->attackDirection, recoil * 8));
+            feet = Vector2Subtract(feet,Vector2Scale(enemy->attackDirection,recoil*8));
             if (recoil > 0)
-                DrawEmberBurst(Vector2Add(EnemyCenter(enemy), Vector2Scale(enemy->attackDirection, 25)),
-                               (t - impact) / (activeEnd - impact));
-        } else {
-            bool ring = marshal && (skill == MARSHAL_SHOCKWAVE || skill == MARSHAL_RUPTURE);
-            if (charge) {
-                float elapsed = t - impact;
-                for (int puff = 0; puff < 4; puff++) {
-                    float delay = (float)puff * .12f;
-                    Vector2 origin = Vector2Subtract(feet, Vector2Scale(enemy->attackDirection, puff * 26));
-                    DrawTemplarEffect(group->templarDust, 1, origin, enemy->attackDirection,
-                                      (elapsed - delay) / .42f, 126);
-                }
-                DrawTemplarEffect(group->templarDust, 2, feet, (Vector2){1,0},
-                                  (t - activeEnd) / .38f, 124);
-            } else {
-                float size = ring ? 265 : marshal ? 151 : 98;
-                DrawTemplarEffect(group->templarDust, ring ? 3 : 2, feet,
-                                  (Vector2){1,0}, (t - impact) / .43f, size);
-            }
-        }
+                DrawEmberBurst(Vector2Add(EnemyCenter(enemy),Vector2Scale(enemy->attackDirection,25)),
+                               (t-impact)/(activeEnd-impact));
+        } else DrawTemplarEffect(group->templarDust,2,feet,(Vector2){1,0},(t-impact)/.43f,98);
         float lean = enemy->facing == 2 ? -recoil : recoil;
-        if (marshal)
-            DrawMarshalAttackPose(group, enemy, tint);
-        else
-            DrawTemplarAttackPose(group, enemy, feet, enemy->facing, pose, 4 * lean, tint);
-        int effect = role == TEMPLAR_SHIELD ? 0 : role == TEMPLAR_CROSSBOW ? 2 :
-            marshal && (skill == MARSHAL_SPIN || skill == MARSHAL_SHOCKWAVE) ? 3 : 1;
-        Vector2 origin = Vector2Add((Vector2){feet.x, feet.y - 24},
-                                    Vector2Scale(enemy->attackDirection, effect == 3 ? 0 : 35));
-        DrawTemplarEffect(group->templarEffects, effect, origin, enemy->attackDirection, (t - impact) / .32f,
-                          marshal ? 190 : role == TEMPLAR_EXECUTIONER ? 142 : 91);
+        DrawTemplarAttackPose(group,enemy,feet,enemy->facing,pose,4*lean,tint);
+        int effect = role == TEMPLAR_SHIELD ? 0 : role == TEMPLAR_CROSSBOW ? 2 : 1;
+        Vector2 origin = Vector2Add((Vector2){feet.x,feet.y-24},Vector2Scale(enemy->attackDirection,35));
+        DrawTemplarEffect(group->templarEffects,effect,origin,enemy->attackDirection,(t-impact)/.32f,
+                          role == TEMPLAR_EXECUTIONER ? 142 : 91);
         return;
     }
     if (enemy->state == ENEMY_WALK) {
@@ -2081,13 +2351,9 @@ static void DrawTemplar(const EnemyGroup *group, const Enemy *enemy) {
         Vector2 direction = facingDirection[enemy->facing];
         Vector2 heel = Vector2Subtract(enemy->position, Vector2Scale(direction, 10));
         DrawTemplarEffect(group->templarDust, 0, heel, direction, step,
-                          role == TEMPLAR_MARSHAL ? 76 : 52);
+                          52);
     }
-    if (role == TEMPLAR_MARSHAL && fall > 0)
-        DrawEllipse((int)enemy->position.x, (int)enemy->position.y - 8, 48.0f, 16.0f, Fade(BLACK, .38f));
     DrawTemplarSprite(group, enemy, enemy->position, enemy->facing, frame, tilt, tint);
-    if (role == TEMPLAR_MARSHAL && enemy->state == ENEMY_FALLEN)
-        DrawGameText("E: selar", (int)enemy->position.x - 30, (int)enemy->position.y + 12, 18, GOLD);
 }
 
 void DrawBossGroundSeal(Texture2D sealMarker, Vector2 position) {
@@ -2111,77 +2377,151 @@ static void DrawSealMarkers(const EnemyGroup *group) {
     }
 }
 
+static void DrawIgrisEchoes(const EnemyGroup *group, const Enemy *boss) {
+    float t = boss->stateTime;
+    if (t < IGRIS_ECHO_PLANT) return;
+    Texture2D art = group->igrisArt[IGRIS_ECHO_FX];
+    float fade = 1-Clamp((t-IGRIS_ECHO_FADE)/(IGRIS_ECHO_END-IGRIS_ECHO_FADE),0,1);
+    DrawIgrisCell(art,6,4,t < IGRIS_ECHO_FADE ? 1 : 5,0,boss->position,155,.5f,.65f,false,0,Fade(WHITE,fade));
+    for (int i = 0; i < 3; i++) {
+        float age = t-IgrisEchoLaunch(i);
+        if (age < -IGRIS_ECHO_WARNING) continue;
+        Vector2 from = boss->igrisEchoFrom[i], to = boss->igrisEchoTo[i];
+        Vector2 direction = Vector2Subtract(to,from);
+        int row = IgrisRow(IGRIS_FINAL_MELEE,FacingToward(direction));
+        if (age < 0) {
+            float opacity = 1+age/IGRIS_ECHO_WARNING;
+            DrawLineEx(from,to,2*IGRIS_ECHO_WIDTH,Fade(PURPLE,.15f+.19f*opacity));
+            DrawLineEx(from,to,3,Fade(VIOLET,.35f+.55f*opacity));
+            DrawIgrisCell(art,6,4,1,row,from,156,.5f,.65f,false,0,WHITE);
+            if (opacity > .35f)
+                DrawIgrisCell(art,6,4,2,row,from,178,.5f,.90f,false,0,Fade(WHITE,opacity*.8f));
+        } else if (age < IGRIS_ECHO_TRAVEL) {
+            float progress = age/IGRIS_ECHO_TRAVEL;
+            DrawIgrisCell(art,6,4,progress < .58f ? 3 : 4,row,from,178,.5f,.90f,false,0,Fade(WHITE,1-progress));
+            Vector2 position = Vector2Lerp(from,to,progress);
+            float angle = atan2f(direction.y,direction.x)*RAD2DEG;
+            DrawIgrisCell(group->igrisArt[IGRIS_ECLIPSE_FX],8,4,2+(int)(progress*5),1,
+                          position,115,.5f,.5f,false,angle,Fade(WHITE,1-.4f*progress));
+        } else {
+            float dissolve = 1-Clamp((age-IGRIS_ECHO_TRAVEL)/.25f,0,1);
+            DrawIgrisCell(art,6,4,5,row,from,156,.5f,.70f,false,0,Fade(WHITE,fmaxf(dissolve,.30f*fade)));
+        }
+    }
+}
+
+static void DrawIgrisWarning(const EnemyGroup *group, const Enemy *boss) {
+    if (boss->state != ENEMY_ATTACK) return;
+    int skill = boss->bossAttack;
+    if (skill == IGRIS_ECLIPSE_ECHOES) {
+        DrawIgrisEchoes(group,boss);
+        return;
+    }
+    if (skill == IGRIS_ABYSS_GRAB) {
+        float t = boss->stateTime;
+        Vector2 end = Vector2Add(boss->position,Vector2Scale(boss->attackDirection,IGRIS_GRAB_REACH));
+        if (t < IGRIS_GRAB_IMPACT) {
+            DrawLineEx(boss->position,end,2*IGRIS_GRAB_HALF_WIDTH,Fade(PURPLE,.24f));
+            DrawLineEx(boss->position,end,4,Fade(VIOLET,.82f));
+        }
+        if (t >= .40f && t < IGRIS_GRAB_RELEASE) {
+            Texture2D art = group->igrisArt[IGRIS_GRAB_FX];
+            int frame = t < IGRIS_GRAB_IMPACT ? 2 : t < .79f ? 3 : 4;
+            float w = art.width/6.0f, h = art.height/4.0f;
+            float angle = atan2f(boss->attackDirection.y,boss->attackDirection.x)*RAD2DEG;
+            float length = t < IGRIS_GRAB_IMPACT ? IGRIS_GRAB_REACH :
+                Lerp(IGRIS_GRAB_REACH,95,Clamp((t-IGRIS_GRAB_IMPACT)/(IGRIS_GRAB_RELEASE-IGRIS_GRAB_IMPACT),0,1));
+            Vector2 anchor = {boss->position.x,boss->position.y-28};
+            DrawTexturePro(art,(Rectangle){frame*w,h,w,h},
+                           (Rectangle){anchor.x,anchor.y,length,140},(Vector2){0,70},angle,WHITE);
+        }
+        return;
+    }
+    if (skill == IGRIS_Z_RIP) {
+        if (boss->stateTime < igrisZFrames[1]) {
+            for (int leg = 0; leg < 3; leg++) {
+                DrawLineEx(boss->igrisZPath[leg],boss->igrisZPath[leg+1],2*IGRIS_Z_RADIUS,Fade(PURPLE,.18f));
+                DrawLineEx(boss->igrisZPath[leg],boss->igrisZPath[leg+1],4,Fade(VIOLET,.8f));
+            }
+            DrawCircleLinesV(boss->igrisZPath[3],104,Fade(VIOLET,.8f));
+        } else if (boss->stateTime >= igrisZFrames[10] && boss->stateTime < igrisZFrames[11]) {
+            DrawCircleLinesV(boss->position,104,Fade(VIOLET,.55f));
+        }
+        return;
+    }
+    float t = boss->stateTime, impact = igrisSkills[skill].impact;
+    float radius = igrisSkills[skill].reach;
+    Vector2 center = skill == IGRIS_ERUPTION ? boss->attackTarget : boss->position;
+    if (t < impact) {
+        float opacity = .12f+.22f*t/impact;
+        if (skill == IGRIS_SPEARS) {
+            Vector2 normal = {-boss->attackDirection.y,boss->attackDirection.x};
+            for (int lane = -1; lane <= 1; lane++) {
+                Vector2 start = Vector2Add(center,Vector2Scale(normal,lane*42));
+                DrawLineEx(start,Vector2Add(start,Vector2Scale(boss->attackDirection,radius)),3,
+                           Fade(VIOLET,opacity*2));
+            }
+        } else if (skill == IGRIS_ERUPTION || skill == IGRIS_VORTEX) {
+            DrawCircleV(center,radius,Fade(PURPLE,opacity));
+            DrawCircleLinesV(center,radius,Fade(VIOLET,.8f));
+        } else {
+            float heading = atan2f(boss->attackDirection.y,boss->attackDirection.x)*RAD2DEG;
+            float spread = acosf(igrisSkills[skill].arcDot)*RAD2DEG;
+            DrawCircleSector(center,radius,heading-spread,heading+spread,30,Fade(PURPLE,opacity));
+        }
+        return;
+    }
+    float progress = Clamp((t-impact)/(igrisSkills[skill].duration-impact),0,.999f);
+    int facing = boss->facing;
+    if (skill == IGRIS_ECLIPSE) {
+        center = Vector2Add(center,Vector2Scale(boss->attackDirection,radius*(.42f+.32f*progress)));
+        DrawIgrisCell(group->igrisArt[IGRIS_ECLIPSE_FX],8,4,(int)(progress*8),IgrisRow(IGRIS_ECLIPSE_ART,facing),
+                      center,145,.5f,.57f,false,0,WHITE);
+    } else if (skill == IGRIS_ERUPTION) {
+        int frame = (int)(progress*24);
+        DrawIgrisEruption(group->igrisArt[IGRIS_ERUPTION_FX],frame,center);
+    } else if (skill == IGRIS_VORTEX) {
+        DrawIgrisCell(group->igrisArt[IGRIS_VORTEX_FX],6,4,(int)(progress*6),IgrisRow(IGRIS_VORTEX_ART,facing),
+                      center,360,.5f,.60f,false,0,WHITE);
+    }
+}
+
 static void DrawTemplarWarnings(const EnemyGroup *group) {
     for (int i = 0; i < ENEMY_COUNT; i++) {
         const Enemy *enemy = &group->list[i];
         if (enemy->templarRole == TEMPLAR_NONE || !EnemyCanBeHit(enemy)) continue;
-        if (enemy->templarRole == TEMPLAR_STANDARD) {
-            DrawCircleV(enemy->position, 220, Fade(GOLD, .08f));
-            DrawCircleLines((int)enemy->position.x, (int)enemy->position.y, 220, Fade(GOLD, .5f));
-        } else if (enemy->templarRole == TEMPLAR_CROSSBOW &&
-                   enemy->state == ENEMY_ATTACK && !enemy->attackConnected) {
-            Vector2 origin = EnemyCenter(enemy);
-            Vector2 end = Vector2Add(origin, Vector2Scale(enemy->attackDirection, 300));
-            DrawLineEx(origin, end, 3, Fade(GOLD, .65f));
+        if (enemy->templarRole == TEMPLAR_MARSHAL) {
+            DrawIgrisWarning(group,enemy);
+        } else if (enemy->templarRole == TEMPLAR_STANDARD) {
+            DrawCircleV(enemy->position,220,Fade(GOLD,.08f));
+            DrawCircleLinesV(enemy->position,220,Fade(GOLD,.5f));
         } else if (enemy->state == ENEMY_ATTACK) {
             bool shield = enemy->templarRole == TEMPLAR_SHIELD;
-            bool marshal = enemy->templarRole == TEMPLAR_MARSHAL;
-            int skill = marshal ? enemy->bossAttack : 0;
-            bool charge = marshal && skill == MARSHAL_CHARGE;
-            bool rupture = marshal && skill == MARSHAL_RUPTURE;
             float t = enemy->stateTime;
-            float heading = atan2f(enemy->attackDirection.y, enemy->attackDirection.x) * RAD2DEG;
-            float windup = shield ? shieldImpact : marshal ? marshalSkills[skill].impact : executionerImpact;
-            if (enemy->templarRole == TEMPLAR_CROSSBOW) continue;
-            if (marshal && skill == MARSHAL_SHOCKWAVE) {
-                float radius = marshalSkills[skill].reach;
-                if (t < windup) {
-                    DrawCircleV(enemy->position, radius, Fade(MAROON, .12f + .19f * t / windup));
-                    DrawCircleLinesV(enemy->position, radius, Fade(ORANGE, .65f));
-                } else if (t < marshalSkills[skill].activeEnd) {
-                    float age = (t - windup) / (marshalSkills[skill].activeEnd - windup);
-                    float edge = radius * age;
-                    DrawRing(enemy->position, fmaxf(0, edge - 18), edge + 6, 0, 360, 64, Fade(MAROON, .75f));
-                    DrawRing(enemy->position, edge, edge + 5, 0, 360, 64, Fade(RAYWHITE, 1 - .55f * age));
+            if (enemy->templarRole == TEMPLAR_CROSSBOW) {
+                if (!enemy->attackConnected) {
+                    Vector2 origin = EnemyCenter(enemy);
+                    DrawLineEx(origin,Vector2Add(origin,Vector2Scale(enemy->attackDirection,300)),3,Fade(GOLD,.65f));
                 }
                 continue;
             }
-            if (t < windup && (charge || enemy->templarRole == TEMPLAR_EXECUTIONER)) {
-                Vector2 end = Vector2Add(enemy->position, Vector2Scale(enemy->attackDirection, charge ? 280 : 120));
-                DrawLineEx(enemy->position, end, 4, Fade(ORANGE, .68f));
-            }
-            if (charge) {
-                if (t >= windup && t < marshalSkills[skill].activeEnd) {
-                    Vector2 tail = Vector2Subtract(enemy->position, Vector2Scale(enemy->attackDirection, 130));
-                    Vector2 normal = {-enemy->attackDirection.y, enemy->attackDirection.x};
-                    for (int side = -1; side <= 1; side += 2) {
-                        Vector2 offset = Vector2Scale(normal, side * (22 + 7 * sinf(t * 35)));
-                        DrawLineEx(Vector2Add(tail, offset), Vector2Add(enemy->position, offset),
-                                   3, Fade(RAYWHITE, .46f));
-                    }
-                }
-                continue;
-            }
-            float reach = shield ? ENEMY_ATTACK_RANGE + 8 : marshal ? marshalSkills[skill].reach : 106;
-            float spread = shield ? 90 : marshal ? acosf(marshalSkills[skill].arcDot) * RAD2DEG : 99;
-            if (t < windup)
-                DrawCircleSector(enemy->position, reach, heading - spread, heading + spread, 24,
-                                 Fade(ORANGE, .12f + .22f * t / windup));
-            else if (t < windup + (rupture ? .36f : .20f)) {
-                float age = (t - windup) / (rupture ? .36f : .20f);
-                float radius = reach * (.54f + .46f * age);
-                float sweep = heading - spread + 2 * spread * age;
-                bool returning = marshal && skill == MARSHAL_RETURN;
-                if (returning) sweep = heading + spread - 2 * spread * age;
-                float start = rupture ? heading - spread : fmaxf(heading - spread, sweep - spread * .64f);
-                float end = rupture ? heading + spread : fminf(heading + spread, sweep + spread * .64f);
-                DrawRing(enemy->position, radius * .72f, radius, start, end, 24, Fade(ORANGE, .68f * (1 - age)));
-                DrawRing(enemy->position, radius - 4, radius, start, end, 24, Fade(RAYWHITE, .86f * (1 - age)));
-                if (rupture) {
-                    Vector2 center = Vector2Add(enemy->position, Vector2Scale(enemy->attackDirection, 72));
-                    DrawTemplarDust(center, enemy->attackDirection, age, 2.3f);
-                    DrawEmberBurst(center, age);
-                }
+            float windup = shield ? shieldImpact : executionerImpact;
+            float heading = atan2f(enemy->attackDirection.y,enemy->attackDirection.x)*RAD2DEG;
+            float reach = shield ? ENEMY_ATTACK_RANGE+8 : 106;
+            float spread = shield ? 90 : 99;
+            if (t < windup) {
+                if (!shield) DrawLineEx(enemy->position,Vector2Add(enemy->position,
+                    Vector2Scale(enemy->attackDirection,120)),4,Fade(ORANGE,.68f));
+                DrawCircleSector(enemy->position,reach,heading-spread,heading+spread,24,
+                                 Fade(ORANGE,.12f+.22f*t/windup));
+            } else if (t < windup+.20f) {
+                float age = (t-windup)/.20f;
+                float radius = reach*(.54f+.46f*age);
+                float sweep = heading-spread+2*spread*age;
+                float start = fmaxf(heading-spread,sweep-spread*.64f);
+                float end = fminf(heading+spread,sweep+spread*.64f);
+                DrawRing(enemy->position,radius*.72f,radius,start,end,24,Fade(ORANGE,.68f*(1-age)));
+                DrawRing(enemy->position,radius-4,radius,start,end,24,Fade(RAYWHITE,.86f*(1-age)));
             }
         }
     }
@@ -2427,8 +2767,8 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
         }
         if (enemy->templarRole != TEMPLAR_NONE) {
             DrawTemplar(group, enemy);
-            DrawEnemyHealthBar(enemy, enemy->position.y - templarSizes[enemy->templarRole] *
-                               (enemy->type == ENEMY_BOSS ? 1.13f : 1.02f));
+            if (enemy->type != ENEMY_BOSS)
+                DrawEnemyHealthBar(enemy, enemy->position.y - templarSizes[enemy->templarRole] * 1.02f);
             continue;
         }
         if (enemy->state == ENEMY_SPAWNING) {
@@ -2502,12 +2842,8 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
         if (enemy->state == ENEMY_FALLEN) DrawGameText("E: selar",(int)enemy->position.x-30,(int)enemy->position.y+10,16,GOLD);
         if (enemy->type == ENEMY_SPECIAL && enemy->state == ENEMY_ATTACK && enemy->stateTime < SPECIAL_CHARGE_START)
             DrawCircleLines((int)enemy->position.x,(int)enemy->position.y,55,ORANGE);
-        if (EnemyCanBeHit(enemy) && enemy->health < enemy->maxHealth) {
-            int healthY = (int)enemy->position.y - (enemy->type == ENEMY_SPECIAL ? 106 : 85);
-            DrawRectangle((int)enemy->position.x-24,healthY,48,5,DARKGRAY);
-            DrawRectangle((int)enemy->position.x-24,healthY,
-                          48*enemy->health/enemy->maxHealth,5,RED);
-        }
+        if (enemy->health < enemy->maxHealth)
+            DrawEnemyHealthBar(enemy, (int)enemy->position.y - (enemy->type == ENEMY_SPECIAL ? 106 : 85));
     }
     if (foreground) {
         DrawRangedProjectiles(group);
