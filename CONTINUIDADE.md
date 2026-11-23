@@ -4,6 +4,8 @@ Atualizado em 23/11/2026. Leia junto do código e de `git status` antes de retom
 
 ## Retomada rápida
 
+- **23/11 — Legendas da cutscene de Chã da Tristeza:** o flashback agora tem legendas na lembrança de Chã de Alegria, na chegada da febre e na tentativa de mexer no selo. As duas falas no presente e o avanço automático continuam como antes. O teste `guardian_cutscene` passou com asserções ativas, e as cinco legendas foram conferidas nas capturas a 800×450. A sequência atualizada foi copiada para os assets da build local.
+
 - **23/11 — Integração com `764da84`:** o pull trouxe a identificação **Você** nas cutscenes, as cartelas góticas e o rebalanceamento da Clareira e do Cemitério, além da barra de chefes no centro inferior. Reaplicadas as cutscenes pré e pós-luta de Igris e as seis folhas do espadachim e do arqueiro do Portão. Os atalhos de primeira e segunda fase no F1 mantêm as cartelas de área, onda e chefe. A Release compilou em `out/review/release` e os sete testes de Debug passaram em `out/review/boss-hud-check`, incluindo as cartelas no F1, o HUD e o fluxo de Igris.
 
 - **23/11 — Inimigos comuns do Portão da Última Sentença:** as seis folhas em `assets/templarios/` substituem espadachim com escudo e arqueiro nas duas ondas. Cada um tem espera, marcha e ataque nas quatro direções, mantendo as formações, os tempos de dano e disparo, a defesa frontal do escudo e as barras de inimigos comuns. O carrasco e o porta-estandarte continuam usando as folhas existentes. A prévia dos atlas foi conferida e `clearing_encounter` aprovou o carregamento e as formações, com captura em `audit/portao_espadachim_arqueiro.png`.
