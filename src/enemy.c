@@ -2254,7 +2254,7 @@ static void DrawIgrisEclipsePose(Texture2D art, int frame, int row, Vector2 feet
         {96,259,431,611,814,1029,1243,1446},
     };
     int left = edges[row][frame], width = edges[row][frame+1]-left;
-    const float scale = .80f;
+    const float scale = .85f;
     DrawTexturePro(art,(Rectangle){left,row*256,width,256},
                    (Rectangle){feet.x,feet.y,width*scale,256*scale},
                    (Vector2){(body[row][frame]-left)*scale,239*scale},0,tint);
@@ -2326,14 +2326,14 @@ static void DrawIgris(const EnemyGroup *group, const Enemy *enemy) {
             int cel = t < IGRIS_ECHO_PLANT ? 0 : t >= IGRIS_ECHO_FADE ? 5 :
                 t < IgrisEchoLaunch(0) ? 1 : t < IgrisEchoLaunch(1) ? 2 : t < IgrisEchoLaunch(2) ? 3 : 4;
             DrawIgrisCell(group->igrisArt[IGRIS_ECHO_ART],6,4,cel,IgrisRow(IGRIS_FINAL_MELEE,facing),
-                          feet,238,.5f,.85f,false,0,WHITE);
+                          feet,245,.5f,.88f,false,0,WHITE);
             return;
         }
         if (skill == IGRIS_Z_RIP) {
             int cel = 0;
             while (cel < 11 && enemy->stateTime >= igrisZFrames[cel+1]) cel++;
             DrawIgrisCell(group->igrisArt[IGRIS_Z_DOWN+facing],4,3,cel%4,cel/4,
-                          feet,248,.5f,.88f,false,0,WHITE);
+                          feet,272,.5f,.88f,false,0,WHITE);
             return;
         }
         if (skill == IGRIS_ABYSS_GRAB) {
@@ -2341,7 +2341,7 @@ static void DrawIgris(const EnemyGroup *group, const Enemy *enemy) {
             int cel = t < .22f ? 0 : t < .40f ? 1 : t < IGRIS_GRAB_IMPACT ? 2 :
                 t < .78f ? 3 : t < IGRIS_GRAB_RELEASE ? 4 : 5;
             DrawIgrisCell(group->igrisArt[IGRIS_GRAB_ART],6,4,cel,IgrisRow(IGRIS_FINAL_MELEE,facing),
-                          feet,238,.5f,.82f,false,0,WHITE);
+                          feet,272.2f,.5f,.84f,false,0,WHITE);
             return;
         }
         art = igrisSkills[skill].art;
@@ -2356,10 +2356,10 @@ static void DrawIgris(const EnemyGroup *group, const Enemy *enemy) {
     bool flip = (art <= IGRIS_MELEE_ART && facing == 3) ||
                 (art == IGRIS_SPEARS_ART && facing == 2);
     float anchorX = .50f;
-    float ground = enemy->igrisFinalForm ? .84f : art == IGRIS_SPEARS_ART && facing == 0 ? .84f : .94f;
-    if (enemy->igrisFinalForm && art == IGRIS_FINAL_WALK && facing == 0) ground = .92f;
-    float drawHeight = enemy->igrisFinalForm ? (art == IGRIS_FINAL_MELEE ? 243.0f : 238.0f) :
-                       (art == IGRIS_MELEE_ART ? 213.75f : 190.0f);
+    float ground = enemy->igrisFinalForm ? .88f : (art == IGRIS_SPEARS_ART ? .78f : .94f);
+    float drawHeight = enemy->igrisFinalForm ? 245.0f :
+                       (art == IGRIS_SPEARS_ART ? 237.5f :
+                        (art == IGRIS_MELEE_ART || art == IGRIS_ERUPTION_ART) ? 213.75f : 190.0f);
     bool fallen = enemy->state == ENEMY_FALLEN;
     float fall = fallen ? 1 : enemy->state == ENEMY_DIE ? Clamp(enemy->stateTime/1.2f,0,1) : 0;
     if (fallen) DrawBossGroundSeal(group->sealMarker,feet);
