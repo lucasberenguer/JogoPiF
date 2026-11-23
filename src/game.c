@@ -18,24 +18,10 @@
 #include <string.h>
 
 static int DrawAngelRevival(const LogicMCQuestion *question) {
-    float w=(float)GetScreenWidth(), h=(float)GetScreenHeight();
-    float center=h*.5f;
-    float buttonWidth=fminf(660,w-48);
-    const int keys[]={KEY_ONE,KEY_TWO,KEY_THREE};
-    int choice=-1;
-    DrawGameTextIn("A bênção do Anjo", (Rectangle){20,center-185,w-40,62}, 50,GOLD,true);
-    DrawGameTextIn("Qual expressão é equivalente? Acerte para voltar com metade da vida.",
-                   (Rectangle){20,center-116,w-40,38}, 23,RAYWHITE,false);
-    DrawGameTextIn(question->questionText, (Rectangle){20,center-66,w-40,46}, 32,GOLD,false);
-    for(int i=0;i<LOGIC_CHOICE_COUNT;i++) {
-        Rectangle button={(w-buttonWidth)*.5f,center+8+i*57,buttonWidth,48};
-        bool hover=CheckCollisionPointRec(GetMousePosition(),button);
-        if (IsKeyPressed(keys[i]) || (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))) choice=i;
-        DrawRectangleRec(button,hover?MAROON:DARKGRAY);
-        DrawRectangleLinesEx(button,2,GOLD);
-        DrawGameTextIn(TextFormat("%d. %s",i+1,question->choices[i]),button,25,RAYWHITE,false);
-    }
-    return choice;
+    const char *choices[] = {question->choices[0],question->choices[1],question->choices[2]};
+    DrawRitualQuestion("A bênção do Anjo",question->questionText,
+                       "Escolha a equivalente para voltar com metade da vida.",choices,3);
+    return ReadRitualChoice(3);
 }
 
 static Camera2D FitClearing(const Clearing *clearing) {
