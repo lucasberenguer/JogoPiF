@@ -22,9 +22,9 @@ bool InitGun(Gun *gun) {
     *gun = (Gun){0};
     gun->projectile = LoadTexture("assets/arma_fogo_projetil.png");
     gun->impact = LoadTexture("assets/arma_fogo_impacto.png");
-    gun->body = LoadTexture("assets/arma_fogo_disparo.png");
-    gun->idleBody = LoadTexture("assets/arma_fogo_idle_novo.png");
-    gun->walkBody = LoadTexture("assets/arma_fogo_caminhada.png");
+    gun->body = LoadTexture("assets/protagonista/fluido/arma_fogo_disparo.png");
+    gun->idleBody = LoadTexture("assets/protagonista/fluido/arma_fogo_idle_novo.png");
+    gun->walkBody = LoadTexture("assets/protagonista/fluido/arma_fogo_caminhada.png");
     if (!gun->projectile.id || !gun->impact.id ||
         !gun->body.id || !gun->idleBody.id || !gun->walkBody.id) {
         UnloadGun(gun);

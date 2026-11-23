@@ -49,6 +49,40 @@ def eruption_cell(source, row, col):
     return aligned
 
 
+def premultiplied_rgba(cell, size):
+    image = np.asarray(cell.resize(size, Image.Resampling.LANCZOS)).astype(np.float32) / 255
+    image[:, :, :3] *= image[:, :, 3:]
+    return image
+
+
+class MotionInterpolator:
+    def __init__(self, size):
+        width, height = size
+        x, y = np.meshgrid(np.arange(width, dtype=np.float32), np.arange(height, dtype=np.float32))
+        self.grid = np.stack((x, y), axis=-1)
+        self.flow = cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_MEDIUM)
+
+    @staticmethod
+    def luminance(pose):
+        gray = cv2.cvtColor(pose[:, :, :3], cv2.COLOR_RGB2GRAY)
+        return np.clip((gray + .18 * pose[:, :, 3]) * 255, 0, 255).astype(np.uint8)
+
+    def frames(self, current, following, samples):
+        a, b = self.luminance(current), self.luminance(following)
+        forward, backward = self.flow.calc(a, b, None), self.flow.calc(b, a, None)
+        for step in range(samples):
+            phase = step / samples
+            if step == 0:
+                image = current.copy()
+            else:
+                start = cv2.remap(current, self.grid - phase * forward, None, cv2.INTER_LINEAR)
+                end = cv2.remap(following, self.grid - (1 - phase) * backward, None, cv2.INTER_LINEAR)
+                image = start * (1 - phase) + end * phase
+            image[:, :, :3] /= np.maximum(image[:, :, 3:], .001)
+            rgba = np.clip(np.rint(image * 255), 0, 255).astype(np.uint8)
+            yield Image.fromarray(rgba)
+
+
 def generate(name, columns, rows, samples, loop, sequential_rows):
     source = Image.open(ROOT / f"{name}.png").convert("RGBA")
     original_width, original_height = source.width // columns, source.height // rows
@@ -67,38 +101,17 @@ def generate(name, columns, rows, samples, loop, sequential_rows):
                 cell = source.crop((left, y, right, y + original_height))
             else:
                 cell = source.crop((x, y, x + original_width, y + original_height))
-            rgba = np.asarray(cell.resize((width, height), Image.Resampling.LANCZOS)).astype(np.float32) / 255
-            rgba[:, :, :3] *= rgba[:, :, 3:]
-            poses.append(rgba)
+            poses.append(premultiplied_rgba(cell, (width, height)))
     atlas = Image.new("RGBA", (width * columns, height * rows * samples))
-    x, y = np.meshgrid(np.arange(width, dtype=np.float32), np.arange(height, dtype=np.float32))
-    grid = np.stack((x, y), axis=-1)
-    flow = cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_MEDIUM)
+    interpolator = MotionInterpolator((width, height))
     for index, current in enumerate(poses):
         row, col = divmod(index, columns)
         at_end = col == columns - 1 and not sequential_rows or index == len(poses) - 1
         following = poses[row * columns if loop else index] if at_end else poses[index + 1]
         if name == "spears_fx" and col == 4:
             following = poses[row * columns + 2]
-        # Include the silhouette in the motion estimate, even on dark armor.
-        def luminance(pose):
-            gray = cv2.cvtColor(pose[:, :, :3], cv2.COLOR_RGB2GRAY)
-            return np.clip((gray + .18 * pose[:, :, 3]) * 255, 0, 255).astype(np.uint8)
-
-        a, b = luminance(current), luminance(following)
-        forward, backward = flow.calc(a, b, None), flow.calc(b, a, None)
-        for step in range(samples):
-            phase = step / samples
-            if step == 0:
-                image = current.copy()
-            else:
-                start = cv2.remap(current, grid - phase * forward, None, cv2.INTER_LINEAR)
-                end = cv2.remap(following, grid - (1 - phase) * backward, None, cv2.INTER_LINEAR)
-                image = start * (1 - phase) + end * phase
-            alpha = image[:, :, 3:]
-            image[:, :, :3] /= np.maximum(alpha, .001)
-            rgba = np.clip(np.rint(image * 255), 0, 255).astype(np.uint8)
-            atlas.paste(Image.fromarray(rgba), (col * width, (row + step * rows) * height))
+        for step, image in enumerate(interpolator.frames(current, following, samples)):
+            atlas.paste(image, (col * width, (row + step * rows) * height))
     atlas.save(ROOT / "fluido" / f"{name}.png")
     print(name, atlas.size, flush=True)
 

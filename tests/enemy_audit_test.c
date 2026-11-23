@@ -245,6 +245,30 @@ static void CheckGuardianMelee(Clearing *map, EnemyGroup *group) {
     }
 }
 
+static void CheckGuardianClosePressure(Clearing *map, EnemyGroup *group) {
+    const Vector2 origin = {400,400}, player = {527,400};
+    int health = 100;
+    StartArenaBoss(group,map,player,1);
+    Enemy *boss = &group->list[0];
+    boss->position = origin;
+    boss->state = ENEMY_IDLE;
+    boss->attackCooldown = 0;
+    UpdateEnemies(group,map,player,.16f,false,&health,100);
+    assert(boss->state == ENEMY_WALK && boss->position.x > origin.x);
+    UpdateEnemies(group,map,player,.01f,false,&health,100);
+    assert(boss->state == ENEMY_ATTACK && boss->guardianMelee);
+    UpdateEnemies(group,map,player,.41f,false,&health,100);
+    assert(health == 74);
+    UpdateEnemies(group,map,player,.40f,false,&health,100);
+    Vector2 feet = boss->position;
+    UpdateEnemies(group,map,player,.10f,false,&health,100);
+    assert(boss->state == ENEMY_IDLE && Vector2Distance(feet,boss->position) < .01f);
+    UpdateEnemies(group,map,player,.26f,false,&health,100);
+    assert(boss->state == ENEMY_ATTACK && boss->guardianMelee);
+    UpdateEnemies(group,map,player,.41f,false,&health,100);
+    assert(health == 48);
+}
+
 static void CheckGuardianDodge(Clearing *map, EnemyGroup *group) {
     Vector2 player={500,400};
     int health=100;
@@ -642,6 +666,7 @@ int main(void) {
     assert(EnemiesRemaining(&group)==14); /* Clareira, onda 1 */
     CheckGuardianAttacks(&map, &group);
     CheckGuardianMelee(&map, &group);
+    CheckGuardianClosePressure(&map, &group);
     CheckGuardianDodge(&map, &group);
     for (int i=0;i<ENEMY_COUNT;i++) group.list[i]=(Enemy){.state=ENEMY_GONE};
     Enemy *melee = &group.list[0];

@@ -29,10 +29,10 @@ static Vector2 BookCenter(const Bible *b, Vector2 player, int index) {
 
 bool InitBible(Bible *b) {
     *b = (Bible){0};
-    b->sprites = LoadTexture("assets/biblia_orbita.png");
-    b->activation = LoadTexture("assets/biblia_ativacao_nova.png");
-    b->idle = LoadTexture("assets/biblia_idle.png");
-    b->walk = LoadTexture("assets/biblia_caminhada.png");
+    b->sprites = LoadTexture("assets/protagonista/fluido/biblia_orbita.png");
+    b->activation = LoadTexture("assets/protagonista/fluido/biblia_ativacao_nova.png");
+    b->idle = LoadTexture("assets/protagonista/fluido/biblia_idle.png");
+    b->walk = LoadTexture("assets/protagonista/fluido/biblia_caminhada.png");
     if (!b->sprites.id || !b->activation.id || !b->idle.id || !b->walk.id) { UnloadBible(b); return false; }
     SetTextureFilter(b->sprites, TEXTURE_FILTER_POINT);
     SetTextureFilter(b->activation, TEXTURE_FILTER_POINT);
@@ -143,9 +143,10 @@ void DrawBible(const Bible *b, Vector2 player, bool foreground) {
             DrawCircleV(trail, j==1 ? 2.8f : 1.6f,
                         Fade(GOLD, (b->boostRemaining>0.0f ? 0.55f : 0.32f)/j));
         }
-        int frame = ((int)(b->animationTime * 9.0f) + i * 2) % 8;
+        int frame = (int)(b->animationTime*27) % 24;
+        frame = (frame + i*6) % 24;
         float size = 72.0f;
-        DrawTexturePro(b->sprites, (Rectangle){frame*80.0f,0,80,80},
+        DrawTexturePro(b->sprites, (Rectangle){(frame/3)*80.0f,(frame%3)*80.0f,80,80},
                        (Rectangle){center.x-size/2,center.y-size/2,size,size},
                        (Vector2){0},0,WHITE);
     }

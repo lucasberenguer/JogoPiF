@@ -34,7 +34,8 @@
 #define GUARDIAN_DEFEAT_FRAMES 8
 #define GUARDIAN_SPAWN_DURATION 3.0f
 #define GUARDIAN_SPAWN_COLUMNS 6
-#define GUARDIAN_SPAWN_RECOIL_FRAME 13 /* Índice na folha, começando em zero. */
+#define GUARDIAN_SPAWN_FRAMES 23
+#define GUARDIAN_RENDER_SAMPLES 4
 #define GUARDIAN_SPAWN_SCALE .72f
 #define GUARDIAN_SPRITE_SCALE .65f
 #define GUARDIAN_PHASE_TRANSITION_TIME 1.0f
@@ -55,47 +56,16 @@
 #define GUARDIAN_CURSE_TILE_WIDTH 384
 #define GUARDIAN_CURSE_TILE_HEIGHT 320
 #define GUARDIAN_MELEE_RANGE 118.0f
-#define GUARDIAN_MELEE_COOLDOWN 1.65f
+#define GUARDIAN_MELEE_PRESSURE_RANGE 132.0f
+#define GUARDIAN_MELEE_COOLDOWN 1.15f
 #define GUARDIAN_MELEE_FPS 10.0f
 #define GUARDIAN_MELEE_FRAMES 8
 #define GUARDIAN_MELEE_HIT_FRAME 4
 
-/* As poses da folha têm larguras diferentes. O pivô acompanha o corpo e a
-   linha do chão de cada fileira, independente de folhas e raízes soltas. */
-static const struct {
-    int top, bottom, ground;
-    int edges[GUARDIAN_SPAWN_COLUMNS + 1];
-    int pivots[GUARDIAN_SPAWN_COLUMNS];
-} guardianSpawnRows[] = {
-    {0,   234, 221, {0, 224, 452, 674, 937, 1201, 1536}, {116, 343, 571, 819, 1078, 1348}},
-    {234, 474, 462, {0, 242, 481, 737, 984, 1236, 1536}, {118, 362, 619, 868, 1122, 1374}},
-    {474, 702, 692, {0, 254, 523, 788, 1055, 1288, 1536}, {140, 397, 674, 938, 1188, 1433}},
-    {702, 940, 924, {0, 273, 529, 784, 1049, 1278, 1536}, {155, 407, 680, 930, 1181, 1408}},
-};
-
-#define GUARDIAN_SPAWN_FRAMES ((int)(sizeof(guardianSpawnRows) / sizeof(guardianSpawnRows[0])) * GUARDIAN_SPAWN_COLUMNS - 1)
-
-/* Ordem das direções do inimigo: baixo, cima, esquerda e direita.
-   O primeiro recorte de cada linha começa depois da legenda da folha. */
-static const struct {
-    int top, bottom, ground;
-    int edges[GUARDIAN_DEFEAT_FRAMES + 1];
-    float scale;
-} guardianDefeatRows[] = {
-    {0,   267, 251, {74, 248, 420, 609, 795, 988, 1176, 1364, 1536}, .66f},
-    {267, 523, 508, {73, 248, 420, 608, 795, 988, 1178, 1364, 1536}, .72f},
-    {523, 779, 763, {94, 251, 420, 607, 793, 987, 1179, 1366, 1536}, .70f},
-    {779, 1024, 1005, {78, 250, 420, 607, 797, 990, 1181, 1363, 1536}, .71f},
-};
-
-static const int guardianDefeatPivots[GUARDIAN_DEFEAT_FRAMES] = {
-    158, 334, 510, 699, 891, 1084, 1271, 1454
-};
-
-static int GuardianDefeatFrame(const Enemy *enemy) {
+static float GuardianDefeatPose(const Enemy *enemy) {
     if (enemy->state == ENEMY_FALLEN) return GUARDIAN_DEFEAT_FRAMES - 1;
-    float progress = enemy->stateTime / ENEMY_DEFEAT_DURATION;
-    return (int)fminf(progress * GUARDIAN_DEFEAT_FRAMES, GUARDIAN_DEFEAT_FRAMES - 1);
+    return Clamp(enemy->stateTime * GUARDIAN_DEFEAT_FRAMES / ENEMY_DEFEAT_DURATION,
+                 0, GUARDIAN_DEFEAT_FRAMES - 1);
 }
 
 static bool IsGuardianSpawn(const EnemyGroup *group, const Enemy *enemy) {
@@ -103,9 +73,9 @@ static bool IsGuardianSpawn(const EnemyGroup *group, const Enemy *enemy) {
            enemy->type == ENEMY_BOSS && enemy->state == ENEMY_SPAWNING;
 }
 
-static int GuardianSpawnFrame(const Enemy *enemy) {
-    float progress = enemy->stateTime / GUARDIAN_SPAWN_DURATION;
-    return (int)Clamp(progress * GUARDIAN_SPAWN_FRAMES, 0, GUARDIAN_SPAWN_FRAMES - 1);
+static float GuardianSpawnPose(const Enemy *enemy) {
+    return Clamp(enemy->stateTime * GUARDIAN_SPAWN_FRAMES / GUARDIAN_SPAWN_DURATION,
+                 0, GUARDIAN_SPAWN_FRAMES - 1);
 }
 
 typedef struct GuardianHazard {
@@ -186,20 +156,23 @@ static int ClearingEnemyFrame(const Enemy *enemy, bool boneland) {
     }
 }
 
+static float GuardianBodyPose(const Enemy *enemy) {
+    if (enemy->state == ENEMY_ATTACK && enemy->guardianMelee)
+        return Clamp(enemy->stateTime * GUARDIAN_MELEE_FPS, 0, GUARDIAN_MELEE_FRAMES - 1);
+    if (enemy->state == ENEMY_ATTACK && enemy->bossAttack == GUARDIAN_ROOTS)
+        return Clamp(enemy->stateTime * 6, 0, 8);
+    if (enemy->state == ENEMY_WALK) {
+        float speed = enemy->speed * (GuardianEnraged(enemy) ? 1.5f : 1.0f);
+        return fmodf(enemy->walkTime * 4 * speed / 30, 8);
+    }
+    return fmodf(fmaxf(0, enemy->stateTime) * 7, 6);
+}
+
 int EnemyAnimationFrame(const Enemy *enemy) {
     if (enemy->type == ENEMY_BOSS) {
-        if (enemy->state == ENEMY_ATTACK && enemy->guardianMelee)
-            return (int)fminf(enemy->stateTime * GUARDIAN_MELEE_FPS, GUARDIAN_MELEE_FRAMES - 1);
-        if (enemy->state == ENEMY_ATTACK && enemy->bossAttack != GUARDIAN_ROOTS)
+        if (enemy->state == ENEMY_ATTACK && !enemy->guardianMelee && enemy->bossAttack != GUARDIAN_ROOTS)
             return 0;
-       if (enemy->state == ENEMY_WALK) {
-            float v = enemy->speed * (GuardianEnraged(enemy) ? 1.5f : 1.0f);
-            float fps = 4.0f * v / 30.0f;
-            return (int)(enemy->walkTime * fps) % 8;
-        }
-        int count = enemy->state == ENEMY_ATTACK ? 9 : 6;
-        int frame = (int)(enemy->stateTime * (enemy->state == ENEMY_ATTACK ? 6.0f : 7.0f));
-        return enemy->state == ENEMY_ATTACK ? (frame < count ? frame : count-1) : frame % count;
+        return (int)GuardianBodyPose(enemy);
     }
     int count = enemy->type == ENEMY_COMMON_RANGED ? 4 :
                 enemy->state == ENEMY_ATTACK || enemy->state == ENEMY_DIE ? 5 : 4;
@@ -404,16 +377,16 @@ static bool LoadClearingEnemyAssets(EnemyGroup *group) {
     group->clearingSpecial[1] = LoadClearingSpriteWithMatte("assets/clareira_especial_andar.png", matte);
     group->clearingSpecial[2] = LoadTexture("assets/clareira_especial_ataque.png");
     if (matte.id) UnloadShader(matte);
-    group->bossSprites = LoadTexture("assets/boss_clareira.png");
-    group->guardianSpawn = LoadTexture("assets/boss_clareira_spawn.png");
-    group->guardianDefeat = LoadTexture("assets/boss_clareira_derrota.png");
-    group->bossWalk = LoadTexture("assets/boss_clareira_andar.png");
+    group->bossSprites = LoadTexture("assets/guardiao/fluido/espera.png");
+    group->guardianSpawn = LoadTexture("assets/guardiao/fluido/emergencia.png");
+    group->guardianDefeat = LoadTexture("assets/guardiao/fluido/queda.png");
+    group->bossWalk = LoadTexture("assets/guardiao/fluido/marcha.png");
     group->bossPortrait = LoadTexture("assets/guardiao_intro_pixel_v2.png");
-    group->bossAttack = LoadTexture("assets/boss_clareira_especial_1.png");
-    group->roots = LoadTexture("assets/boss_clareira_raizes_area.png");
-    group->rootWave = LoadTexture("assets/boss_clareira_onda.png");
-    group->curse = LoadTexture("assets/boss_clareira_maldicao.png");
-    group->guardianMelee = LoadTexture("assets/boss_clareira_corpo_a_corpo.png");
+    group->bossAttack = LoadTexture("assets/guardiao/fluido/conjuracao.png");
+    group->roots = LoadTexture("assets/guardiao/fluido/raizes.png");
+    group->rootWave = LoadTexture("assets/guardiao/fluido/onda.png");
+    group->curse = LoadTexture("assets/guardiao/fluido/maldicao.png");
+    group->guardianMelee = LoadTexture("assets/guardiao/fluido/golpe.png");
     if (!group->sprites.id || !group->backSprites.id || !group->frontSprites.id ||
         !group->clearingMelee[0].id || !group->clearingMelee[1].id || !group->clearingMelee[2].id ||
         !group->clearingArcher[0].id || !group->clearingArcher[1].id || !group->clearingArcher[2].id ||
@@ -1828,9 +1801,11 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         if (enemy->type == ENEMY_BOSS || enemy->type == ENEMY_SPECIAL) {
             float range = enemy->type == ENEMY_BOSS ? 560 : 280;
             bool guardian = enemy->type == ENEMY_BOSS;
-            bool melee = guardian && distance <= 105.0f &&
+            bool closePressure = guardian && distance <= GUARDIAN_MELEE_PRESSURE_RANGE &&
+                                 MapHasClearPath(clearing,enemy->position,player);
+            bool melee = closePressure && distance <= GUARDIAN_MELEE_RANGE &&
                          enemy->guardianMeleeCooldown <= 0;
-            if (guardian && (melee || enemy->attackCooldown <= 0))
+            if (guardian && (closePressure || enemy->attackCooldown <= 0))
                 enemy->guardianDodgeTime = 0;
             if (guardian && enemy->guardianDodgeTime > 0) {
                 enemy->guardianDodgeTime = fmaxf(0,enemy->guardianDodgeTime-dt);
@@ -1838,8 +1813,9 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 enemy->walkTime += dt;
                 MoveEnemy(clearing,enemy,Vector2Scale(enemy->guardianDodgeDirection,
                           enemy->speed*2.2f*dt));
-            } else if (guardian && !melee && enemy->guardianDodgeCooldown <= 0 &&
-                       enemy->attackCooldown > .35f && distance > 95 && distance < 215) {
+            } else if (guardian && enemy->guardianDodgeCooldown <= 0 &&
+                       enemy->attackCooldown > .35f &&
+                       distance > GUARDIAN_MELEE_PRESSURE_RANGE && distance < 215) {
                 Vector2 side = Vector2Normalize((Vector2){-toPlayer.y,toPlayer.x});
                 if (enemy->attackBurst++%2) side=Vector2Negate(side);
                 Vector2 destination=Vector2Add(enemy->position,Vector2Scale(side,48));
@@ -1853,7 +1829,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                     enemy->guardianDodgeTime=.22f;
                     enemy->state=ENEMY_WALK;
                 }
-            } else if (melee || (distance <= range && enemy->attackCooldown <= 0 &&
+            } else if (melee || (!closePressure && distance <= range && enemy->attackCooldown <= 0 &&
                        (enemy->templarRole != TEMPLAR_EXECUTIONER ||
                         (distance <= 245 && MapHasClearPath(clearing, enemy->position, player))))) {
                 enemy->state = ENEMY_ATTACK;
@@ -1863,7 +1839,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 if (melee) {
                     const Vector2 directions[] = {{0,1}, {0,-1}, {-1,0}, {1,0}};
                     enemy->guardianMelee = true;
-                    enemy->guardianMeleeCooldown = GuardianEnraged(enemy) ? 1.25f : GUARDIAN_MELEE_COOLDOWN;
+                    enemy->guardianMeleeCooldown = GuardianEnraged(enemy) ? 1.0f : GUARDIAN_MELEE_COOLDOWN;
                     enemy->attackDirection = directions[enemy->facing];
                 } else if (enemy->type == ENEMY_BOSS) {
                     StartGuardianCast(group, clearing, enemy, player);
@@ -1872,12 +1848,11 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                     enemy->attackCooldown = enemy->templarRole == TEMPLAR_EXECUTIONER ? 1.78f :
                         2.75f / fminf(enemy->power, 1.36f);
                 }
-            } else if (guardian && distance < 135.0f && !melee) {
+            } else if (closePressure && distance > GUARDIAN_MELEE_RANGE) {
                 enemy->state = ENEMY_WALK;
                 enemy->walkTime += dt;
-                Vector2 away=Vector2Negate(Vector2Normalize(toPlayer));
-                MoveEnemyTactically(group,clearing,enemy,
-                    Vector2Add(enemy->position,Vector2Scale(away,100)),enemy->speed*dt);
+                float step = fminf(enemy->speed*dt,distance-(GUARDIAN_MELEE_RANGE-6));
+                MoveEnemyTactically(group,clearing,enemy,player,step);
             } else if (distance > (guardian ? 230 : 100)) {
                 enemy->state = ENEMY_WALK;
                 enemy->walkTime += dt;
@@ -1973,17 +1948,26 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
     }
 }
 
+/* Cada amostra intermediária ocupa uma faixa de fileiras no atlas,
+   mantendo as dimensões abaixo do limite de textura. */
+static Rectangle GuardianSample(Texture2D texture, int columns, int rows, int row, float pose, bool flip) {
+    int sample = (int)(fmaxf(0, pose) * GUARDIAN_RENDER_SAMPLES);
+    float width = texture.width / columns;
+    float height = texture.height / (rows * GUARDIAN_RENDER_SAMPLES);
+    return (Rectangle){(sample / GUARDIAN_RENDER_SAMPLES) * width,
+                       (row + sample % GUARDIAN_RENDER_SAMPLES * rows) * height,
+                       flip ? -width : width, height};
+}
+
 static void DrawGuardianWaveFrame(Texture2D texture, Vector2 position, float elapsed,
                                   bool eruption, bool flip) {
-    int frame = (int)(elapsed * GUARDIAN_WAVE_FPS);
-    if (frame >= GUARDIAN_WAVE_FRAMES) return;
+    float pose = elapsed * GUARDIAN_WAVE_FPS;
+    if (pose >= GUARDIAN_WAVE_FRAMES || pose < 0) return;
     const float scale = .50f;
     const float width = GUARDIAN_WAVE_TILE_WIDTH * scale;
     const float height = GUARDIAN_WAVE_TILE_HEIGHT * scale;
     float ground = (eruption ? 217 : 252) * scale;
-    DrawTexturePro(texture,
-        (Rectangle){frame * GUARDIAN_WAVE_TILE_WIDTH, eruption ? GUARDIAN_WAVE_TILE_HEIGHT : 0,
-                    flip ? -GUARDIAN_WAVE_TILE_WIDTH : GUARDIAN_WAVE_TILE_WIDTH, GUARDIAN_WAVE_TILE_HEIGHT},
+    DrawTexturePro(texture, GuardianSample(texture, GUARDIAN_WAVE_FRAMES, 2, eruption, pose, flip),
         (Rectangle){position.x - width / 2, position.y - ground, width, height},
         (Vector2){0}, 0, WHITE);
 }
@@ -1998,12 +1982,9 @@ static void DrawGuardianCurse(Texture2D texture, const EnemyRoot *root, const Gu
     if (charging) elapsed += GUARDIAN_CURSE_CHARGE_FRAMES / GUARDIAN_CURSE_FPS;
     if (elapsed < 0) return;
     int count = charging ? GUARDIAN_CURSE_CHARGE_FRAMES : GUARDIAN_CURSE_IMPACT_FRAMES;
-    int frame = (int)(elapsed * GUARDIAN_CURSE_FPS);
-    if (frame >= count) frame = count - 1;
+    float pose = fminf(elapsed * GUARDIAN_CURSE_FPS, count - 1);
     const float scale = .80f;
-    DrawTexturePro(texture,
-        (Rectangle){frame * GUARDIAN_CURSE_TILE_WIDTH, charging ? 0 : GUARDIAN_CURSE_TILE_HEIGHT,
-                    GUARDIAN_CURSE_TILE_WIDTH, GUARDIAN_CURSE_TILE_HEIGHT},
+    DrawTexturePro(texture, GuardianSample(texture, GUARDIAN_CURSE_CHARGE_FRAMES, 2, charging ? 0 : 1, pose, false),
         (Rectangle){root->position.x - GUARDIAN_CURSE_TILE_WIDTH * scale / 2,
                     root->position.y - 250 * scale,
                     GUARDIAN_CURSE_TILE_WIDTH * scale, GUARDIAN_CURSE_TILE_HEIGHT * scale},
@@ -2103,39 +2084,24 @@ static void DrawRangedProjectiles(const EnemyGroup *group) {
 }
 
 static void DrawGuardianSpawn(Texture2D texture, const Enemy *enemy) {
-    int frame = GuardianSpawnFrame(enemy);
-    // Pula a pose em que o Guardião afunda no meio da subida.
-    if (frame >= GUARDIAN_SPAWN_RECOIL_FRAME) frame++;
-    int row = frame / GUARDIAN_SPAWN_COLUMNS;
-    int column = frame % GUARDIAN_SPAWN_COLUMNS;
-    int left = guardianSpawnRows[row].edges[column];
-    int top = guardianSpawnRows[row].top;
-    Rectangle source = {left, top, guardianSpawnRows[row].edges[column + 1] - left,
-                        guardianSpawnRows[row].bottom - top};
-    Vector2 pivot = {(guardianSpawnRows[row].pivots[column] - left) * GUARDIAN_SPAWN_SCALE,
-                     (guardianSpawnRows[row].ground - top) * GUARDIAN_SPAWN_SCALE};
-    Rectangle destination = {enemy->position.x, enemy->position.y,
-                             source.width * GUARDIAN_SPAWN_SCALE, source.height * GUARDIAN_SPAWN_SCALE};
-    DrawTexturePro(texture, source, destination, pivot, 0, WHITE);
+    float pose = GuardianSpawnPose(enemy);
+    int row = (int)pose / GUARDIAN_SPAWN_COLUMNS;
+    Rectangle source = GuardianSample(texture, GUARDIAN_SPAWN_COLUMNS, 4, row,
+                                      pose - row * GUARDIAN_SPAWN_COLUMNS, false);
+    DrawTexturePro(texture, source,
+        (Rectangle){enemy->position.x, enemy->position.y, 384 * GUARDIAN_SPAWN_SCALE, 288 * GUARDIAN_SPAWN_SCALE},
+        (Vector2){192 * GUARDIAN_SPAWN_SCALE, 256 * GUARDIAN_SPAWN_SCALE}, 0, WHITE);
 }
 
 static void DrawGuardianDefeat(Texture2D texture, const Enemy *enemy) {
+    static const float scales[] = {.66f, .72f, .70f, .71f};
     int row = enemy->facing;
-    int frame = GuardianDefeatFrame(enemy);
-    int left = guardianDefeatRows[row].edges[frame];
-    int right = guardianDefeatRows[row].edges[frame + 1];
-    int top = guardianDefeatRows[row].top;
-    int ground = guardianDefeatRows[row].ground;
-    int width = right - left;
-    int height = guardianDefeatRows[row].bottom - top;
-    float scale = guardianDefeatRows[row].scale;
+    float scale = scales[row];
     // As duas linhas laterais da arte original estão voltadas para a esquerda.
-    bool flip = row == 3;
-    int anchor = guardianDefeatPivots[frame];
-    Rectangle source = {left, top, flip ? -width : width, height};
-    Vector2 pivot = {(flip ? right - anchor : anchor - left) * scale, (ground - top) * scale};
-    Rectangle destination = {enemy->position.x, enemy->position.y, width * scale, height * scale};
-    DrawTexturePro(texture, source, destination, pivot, 0, WHITE);
+    Rectangle source = GuardianSample(texture, GUARDIAN_DEFEAT_FRAMES, 4, row, GuardianDefeatPose(enemy), row == 3);
+    DrawTexturePro(texture, source,
+        (Rectangle){enemy->position.x, enemy->position.y, 224 * scale, 288 * scale},
+        (Vector2){112 * scale, 256 * scale}, 0, WHITE);
     if (enemy->state == ENEMY_FALLEN)
         DrawGameText("E: selar", (int)enemy->position.x - 30, (int)enemy->position.y + 10, 18, GOLD);
 }
@@ -3033,9 +2999,8 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
             DrawGuardianWaveFrame(group->rootWave, root->position, root->age - hazard->warning, true,
                                   group->list[0].attackDirection.x < 0);
         } else {
-            int frame = (int)((root->age - hazard->warning)*10);
-            if (frame > 7) frame = 7;
-            DrawTexturePro(group->roots, (Rectangle){frame*288.0f,0,288,256},
+            float pose = fminf((root->age - hazard->warning) * 10, 7);
+            DrawTexturePro(group->roots, GuardianSample(group->roots, 8, 1, 0, pose, false),
                 (Rectangle){root->position.x-90,root->position.y-145,180,160}, (Vector2){0},0,WHITE);
         }
     }
@@ -3086,8 +3051,9 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
             float w = widePose ? 384 : 256, h = widePose ? 288 : 272;
             Texture2D texture = melee ? group->guardianMelee : attack ? group->bossAttack :
                     enemy->state == ENEMY_WALK ? group->bossWalk : group->bossSprites;
+            int columns = melee ? GUARDIAN_MELEE_FRAMES : attack ? 9 : enemy->state == ENEMY_WALK ? 8 : 6;
             DrawTexturePro(texture,
-                (Rectangle){EnemyAnimationFrame(enemy)*w, enemy->facing*h,w,h},
+                GuardianSample(texture, columns, 4, enemy->facing, GuardianBodyPose(enemy), false),
                 (Rectangle){enemy->position.x-w*.5f*GUARDIAN_SPRITE_SCALE,
                             enemy->position.y-(widePose?280:264)*GUARDIAN_SPRITE_SCALE,
                             w*GUARDIAN_SPRITE_SCALE,h*GUARDIAN_SPRITE_SCALE}, (Vector2){0},0,
@@ -3144,13 +3110,13 @@ void DrawEnemyDebug(const EnemyGroup *group) {
         Vector2 center = EnemyCenter(enemy);
         DrawCircleLines((int)center.x,(int)center.y,EnemyHurtRadius(enemy),GREEN);
         DrawCircleV(enemy->position,3.0f,YELLOW);
-        int frame = IsGuardianSpawn(group, enemy) ? GuardianSpawnFrame(enemy) : EnemyAnimationFrame(enemy);
+        int frame = IsGuardianSpawn(group, enemy) ? (int)GuardianSpawnPose(enemy) : EnemyAnimationFrame(enemy);
         if (!group->cemetery && (enemy->type == ENEMY_COMMON_MELEE || enemy->type == ENEMY_COMMON_RANGED ||
                                 enemy->type == ENEMY_SPECIAL))
             frame = ClearingEnemyFrame(enemy, group->boneland);
         if (!group->cemetery && enemy->type == ENEMY_BOSS &&
             (enemy->state == ENEMY_DIE || enemy->state == ENEMY_FALLEN))
-            frame = GuardianDefeatFrame(enemy);
+            frame = (int)GuardianDefeatPose(enemy);
         DrawGameText(TextFormat("E%d F%d",enemy->state,frame),
                  (int)enemy->position.x-28,(int)enemy->position.y-97,12,GOLD);
     }
