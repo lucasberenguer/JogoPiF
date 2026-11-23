@@ -313,7 +313,7 @@ static void CheckTemplarBalance(void) {
     const int skills[] = {IGRIS_ECLIPSE, IGRIS_SPEARS, IGRIS_VORTEX, IGRIS_ERUPTION, IGRIS_MELEE};
     const int previous[] = {IGRIS_MELEE, IGRIS_ECLIPSE, IGRIS_ECLIPSE, IGRIS_SPEARS, IGRIS_ECLIPSE};
     const float choiceDistance[] = {120,450,160,300,80};
-    const int damage[] = {28,25,32,33,20};
+    const int damage[] = {31,28,35,36,22};
     for (int i = 0; i < IGRIS_SKILL_COUNT; i++) {
         marshal->state = ENEMY_IDLE;
         marshal->attackCooldown = 0;
@@ -358,7 +358,7 @@ static void CheckTemplarBalance(void) {
     Vector2 origin = marshal->position;
     UpdateEnemies(&group,&map,player,.73f,false,&playerHealth,100);
     assert(marshal->position.x > origin.x+150 && fabsf(marshal->position.y-origin.y)<.1f);
-    assert(playerHealth == 68);
+    assert(playerHealth == 65);
     Vector2 pivot = marshal->position;
     UpdateEnemies(&group,&map,player,.08f,false,&playerHealth,100);
     assert(Vector2Distance(pivot,marshal->position)<.1f);
@@ -370,7 +370,7 @@ static void CheckTemplarBalance(void) {
     UpdateEnemies(&group,&map,player,.27f,false,&playerHealth,100);
     assert(marshal->position.x>origin.x+150 && fabsf(marshal->position.y-pivot.y)<.1f);
     UpdateEnemies(&group,&map,player,.40f,false,&playerHealth,100);
-    assert(marshal->state == ENEMY_IDLE && playerHealth == 68);
+    assert(marshal->state == ENEMY_IDLE && playerHealth == 65);
     for (int dodge = 0; dodge < 2; dodge++) {
         marshal->position = origin;
         marshal->attackCooldown = 0;
@@ -381,7 +381,7 @@ static void CheckTemplarBalance(void) {
         UpdateEnemies(&group,&map,victim,.01f,false,&playerHealth,100);
         UpdateEnemies(&group,&map,victim,.57f,dodge,&playerHealth,100);
         assert(IgrisHoldingPlayer(&group) == !dodge);
-        assert(playerHealth == (dodge ? 100 : 76));
+        assert(playerHealth == (dodge ? 100 : 74));
         UpdateEnemies(&group,&map,victim,.20f,false,&playerHealth,100);
         ApplyIgrisGrab(&group,&map,&victim,.20f);
         assert(dodge ? victim.x == origin.x+250 : victim.x < origin.x+200);
@@ -403,11 +403,11 @@ static void CheckTemplarBalance(void) {
     UpdateEnemies(&group,&map,player,.80f,false,&playerHealth,100);
     assert(playerHealth == 100);
     UpdateEnemies(&group,&map,player,.39f,false,&playerHealth,100);
-    assert(playerHealth == 72 && marshal->igrisEchoHits == 1u);
+    assert(playerHealth == 69 && marshal->igrisEchoHits == 1u);
     UpdateEnemies(&group,&map,player,.65f,false,&playerHealth,100);
-    assert(playerHealth == 44 && marshal->igrisEchoHits == 3u);
+    assert(playerHealth == 38 && marshal->igrisEchoHits == 3u);
     UpdateEnemies(&group,&map,player,.60f,true,&playerHealth,100);
-    assert(playerHealth == 44 && marshal->igrisEchoHits == 3u);
+    assert(playerHealth == 38 && marshal->igrisEchoHits == 3u);
     UpdateEnemies(&group,&map,player,.5f,false,&playerHealth,100);
     assert(marshal->state == ENEMY_IDLE);
 }
@@ -569,15 +569,15 @@ int main(void) {
     UpdateEnemies(&group,&map,target,.02f,true,&health,100);
     assert(health==100); /* Dodge during active roots. */
     UpdateEnemies(&group,&map,target,.02f,false,&health,100);
-    assert(health==65);
+    assert(health==62);
     UpdateEnemies(&group,&map,target,.02f,false,&health,100);
-    assert(health==65); /* One hit while immunity is active. */
+    assert(health==62); /* One hit while immunity is active. */
     group.playerHitCooldown=0;
     group.list[0].power=2;
     group.list[0].attackConnected=false;
     health=100;
     UpdateEnemies(&group,&map,target,.01f,false,&health,100);
-    assert(health==31); /* Corruption power must affect the root attack. */
+    assert(health==24); /* Corruption power must affect the root attack. */
     Enemy *coveiro = &group.list[0];
     DamageEnemy(coveiro, coveiro->health);
     assert(coveiro->guardianPhase == GUARDIAN_PHASE_TRANSITION && coveiro->health == coveiro->maxHealth/2);
@@ -588,7 +588,7 @@ int main(void) {
     coveiro->stateTime = .79f;
     UpdateEnemies(&group, &map, target, .02f, true, &health, 100);
     assert(group.cemeteryProjectiles[2].active && !group.cemeteryProjectiles[3].active);
-    assert(group.cemeteryProjectiles[0].damage == 83); /* The projectile keeps corruption power. */
+    assert(group.cemeteryProjectiles[0].damage == 91); /* The projectile keeps corruption power. */
     assert(fabsf(group.cemeteryProjectiles[0].velocity.x) +
            fabsf(group.cemeteryProjectiles[0].velocity.y) >= 739);
     ClearEnemyAttacks(&group);
@@ -603,7 +603,7 @@ int main(void) {
     UpdateEnemies(&group,&map,target,.34f,false,&health,100);
     assert(health==100 && !coveiro->attackConnected);
     UpdateEnemies(&group,&map,target,.03f,false,&health,100);
-    assert(health==70 && coveiro->attackConnected && CemeteryAnimationPose(coveiro).frame==4);
+    assert(health==67 && coveiro->attackConnected && CemeteryAnimationPose(coveiro).frame==4);
     UpdateEnemies(&group,&map,target,.45f,false,&health,100);
     assert(coveiro->state==ENEMY_IDLE && !coveiro->guardianMelee && coveiro->guardianMeleeCooldown>0);
     coveiro->position=(Vector2){800,600};

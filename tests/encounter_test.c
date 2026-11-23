@@ -1445,7 +1445,7 @@ int main(void) {
     marshal->stateTime = .78f;
     marshal->attackConnected = false;
     UpdateEnemies(&enemies, &field, target, .02f, false, &fieldHealth, 100);
-    assert(fieldHealth < before && enemies.templarBlood.remaining > 0);
+    assert(fieldHealth == before - 36 && enemies.templarBlood.remaining > 0);
     DamageEnemy(marshal, marshal->health);
     assert(marshal->igrisFinalForm && marshal->guardianPhase == GUARDIAN_PHASE_TRANSITION);
     assert(marshal->health == marshal->maxHealth * IGRIS_FINAL_HEALTH_PERCENT / 100);
@@ -1460,7 +1460,7 @@ int main(void) {
     UpdateEnemies(&enemies, &field, target, .25f, false, &clawHealth, 100);
     assert(marshal->state == ENEMY_ATTACK);
     UpdateEnemies(&enemies, &field, target, .38f, false, &clawHealth, 100);
-    assert(clawHealth == 64 && marshal->attackConnected);
+    assert(clawHealth == 60 && marshal->attackConnected);
     DamageEnemy(marshal, marshal->health);
     UpdateEnemies(&enemies, &field, field.spawn, 1.5f, true, &fieldHealth, 100);
     assert(marshal->state == ENEMY_FALLEN && !EnemyCanBeHit(marshal));

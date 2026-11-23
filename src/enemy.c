@@ -1273,6 +1273,10 @@ static void HurtByTemplar(EnemyGroup *group, Vector2 player, int *health, bool d
     group->templarBlood = (EnemyImpact){.position={player.x, player.y - 36}, .remaining=.36f};
 }
 
+static int IgrisHitDamage(const Enemy *boss, int baseDamage) {
+    return (int)roundf(baseDamage*boss->power*1.10f);
+}
+
 static void FireUmbraSpears(EnemyGroup *group, const Enemy *boss, int damage) {
     Vector2 direction = boss->attackDirection;
     Vector2 normal = {-direction.y,direction.x};
@@ -1331,13 +1335,13 @@ static void UpdateIgrisZ(EnemyGroup *group, const Clearing *map, Enemy *boss,
         if (!boss->attackConnected && !dodging && Vector2Distance(player,contact) <= IGRIS_Z_RADIUS &&
             MapHasClearPath(map,contact,player)) {
             boss->attackConnected = true;
-            HurtByTemplar(group,player,health,false,(int)(32*boss->power));
+            HurtByTemplar(group,player,health,false,IgrisHitDamage(boss,32));
         }
     }
     if (!boss->attackConnected && t >= igrisZFrames[10] && t-dt < igrisZFrames[10]) {
         boss->attackConnected = true;
         if (Vector2Distance(boss->position,player) <= 104 && MapHasClearPath(map,boss->position,player))
-            HurtByTemplar(group,player,health,dodging,(int)(40*boss->power));
+            HurtByTemplar(group,player,health,dodging,IgrisHitDamage(boss,40));
     }
     if (t >= igrisZFrames[12]) {
         boss->state = ENEMY_IDLE;
@@ -1379,7 +1383,7 @@ static void UpdateAbyssGrab(EnemyGroup *group, const Clearing *map, Enemy *boss,
         if (along >= 0 && along <= IGRIS_GRAB_REACH && Vector2LengthSqr(side) <= IGRIS_GRAB_HALF_WIDTH*IGRIS_GRAB_HALF_WIDTH &&
             MapHasClearPath(map,boss->position,player)) {
             boss->attackConnected = true;
-            HurtByTemplar(group,player,health,false,(int)(24*boss->power));
+            HurtByTemplar(group,player,health,false,IgrisHitDamage(boss,24));
         }
     }
     if (t >= IGRIS_GRAB_END) {
@@ -1435,7 +1439,7 @@ static void UpdateIgrisEchoes(EnemyGroup *group, const Clearing *map, Enemy *bos
         if (!dodging && group->playerHitCooldown <= 0 &&
             Vector2Distance(player,contact) <= IGRIS_ECHO_WIDTH && MapHasClearPath(map,contact,player)) {
             boss->igrisEchoHits |= hit;
-            HurtByTemplar(group,player,health,false,(int)(28*boss->power));
+            HurtByTemplar(group,player,health,false,IgrisHitDamage(boss,28));
         }
     }
     if (boss->stateTime >= IGRIS_ECHO_END) {
@@ -1533,7 +1537,7 @@ static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
     float time = boss->stateTime;
     if (!boss->attackConnected && time >= igrisSkills[skill].impact) {
         boss->attackConnected = true;
-        int damage = (int)(igrisSkills[skill].damage*boss->power);
+        int damage = IgrisHitDamage(boss,igrisSkills[skill].damage);
         if (skill == IGRIS_SPEARS) {
             FireUmbraSpears(group,boss,damage);
         } else {
@@ -1846,7 +1850,9 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         if (root->age >= hazard->hitStart && root->age < hazard->hitEnd && !root->hit && !playerDodging &&
             group->playerHitCooldown <= 0 && *playerHealth > 0 &&
             Vector2Distance(player, root->position) < hazard->radius) {
-            *playerHealth = (int)fmaxf(0, *playerHealth - hazard->damage * group->list[0].power);
+            float damage = hazard->damage * group->list[0].power;
+            if (group->cemetery) damage = roundf(damage * COVEIRO_DAMAGE_BOOST);
+            *playerHealth = (int)fmaxf(0, *playerHealth - damage);
             group->playerHitCooldown = .65f;
             root->hit = true;
         }

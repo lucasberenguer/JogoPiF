@@ -515,3 +515,8 @@ Na entrega do pós-boss de 18/11, build em `out/review` concluído e seis testes
 
 - Ao terminar ou pular a cutscene pré-luta, a cartela de chefe aparece por 2,3 s. Usa o retrato frontal em `assets/igris/portrait.png`, com recorte na altura das coxas, aproximação curta e brasas violetas. A faixa inclinada e as linhas douradas seguem o modelo anterior. A indicação de onda continua na cartela de onda.
 - A simulação de combate fica pausada durante a cartela. O HUD, a trilha de combate e o intervalo inicial de ataque seguem na retomada. Build local em `out/review/JogoPiF-Igris-Apresentacao.exe`; captura em `out/review/audit/igris_apresentacao.png`.
+
+## Dano do Coveiro e de Igris
+
+- Aumentado o dano efetivo em 10% sobre os valores anteriores, com arredondamento por acerto. Coveiro: pazada 33, raízes centrais 38, raízes laterais 33, pá 46 e investida 53. Igris: corte 22, Eclipse 31, Erupção 36, lanças 28, Vórtice 35, garra final 40, Rasgo em Z 35 ou 44, Garra do Abismo 26 e Ecos 31.
+- Os PV, alcance, tempos e janelas de esquiva permanecem iguais. Build local em `out/review/JogoPiF-Coveiro-Igris-Dano.exe`.
