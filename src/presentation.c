@@ -44,7 +44,7 @@ void UpdateStagePresentation(StagePresentation *p,float dt) {
             .mapName=name,.areaUnlock=true};
     }
 }
-void DrawStagePresentation(const StagePresentation *p,Texture2D sprite,int columns,int rows,bool gothic) {
+void DrawStagePresentation(const StagePresentation *p,Texture2D sprite,int columns,int rows) {
     if (p->remaining<=0) return;
     float elapsed=p->duration-p->remaining;
     float alpha=fminf(1,fminf(elapsed/.22f,p->remaining/.35f));
@@ -59,19 +59,18 @@ void DrawStagePresentation(const StagePresentation *p,Texture2D sprite,int colum
         float half=w*.34f*reveal;
         DrawLineEx((Vector2){w/2-half,center-85},(Vector2){w/2+half,center-85},2,Fade(GOLD,alpha));
         DrawLineEx((Vector2){w/2-half,center+89},(Vector2){w/2+half,center+89},2,Fade(GOLD,alpha));
-        const char *label=p->areaEntry?(p->areaSubtitle?"":gothic?"Entrando em":"ENTRANDO EM"):
-            gothic?"Nova área desbloqueada":"NOVA ÁREA DESBLOQUEADA";
-        float labelSize = gothic ? 23 : 19;
-        DrawGameTextEx(label,(Vector2){(w-MeasureGameTextEx(label,labelSize,gothic).x)/2,center-61},
-                       labelSize,Fade(GOLD,alpha),gothic);
+        const char *label=p->areaEntry?(p->areaSubtitle?"":"Entrando em"):"Nova área desbloqueada";
+        float labelSize = 24;
+        DrawGameTextEx(label,(Vector2){(w-MeasureGameTextEx(label,labelSize,true).x)/2,center-61},
+                       labelSize,Fade(GOLD,alpha),true);
         DrawGameTextIn(p->mapName,(Rectangle){w*.07f+(1-reveal)*65,center-(p->areaSubtitle?39:30),w*.86f,58},
                        52,Fade(RAYWHITE,alpha),true);
         const char *hint=p->areaEntry?(p->areaSubtitle?p->areaSubtitle:""):"O caminho adiante foi revelado";
-        float hintSize=p->areaSubtitle?24:gothic?21:18;
-        float hintWidth=MeasureGameTextEx(hint,hintSize,gothic).x;
+        float hintSize=24;
+        float hintWidth=MeasureGameTextEx(hint,hintSize,true).x;
         if (hintWidth>w*.86f) hintSize*=w*.86f/hintWidth;
-        DrawGameTextEx(hint,(Vector2){(w-MeasureGameTextEx(hint,hintSize,gothic).x)/2,
-            center+(p->areaSubtitle?26:48)},hintSize,Fade(p->areaSubtitle?GOLD:LIGHTGRAY,alpha),gothic);
+        DrawGameTextEx(hint,(Vector2){(w-MeasureGameTextEx(hint,hintSize,true).x)/2,
+            center+(p->areaSubtitle?26:48)},hintSize,Fade(p->areaSubtitle?GOLD:LIGHTGRAY,alpha),true);
         return;
     }
     const Color headline = {255, 232, 190, 255};
@@ -111,11 +110,11 @@ void DrawStagePresentation(const StagePresentation *p,Texture2D sprite,int colum
         }
         float textX=w*.13f-offset;
         if (!p->separateBossWave && p->wave>0)
-            DrawGameTextEx(TextFormat("%s - %s",waveTitle,gothic?"Chefe":"MINI-BOSS"),(Vector2){textX,h*.37f},
+            DrawGameTextEx(TextFormat("%s - Chefe",waveTitle),(Vector2){textX,h*.37f},
                            27,Fade(headline,alpha),true);
-        float bossSize=fminf(gothic?56:48, w*.42f/MeasureGameTextEx(p->bossName,1,gothic).x);
+        float bossSize=fminf(56, w*.42f/MeasureGameTextEx(p->bossName,1,true).x);
         DrawGameTextEx(p->bossName,(Vector2){textX,h*(p->separateBossWave?.43f:.44f)},
-                       bossSize,Fade(RAYWHITE,alpha),gothic);
-        DrawGameTextEx(p->mapName,(Vector2){textX,h*.56f},gothic?24:20,Fade(LIGHTGRAY,alpha),gothic);
+                       bossSize,Fade(RAYWHITE,alpha),true);
+        DrawGameTextEx(p->mapName,(Vector2){textX,h*.56f},24,Fade(LIGHTGRAY,alpha),true);
     }
 }

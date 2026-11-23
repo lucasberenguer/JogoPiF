@@ -202,12 +202,11 @@ static void StartStage(Encounter *e, EnemyGroup *enemies, const Clearing *cleari
             e->presentation.areaSubtitle = "O Grande Selo Profano";
             e->presentation.portraitCenterX = .72f;
         }
+        if (wave > 0) e->presentation.waveTotal = CampaignWaveCount(e->progress.map) + 1;
         if (clearing->boneland) {
-            e->presentation.waveTotal = BONELAND_WAVES + 1;
             e->presentation.portraitCenterX = .74f;
         }
         if (clearing->templarField) {
-            e->presentation.waveTotal = TEMPLAR_FIELD_WAVES + 1;
             e->presentation.areaSubtitle = "A última defesa do palácio";
             if (wave <= TEMPLAR_FIELD_WAVES)
                 e->presentation.announcement = wave == 1 ? "A Linha de Frente" : "O Último Estandarte";
@@ -317,7 +316,14 @@ void CompleteVillageCinematic(Encounter *e) {
 void CompleteGuardianIntro(Encounter *e, bool cinematicPlayed) {
     if (!e->guardianIntroPending) return;
     e->guardianIntroPending=false;
-    if (cinematicPlayed) e->presentation=(StagePresentation){0};
+    if (cinematicPlayed) {
+        if (e->presentation.areaEntry && e->presentation.mapName) {
+            // A cutscene já apresentou o chefe, mas a cartela do mapa ainda está na fila.
+            e->presentation.wave=0;
+            e->presentation.boss=false;
+            e->presentation.bossName=NULL;
+        } else e->presentation=(StagePresentation){0};
+    }
     if (e->progress.map==1) return;
     e->progress.guardianIntroSeen=true;
     if (!e->practice && !SaveClearingCheckpoint(&e->progress))
@@ -1205,9 +1211,7 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         bool animatedPortrait = e->progress.map == 2;
         int cols = animatedPortrait ? 6 : e->progress.map == TEMPLAR_FIELD_MAP ? 8 : 1;
         int rows = cols > 1 ? 4 : 1;
-        bool gothic = e->progress.map == BONELAND_MAP || e->progress.map == TEMPLAR_FIELD_MAP ||
-                      e->progress.map == NECROMANCER_MAP;
-        DrawStagePresentation(&e->presentation, bossSprite, cols, rows, gothic);
+        DrawStagePresentation(&e->presentation, bossSprite, cols, rows);
         return;
     }
     bool bossVisible = EncounterBossVisible(e, enemies);

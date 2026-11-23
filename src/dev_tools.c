@@ -225,7 +225,8 @@ bool StartDevEncounter(const DevTools *tools, DevAction action, Encounter *e,
     e->practice=true;
     if (action==DEV_STAGE && map->cemetery && progress.stage==CLEARING_BOSS_STAGE)
         e->guardianIntroPending=true;
-    if ((!map->boneland && !map->templarField && !map->necromancerArena) || action == DEV_SEAL)
+    if (action == DEV_SEAL ||
+        (action != DEV_STAGE && !map->boneland && !map->templarField && !map->necromancerArena))
         e->presentation=(StagePresentation){0};
     if (map->necromancerArena && (action==DEV_STAGE || action==DEV_BOSS_TWO) &&
         (tools->wave!=1 || action==DEV_BOSS_TWO)) {

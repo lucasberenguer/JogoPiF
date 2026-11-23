@@ -1,4 +1,5 @@
 #include "enemy.h"
+#include "run_progress.h"
 #include "raymath.h"
 #include <assert.h>
 #include <math.h>
@@ -420,7 +421,7 @@ int main(void) {
     map.playableBounds=(Rectangle){0,0,1670,942};
     EnemyGroup group={0};
     ResetEnemies(&group,&map);
-    assert(EnemiesRemaining(&group)==14); /* Clareira, onda 1 */
+    assert(EnemiesRemaining(&group)==10); /* Clareira, onda 1 */
     CheckGuardianAttacks(&map, &group);
     CheckGuardianMelee(&map, &group);
     for (int i=0;i<ENEMY_COUNT;i++) group.list[i]=(Enemy){.state=ENEMY_GONE};
@@ -459,7 +460,7 @@ int main(void) {
     }
     map.cemetery=true;
     ResetEnemies(&group,&map);
-    assert(EnemiesRemaining(&group)==7);
+    assert(EnemiesRemaining(&group)==12);
     assert(group.list[3].type==ENEMY_COMMON_RANGED);
     int health=100;
     StartArenaBoss(&group,&map,(Vector2){800,400},1);
@@ -476,15 +477,15 @@ int main(void) {
     UpdateEnemies(&group,&map,target,.02f,true,&health,100);
     assert(health==100); /* Dodge during active roots. */
     UpdateEnemies(&group,&map,target,.02f,false,&health,100);
-    assert(health==56);
+    assert(health==65);
     UpdateEnemies(&group,&map,target,.02f,false,&health,100);
-    assert(health==56); /* One hit while immunity is active. */
+    assert(health==65); /* One hit while immunity is active. */
     group.playerHitCooldown=0;
     group.list[0].power=2;
     group.list[0].attackConnected=false;
     health=100;
     UpdateEnemies(&group,&map,target,.01f,false,&health,100);
-    assert(health==12); /* Corruption power must affect the root attack. */
+    assert(health==31); /* Corruption power must affect the root attack. */
     Enemy *coveiro = &group.list[0];
     DamageEnemy(coveiro, coveiro->health);
     assert(coveiro->guardianPhase == GUARDIAN_PHASE_TRANSITION && coveiro->health == coveiro->maxHealth/2);
@@ -495,7 +496,7 @@ int main(void) {
     coveiro->stateTime = .79f;
     UpdateEnemies(&group, &map, target, .02f, true, &health, 100);
     assert(group.cemeteryProjectiles[2].active && !group.cemeteryProjectiles[3].active);
-    assert(group.cemeteryProjectiles[0].damage == 76); /* The projectile keeps corruption power. */
+    assert(group.cemeteryProjectiles[0].damage == 83); /* The projectile keeps corruption power. */
     assert(fabsf(group.cemeteryProjectiles[0].velocity.x) +
            fabsf(group.cemeteryProjectiles[0].velocity.y) >= 739);
     ClearEnemyAttacks(&group);
@@ -510,7 +511,7 @@ int main(void) {
     UpdateEnemies(&group,&map,target,.34f,false,&health,100);
     assert(health==100 && !coveiro->attackConnected);
     UpdateEnemies(&group,&map,target,.03f,false,&health,100);
-    assert(health==72 && coveiro->attackConnected && CemeteryAnimationPose(coveiro).frame==7);
+    assert(health==70 && coveiro->attackConnected && CemeteryAnimationPose(coveiro).frame==7);
     UpdateEnemies(&group,&map,target,.45f,false,&health,100);
     assert(coveiro->state==ENEMY_IDLE && !coveiro->guardianMelee && coveiro->guardianMeleeCooldown>0);
     coveiro->position=(Vector2){800,600};
@@ -645,10 +646,10 @@ int main(void) {
     poseEnemy.state=ENEMY_FALLEN;
     assert(CemeteryAnimationPose(&poseEnemy).frame==6);
     Clearing arena=map;arena.cemetery=false;
-    /* Clareira: 3 ondas de 14/18/22, vida +10% e dano +15% sobre a base. */
+    /* Clareira: 3 ondas de 10/14/18, vida +10% e dano +15% sobre a base. */
     for (int wave=1;wave<=3;wave++) {
         StartEnemyWave(&group,&arena,wave,target,1);
-        assert(EnemiesRemaining(&group)==14+(wave-1)*4);
+        assert(EnemiesRemaining(&group)==10+(wave-1)*4);
         for (int i=0;i<ENEMY_COUNT;i++) {
             const Enemy *enemy=&group.list[i];
             if (enemy->state==ENEMY_GONE) continue;
@@ -664,28 +665,25 @@ int main(void) {
     UpdateEnemies(&group,&arena,target,.02f,false,&health,100);
     assert(group.projectiles[0].remaining>0 && group.projectiles[0].damage==14); /* 12 x 1,15 = 13,8 */
     ClearEnemyAttacks(&group);
-    /* Cemitério: sem o ajuste da Clareira; mantém 4 ondas, +10% de vida e +10% de força. */
-    SetRandomSeed(321);StartEnemyWave(&group,&map,1,target,1);
-    assert(EnemiesRemaining(&group)==7);
-    for (int i=0;i<ENEMY_COUNT;i++) if (group.list[i].state!=ENEMY_GONE) {
-        int base=group.list[i].type==ENEMY_SPECIAL ? 100 : 45;
-        assert(group.list[i].maxHealth==(int)ceilf(base*1.10f));
-        assert(fabsf(group.list[i].power-1.10f)<.001f);
-        assert(group.list[i].damageScale==0.0f);
-    }
-    for (int wave=1;wave<=4;wave++) {
+    /* Cemitério: mesma base por classe da Clareira, mais 90 PV e 30% de dano. */
+    for (int wave=1;wave<=CEMETERY_WAVES;wave++) {
         StartEnemyWave(&group,&map,wave,target,1);
         int melee=0, ranged=0, specials=0;
         for (int i=0;i<ENEMY_COUNT;i++) {
             if (group.list[i].state==ENEMY_GONE) continue;
+            const Enemy *enemy=&group.list[i];
+            int base=(int)((enemy->type==ENEMY_SPECIAL ? 100 : 45)*(1.0f+(wave-1)*.12f));
+            assert(enemy->maxHealth==(int)ceilf(base*1.10f)+90);
+            assert(fabsf(enemy->damageScale-1.15f*1.30f)<.001f);
+            assert(fabsf(enemy->power-(1.0f+(wave-1)*.09f))<.001f);
             if (group.list[i].type==ENEMY_COMMON_MELEE) melee++;
             if (group.list[i].type==ENEMY_COMMON_RANGED) ranged++;
             if (group.list[i].type==ENEMY_SPECIAL) specials++;
         }
         assert(melee>0 && ranged>0 && specials>=1+(wave-1)/2);
-        assert(melee+ranged+specials==7+(wave-1)*4);
+        assert(melee+ranged+specials==((int[]){12,18,20})[wave-1]);
     }
-    StartArenaBoss(&group,&map,target,1);assert(group.list[0].maxHealth==2420);
+    StartArenaBoss(&group,&map,target,1);assert(group.list[0].maxHealth==2600);
     for (int i=0;i<ENEMY_COUNT;i++) group.list[i]=(Enemy){.state=ENEMY_GONE};
     ClearEnemyAttacks(&group);
     Enemy *special=&group.list[0];

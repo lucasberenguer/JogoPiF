@@ -143,7 +143,7 @@ static void CheckLegacyCheckpoints(void) {
     snprintf(path, sizeof(path), "%s/partida_pif.sav", GetApplicationDirectory());
     const int legacyStages[] = {6, 7, 8, 11, 12, 13, 14};
     const int maps[] = {0, 0, 1, 1, 1, 1, 1};
-    const int stages[] = {CLEARING_BOSS_STAGE, CLEARING_COMPLETE_STAGE, 1, 4,
+    const int stages[] = {CLEARING_BOSS_STAGE, CLEARING_COMPLETE_STAGE, 1, CLEARING_BOSS_STAGE,
                           CLEARING_BOSS_STAGE, CLEARING_BOSS_STAGE, CLEARING_COMPLETE_STAGE};
     for (int i = 0; i < (int)(sizeof(legacyStages)/sizeof(legacyStages[0])); i++) {
         char contents[128];
@@ -363,7 +363,7 @@ static void CheckLegacyCheckpoints(void) {
                rTest.rewards[slot].kind != before[2].kind);
     }
 
-    /* Tela épica (após a última onda de cada mapa: Clareira = 3, Cemitério = 4, Terra dos Ossos = 3, Campo dos Templários = 2):
+    /* Tela épica (após a última onda de cada mapa: Clareira = 3, Cemitério = 3, Terra dos Ossos = 3, Campo dos Templários = 2):
        3 cartões épicos distintos, sem reroll. E nas ondas anteriores desses mapas, tela normal com reroll permitido. */
     static const int epicMapIds[3] = {0, BONELAND_MAP, TEMPLAR_FIELD_MAP};
     static const int epicMapLastWaves[3] = {CLEARING_WAVES, BONELAND_WAVES, TEMPLAR_FIELD_WAVES};
@@ -602,8 +602,12 @@ static void CheckDevTools(Encounter *e, EnemyGroup *enemies, Clearing *map) {
             assert(StartDevEncounter(&tools,DEV_STAGE,e,enemies,map,&player,&health));
             assert(e->practice && e->progress.map==area && e->progress.stage==wave);
             assert(e->progress.weapon==2 && e->progress.weaponLevel[2]==3);
-            assert(health==100 && EnemiesRemaining(enemies)==(area==CLEARING_MAP ? 14 : 7)+(wave-1)*4);
+            assert(health==100 && EnemiesRemaining(enemies)==(area==CLEARING_MAP ? 10+(wave-1)*4 : ((int[]){12,18,20})[wave-1]));
             assert(!IsMapActorBlocked(map,player));
+            assert(e->presentation.areaEntry && EncounterPaused(e));
+            UpdateStagePresentation(&e->presentation,e->presentation.remaining);
+            assert(!e->presentation.areaEntry && e->presentation.wave==wave);
+            assert(e->presentation.waveTotal==CampaignWaveCount(area)+1);
         }
         assert(StartDevEncounter(&tools,DEV_BOSS_ONE,e,enemies,map,&player,&health));
         assert(e->practice && !e->guardianIntroPending && EnemiesRemaining(enemies)==1);
@@ -614,6 +618,7 @@ static void CheckDevTools(Encounter *e, EnemyGroup *enemies, Clearing *map) {
         assert(StartDevEncounter(&tools,DEV_SEAL,e,enemies,map,&player,&health));
         assert(e->phase==ENCOUNTER_SEAL && e->practice);
         assert(StartDevEncounter(&tools,DEV_STAGE,e,enemies,map,&player,&health));
+        UpdateStagePresentation(&e->presentation,10);
         for (int i=0; i<ENEMY_COUNT; i++) enemies->list[i]=(Enemy){.state=ENEMY_GONE};
         UpdateEncounter(e,enemies,map,player,&health);
         assert(e->phase==ENCOUNTER_REWARD);
@@ -921,7 +926,7 @@ int main(void) {
     Capture("audit/clearing_special_directions.png",&encounter,&meleePreview,&clearing,player);
     for (int wave=1;wave<=CLEARING_WAVES;wave++) {
         assert(encounter.progress.stage==wave);
-        assert(EnemiesRemaining(&enemies)==14+(wave-1)*4);
+        assert(EnemiesRemaining(&enemies)==10+(wave-1)*4);
         assert(EncounterPaused(&encounter));
         UpdateStagePresentation(&encounter.presentation,.1f);
         assert(EncounterPaused(&encounter));
@@ -1142,12 +1147,12 @@ int main(void) {
         enemies.list[attack*4+beat]=(Enemy){.position={380+beat*270,300+attack*185},
             .type=ENEMY_BOSS,.state=ENEMY_ATTACK,.bossAttack=attack,
             .stateTime=(float[]){.15f,.55f,.95f,1.8f}[beat],.facing=3,
-            .health=2420,.maxHealth=2420};
+            .health=2600,.maxHealth=2600};
     }
     Capture("audit/cemetery_attack_poses_v3.png",&encounter,&enemies,&clearing,(Vector2){30,30});
     for(int i=0;i<ENEMY_COUNT;i++) enemies.list[i]=(Enemy){.state=ENEMY_GONE};
     enemies.list[0]=(Enemy){.position={500,470},.type=ENEMY_BOSS,.state=ENEMY_ATTACK,
-        .bossAttack=COVEIRO_SHOVEL,.facing=3,.stateTime=.95f,.health=2420,.maxHealth=2420};
+        .bossAttack=COVEIRO_SHOVEL,.facing=3,.stateTime=.95f,.health=2600,.maxHealth=2600};
     for(int i=0;i<3;i++) enemies.cemeteryProjectiles[i]=(CemeteryProjectile){.active=true,
         .position={850+i*150,350+i*110},.velocity={740,(i-1)*180},.life=1.9f-i*.08f};
     Capture("audit/cemetery_attack_poses_shovel_v4.png",&encounter,&enemies,&clearing,(Vector2){30,30});
@@ -1156,11 +1161,17 @@ int main(void) {
     for(int face=0;face<4;face++) for(int beat=0;beat<4;beat++) {
         enemies.list[face*4+beat]=(Enemy){.position={380+beat*270,250+face*155},
             .type=ENEMY_BOSS,.state=ENEMY_ATTACK,.guardianMelee=true,.facing=face,
-            .stateTime=(float[]){.10f,.28f,.40f,.65f}[beat],.health=2420,.maxHealth=2420};
+            .stateTime=(float[]){.10f,.28f,.40f,.65f}[beat],.health=2600,.maxHealth=2600};
     }
     Capture("audit/cemetery_melee_poses_v4.png",&encounter,&enemies,&clearing,(Vector2){30,30});
     ClearEnemyAttacks(&enemies);
     player=clearing.spawn;health=100;
+    RunProgress oldCemetery=NewRunProgress(0), migratedCemetery;
+    oldCemetery.map=CEMETERY_MAP;
+    oldCemetery.stage=4;
+    assert(SaveClearingCheckpoint(&oldCemetery));
+    assert(LoadClearingCheckpoint(&migratedCemetery) && migratedCemetery.map==CEMETERY_MAP &&
+           migratedCemetery.stage==CLEARING_BOSS_STAGE);
     RunProgress cemeteryProgress=NewRunProgress(0);
     cemeteryProgress.damage=1.4f;
     BeginEncounter(&encounter,&enemies,&clearing,cemeteryProgress,player);
@@ -1170,7 +1181,7 @@ int main(void) {
     Capture("audit/cemetery_collision_updated.png",&encounter,&enemies,&clearing,player);
     for (int wave=1;wave<=CEMETERY_WAVES;wave++) {
         assert(encounter.progress.stage==wave);
-        assert(EnemiesRemaining(&enemies)==7+(wave-1)*4);
+        assert(EnemiesRemaining(&enemies)==((int[]){12,18,20})[wave-1]);
         UpdateStagePresentation(&encounter.presentation,10);
         for (int i=0;i<ENEMY_COUNT;i++) {
             Enemy *enemy=&enemies.list[i];
@@ -1191,7 +1202,7 @@ int main(void) {
         assert(encounter.phase==ENCOUNTER_REWARD);
         assert(ChooseEncounterReward(&encounter,&enemies,&clearing,player,&health,0));
         RunProgress saved;
-        assert(LoadClearingCheckpoint(&saved) && saved.map==1 && saved.stage==wave+1);
+        assert(LoadClearingCheckpoint(&saved) && saved.map==1 && saved.stage==(wave==CEMETERY_WAVES ? CLEARING_BOSS_STAGE : wave+1));
     }
     assert(encounter.progress.stage==CLEARING_BOSS_STAGE && EnemiesRemaining(&enemies)==1);
     UpdateStagePresentation(&encounter.presentation,.7f);
@@ -1201,7 +1212,7 @@ int main(void) {
     assert(!EncounterBossVisible(&encounter,&enemies));
     CompleteGuardianIntro(&encounter,true);
     assert(!EncounterPaused(&encounter));
-    assert(EncounterBossVisible(&encounter,&enemies) && enemies.list[0].health==2420);
+    assert(EncounterBossVisible(&encounter,&enemies) && enemies.list[0].health==2600);
     Capture("audit/cemetery_boss_hud.png",&encounter,&enemies,&clearing,player);
     enemies.list[0].state=ENEMY_IDLE;
     DamageEnemy(&enemies.list[0],enemies.list[0].health);
@@ -1615,6 +1626,7 @@ int main(void) {
     assert(StartDevEncounter(&villageTools,DEV_STAGE,&encounter,&enemies,&clearing,
                              &villagePracticePlayer,&villagePracticeHealth));
     assert(clearing.village && encounter.practice && encounter.progress.map==VILLAGE_MAP);
+    assert(encounter.presentation.areaEntry && encounter.presentation.wave==0);
     assert(enemies.villageBruteWalk.id && enemies.villageBruteAttack.id);
     assert(encounter.progress.stage==CLEARING_BOSS_STAGE && enemies.list[0].type==ENEMY_BOSS);
     assert(encounter.progress.weaponLevel[2]==2 && villagePracticeHealth==100);
@@ -1636,10 +1648,14 @@ int main(void) {
     int chapelHealth;
     assert(StartDevEncounter(&chapelTools,DEV_STAGE,&encounter,&enemies,&clearing,&chapelPlayer,&chapelHealth));
     assert(clearing.chapel && encounter.practice && !OpenAngelRevival(&encounter,4,&revival));
+    assert(encounter.presentation.areaEntry && encounter.presentation.wave==0);
+    UpdateStagePresentation(&encounter.presentation,encounter.presentation.remaining);
+    assert(!EncounterPaused(&encounter));
     assert(!enemies.villageBruteWalk.id && !enemies.villageBruteAttack.id);
     chapelTools.map=INVERTED_CHAPEL_MAP;
     assert(StartDevEncounter(&chapelTools,DEV_STAGE,&encounter,&enemies,&clearing,&chapelPlayer,&chapelHealth));
     assert(clearing.invertedChapel && encounter.practice && OpenAngelRevival(&encounter,5,&revival));
+    assert(encounter.presentation.areaEntry && encounter.presentation.wave==0);
     chapelHealth=0;
     assert(AnswerAngelRevival(&encounter,&revival,revival.correct,&chapelHealth));
     assert(chapelHealth==50);

@@ -20,5 +20,5 @@ void ShowWaveBeforeBoss(StagePresentation *p);
 void QueueAreaUnlock(StagePresentation *p, const char *mapName);
 void BeginAreaEntry(StagePresentation *p);
 void UpdateStagePresentation(StagePresentation *p, float dt);
-void DrawStagePresentation(const StagePresentation *p, Texture2D bossSprite, int columns, int rows, bool gothic);
+void DrawStagePresentation(const StagePresentation *p, Texture2D bossSprite, int columns, int rows);
 #endif

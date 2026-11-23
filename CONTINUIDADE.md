@@ -420,3 +420,14 @@ Na entrega do pós-boss de 18/11, build em `out/review` concluído e seis testes
 - Validação em `out/review/boss-hud-check`: 7/7 testes com asserts ativos. O componente sem texto ou marcadores de fase foi testado com um chefe de fase única simulado em 1280×720 e 800×450. As duas transições reais do Marechal e as barras dos inimigos comuns da Clareira foram conferidas nas capturas `audit/boss_health_*.png` e `audit/common_enemy_health_directions.png`.
 
 - **Integração com `f37627b`:** mantidos o carregamento por mapa, o duelo e a infestação da Vila e os atlas de seis poses dos templários comuns. Igris e seu HUD foram integrados ao Portão da Última Sentença. Seus atlas são carregados com a área e liberados ao sair. A integração passou pelos sete testes com asserções ativas, incluindo os ataques de Igris, as duas transições da barra, a infestação e a passagem ao Topo do Palácio.
+
+## Ondas da Clareira e do Cemitério
+
+- Clareira: três ondas de 10, 14 e 18 inimigos. O Guardião ocupa a quarta etapa.
+- Cemitério: três ondas de 12, 18 e 20 inimigos. O Coveiro ocupa a quarta etapa. Checkpoints da antiga quarta onda migram para o chefe.
+- Cada classe do Cemitério usa a base da classe equivalente da Clareira na mesma onda, com +90 PV e multiplicador de dano de 1,3. O Coveiro tem a vida do Guardião +400 e os ataques correspondentes multiplicados por 1,15 (arredondados no acerto): golpe próximo por golpe próximo, raízes por raízes, pá pela onda de raízes e investida pela maldição.
+## Cartelas de mapas, ondas e chefes
+
+- As cartelas usam UnifrakturMaguntia em todos os mapas. O S maiúsculo do atlas usa o desenho da Crimson Text Semibold, alinhado ao tamanho e à base das capitais góticas, para que “Selo” seja legível sem trocar a fonte da cartela.
+- A entrada por F1 em uma onda ou mapa exibe a apresentação da área, inclusive na Vila e nas Capelas. Áreas sem ondas não mostram uma onda fictícia. A Clareira e o Cemitério exibem a contagem completa das etapas, incluindo o chefe. Quando uma cutscene apresenta o chefe na entrada, a cartela do mapa permanece na fila.
+- Build local em `out/review/JogoPiF-Apresentacoes.exe`. O teste de encontro verificou as cartelas das ondas iniciais via F1, a Vila e as Capelas.

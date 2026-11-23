@@ -8,8 +8,8 @@
 #define ENEMY_SPEED 98.0f
 #define ENEMY_ATTACK_RANGE 64.0f
 #define ENEMY_ATTACK_DAMAGE 12
-/* Balanceamento das ondas da Clareira do Selo (não afeta outros mapas). */
-#define CLEARING_FIRST_WAVE_ENEMIES 14
+/* Base das ondas da Clareira e referência para o Cemitério. */
+#define CLEARING_FIRST_WAVE_ENEMIES 10
 #define CLEARING_WAVE_ENEMY_STEP 4
 #define CLEARING_ENEMY_HEALTH_SCALE 1.10f
 #define CLEARING_ENEMY_DAMAGE_SCALE 1.15f
@@ -28,7 +28,7 @@
 #define RANGED_MAX_DISTANCE 300.0f
 #define RANGED_SHOT_SPEED 365.0f
 #define ARENA_BOSS_BASE_HEALTH 2200
-#define CEMETERY_BOSS_BASE_HEALTH 2420
+#define CEMETERY_BOSS_HEALTH_BONUS 400
 #define ENEMY_DEFEAT_DURATION .85f
 #define GUARDIAN_DEFEAT_FRAMES 8
 #define GUARDIAN_SPAWN_DURATION 3.0f
@@ -41,10 +41,8 @@
 #define GUARDIAN_CURSE_ECHO_TIME .62f
 #define GUARDIAN_ROOT_WARNING 0.8f
 #define GUARDIAN_ROOT_RADIUS 74.0f
-#define GUARDIAN_ROOT_DAMAGE 30
 #define GUARDIAN_WAVE_WARNING .65f
 #define GUARDIAN_WAVE_RADIUS 60.0f
-#define GUARDIAN_WAVE_DAMAGE 36
 #define GUARDIAN_WAVE_FPS 12.0f
 #define GUARDIAN_WAVE_FRAMES 8
 #define GUARDIAN_WAVE_TILE_WIDTH 352
@@ -56,7 +54,6 @@
 #define GUARDIAN_CURSE_TILE_WIDTH 384
 #define GUARDIAN_CURSE_TILE_HEIGHT 320
 #define GUARDIAN_MELEE_RANGE 118.0f
-#define GUARDIAN_MELEE_DAMAGE 26
 #define GUARDIAN_MELEE_COOLDOWN 1.65f
 #define GUARDIAN_MELEE_FPS 10.0f
 #define GUARDIAN_MELEE_FRAMES 8
@@ -128,7 +125,7 @@ static const GuardianHazard guardianHazards[GUARDIAN_ATTACK_COUNT] = {
         GUARDIAN_CURSE_WARNING + 1.0f / GUARDIAN_CURSE_FPS,
         GUARDIAN_CURSE_WARNING + 6.0f / GUARDIAN_CURSE_FPS,
         GUARDIAN_CURSE_WARNING + GUARDIAN_CURSE_IMPACT_FRAMES / GUARDIAN_CURSE_FPS,
-        110.0f, 42, VIOLET},
+        110.0f, GUARDIAN_CURSE_DAMAGE, VIOLET},
 };
 
 int EnemyOptionalDropChance(EnemyType type) {
@@ -767,8 +764,10 @@ void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
         return;
     }
     bool clearingWave = ClearingMapId(clearing) == CLEARING_MAP;
-    int total = clearingWave ? CLEARING_FIRST_WAVE_ENEMIES + (wave - 1) * CLEARING_WAVE_ENEMY_STEP
-                             : 7 + (wave - 1) * 4;
+    static const int cemeteryCounts[CEMETERY_WAVES] = {12,18,20};
+    int total = clearing->cemetery ? cemeteryCounts[(int)Clamp(wave,1,CEMETERY_WAVES)-1] :
+        clearingWave ? CLEARING_FIRST_WAVE_ENEMIES + (wave - 1) * CLEARING_WAVE_ENEMY_STEP :
+        7 + (wave - 1) * 4;
     if (total > ENEMY_COUNT) total = ENEMY_COUNT;
     int minimumSpecials = 1 + (wave - 1) / 2;
     int specials = GetRandomValue(minimumSpecials, minimumSpecials + (wave >= 3));
@@ -781,12 +780,14 @@ void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
         float adjustment = 1.0f + fminf(.15f, fmaxf(0, playerPower - 1.0f) * .05f);
         enemy->maxHealth = (int)((enemy->type == ENEMY_SPECIAL ? 100 : 45) *
                                 (1.0f + (wave-1)*.12f) * adjustment);
-        if (clearing->cemetery) enemy->maxHealth=(int)ceilf(enemy->maxHealth*1.10f);
-        else if (clearingWave) enemy->maxHealth=(int)ceilf(enemy->maxHealth*CLEARING_ENEMY_HEALTH_SCALE);
+        if (clearingWave || clearing->cemetery)
+            enemy->maxHealth=(int)ceilf(enemy->maxHealth*CLEARING_ENEMY_HEALTH_SCALE);
+        if (clearing->cemetery) enemy->maxHealth+=90;
         enemy->health = enemy->maxHealth;
         enemy->speed = ENEMY_SPEED * (1.0f + (wave-1)*.045f);
-        enemy->power = (1.0f + (wave-1)*.09f) * (clearing->cemetery ? 1.10f : 1.0f);
-        if (clearingWave) enemy->damageScale = CLEARING_ENEMY_DAMAGE_SCALE;
+        enemy->power = 1.0f + (wave-1)*.09f;
+        if (clearingWave || clearing->cemetery)
+            enemy->damageScale = CLEARING_ENEMY_DAMAGE_SCALE * (clearing->cemetery ? 1.30f : 1.0f);
         enemy->state = ENEMY_SPAWNING;
         enemy->stateTime = -WaveSpawnDelay(wave, i);
         enemy->facing = i%2 ? 2 : 3;
@@ -813,13 +814,14 @@ void StartArenaBoss(EnemyGroup *group, const Clearing *clearing, Vector2 player,
     Enemy *boss = &group->list[0];
     if (clearing->necromancerArena) { StartNecromancer(group,power); return; }
     int baseHealth = clearing->templarField ? 3000 : clearing->boneland ? 2800
-        : clearing->village ? 20 : (clearing->cemetery ? CEMETERY_BOSS_BASE_HEALTH : ARENA_BOSS_BASE_HEALTH);
+        : clearing->village ? 20 : ARENA_BOSS_BASE_HEALTH;
     Vector2 bossPos = clearing->templarField ? (Vector2){835, 290} : clearing->village
         ? (Vector2){clearing->background.width * 0.62f, clearing->background.height * 0.54f}
         : SpawnPosition(clearing, player);
     *boss = (Enemy){.type = ENEMY_BOSS, .state = ENEMY_SPAWNING,
         .position = bossPos, .villageLeader = clearing->village,
-        .maxHealth = clearing->village ? baseHealth : (int)(baseHealth*fmaxf(1, power)),
+        .maxHealth = clearing->village ? baseHealth : (int)(baseHealth*fmaxf(1, power)) +
+            (clearing->cemetery ? CEMETERY_BOSS_HEALTH_BONUS : 0),
         .speed = clearing->village || clearing->templarField ? 185 : (clearing->cemetery ? 160 : 100),
         .power = power, .attackCooldown = 1.25f, .lastKatanaSwing = -1,
         .bossAttack = (clearing->cemetery ? COVEIRO_ATTACK_COUNT : GUARDIAN_ATTACK_COUNT) - 1};

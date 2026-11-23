@@ -4,11 +4,11 @@
 #include <math.h>
 
 #define COVEIRO_WINDUP .8f
-#define COVEIRO_ROOT_DAMAGE 44
-#define COVEIRO_SHOVEL_DAMAGE 38
-#define COVEIRO_CHARGE_DAMAGE 42
+#define COVEIRO_ROOT_DAMAGE (GUARDIAN_ROOT_DAMAGE * 1.15f)
+#define COVEIRO_SHOVEL_DAMAGE (GUARDIAN_WAVE_DAMAGE * 1.15f)
+#define COVEIRO_CHARGE_DAMAGE (GUARDIAN_CURSE_DAMAGE * 1.15f)
 #define COVEIRO_MELEE_RANGE 122.0f
-#define COVEIRO_MELEE_DAMAGE 28
+#define COVEIRO_MELEE_DAMAGE (GUARDIAN_MELEE_DAMAGE * 1.15f)
 #define COVEIRO_MELEE_COOLDOWN 1.65f
 #define COVEIRO_MELEE_WINDUP .36f
 #define COVEIRO_MELEE_DURATION .78f
@@ -37,7 +37,7 @@ static void ThrowShovel(EnemyGroup *group, const Enemy *boss, Vector2 direction)
         float speed = boss->guardianPhase == GUARDIAN_PHASE_TWO ? 740 : 620;
         *shot = (CemeteryProjectile){.active=true, .position=boss->position,
             .velocity=Vector2Scale(direction, speed), .life=2,
-            .damage=(int)(COVEIRO_SHOVEL_DAMAGE * boss->power)};
+            .damage=(int)roundf(COVEIRO_SHOVEL_DAMAGE * boss->power)};
         return;
     }
 }
@@ -85,7 +85,7 @@ void CemeteryUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
                 if (distance <= COVEIRO_MELEE_RANGE &&
                     Vector2DotProduct(offset, boss->attackDirection) >= distance * .42f &&
                     MapHasClearPath(map, boss->position, player)) {
-                    HitPlayer(group, dodging, health, (int)(COVEIRO_MELEE_DAMAGE * boss->power));
+                    HitPlayer(group, dodging, health, (int)roundf(COVEIRO_MELEE_DAMAGE * boss->power));
                 }
             }
             if (t >= COVEIRO_MELEE_WINDUP && t < COVEIRO_MELEE_WINDUP + .16f)
@@ -107,7 +107,7 @@ void CemeteryUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
                 }
             } else if (boss->bossAttack == COVEIRO_ROOTS && t < 1.2f &&
                        Vector2Distance(player, boss->attackTarget) < (phaseTwo ? 115 : 95)) {
-                boss->attackConnected = HitPlayer(group, dodging, health, (int)(COVEIRO_ROOT_DAMAGE * boss->power));
+                boss->attackConnected = HitPlayer(group, dodging, health, (int)roundf(COVEIRO_ROOT_DAMAGE * boss->power));
             }
         }
         if (boss->bossAttack==COVEIRO_ROOTS && phaseTwo && t>=COVEIRO_WINDUP && boss->attackBurst==0) {
@@ -133,7 +133,7 @@ void CemeteryUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
             MoveEnemy(map, boss, Vector2Scale(boss->attackDirection, speed * dt));
             if (!boss->attackConnected && Vector2Distance(player, boss->position) < 58 &&
                 MapHasClearPath(map, boss->position, player))
-                boss->attackConnected = HitPlayer(group, dodging, health, (int)(COVEIRO_CHARGE_DAMAGE * boss->power));
+                boss->attackConnected = HitPlayer(group, dodging, health, (int)roundf(COVEIRO_CHARGE_DAMAGE * boss->power));
         }
         /* Follow-through has real movement, while the initial targeting stays locked. */
         if(boss->bossAttack!=COVEIRO_CHARGE && t>=.8f && t<1.02f)
@@ -187,7 +187,7 @@ void CemeteryUpdateSpecial(EnemyGroup *group, const Clearing *map, Enemy *enemy,
             enemy->attackConnected = true;
             if (Vector2Distance(enemy->position, player) <= CEM_SPECIAL_RADIUS &&
                 MapHasClearPath(map, enemy->position, player))
-                HitPlayer(group, dodging, health, (int)(18 * enemy->power));
+                HitPlayer(group, dodging, health, enemy->damageScale>0 ? (int)roundf(18 * enemy->power * enemy->damageScale) : (int)(18 * enemy->power));
         }
         if (enemy->stateTime >= CEM_SPECIAL_ATTACK_DURATION) {
             enemy->state = ENEMY_IDLE;
