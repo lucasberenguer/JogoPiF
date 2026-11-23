@@ -278,20 +278,24 @@ static Texture2D LoadBonelandSprite(const char *path) {
 }
 
 static const float templarArrivalTime = 2.05f;
-static const float templarPlantTime = .48f;
+static const float templarPlantTime = .39f;
+static const float templarPlantImpact = .18f;
 static const float shieldImpact = .42f;
 static const float executionerImpact = .76f;
 static const float crossbowRelease = .52f;
+static const float crossbowAttackDuration = .99f;
+static const float shieldAttackDuration = .73f;
+static const float executionerAttackDuration = 1.25f;
 static const struct {
     float impact, activeEnd, duration, reach, arcDot;
     int damage;
 } marshalSkills[] = {
-    [MARSHAL_SLASH] = {.48f, .64f, .94f, 155, .34f, 20},
-    [MARSHAL_CHARGE] = {.55f, 1.12f, 1.38f, 63, 0, 22},
-    [MARSHAL_RETURN] = {.50f, .68f, 1.07f, 168, -.14f, 22},
-    [MARSHAL_RUPTURE] = {.71f, .93f, 1.39f, 209, .50f, 33},
-    [MARSHAL_SPIN] = {.56f, .79f, 1.13f, 165, -1, 28},
-    [MARSHAL_SHOCKWAVE] = {.84f, 1.46f, 1.79f, 295, -1, 33},
+    [MARSHAL_SLASH] = {.48f, .64f, .84f, 155, .34f, 20},
+    [MARSHAL_CHARGE] = {.55f, 1.12f, 1.30f, 63, 0, 22},
+    [MARSHAL_RETURN] = {.50f, .68f, .95f, 168, -.14f, 22},
+    [MARSHAL_RUPTURE] = {.71f, .93f, 1.24f, 209, .50f, 33},
+    [MARSHAL_SPIN] = {.56f, .79f, 1.01f, 165, -1, 28},
+    [MARSHAL_SHOCKWAVE] = {.84f, 1.46f, 1.69f, 295, -1, 33},
 };
 
 bool InitEnemies(EnemyGroup *group) {
@@ -386,10 +390,10 @@ bool InitEnemies(EnemyGroup *group) {
         [TEMPLAR_MARSHAL] = "assets/templario_marechal.png",
     };
     static const char *const attackFiles[] = {
-        [TEMPLAR_SHIELD] = "assets/templario_escudo_ataque.png",
-        [TEMPLAR_EXECUTIONER] = "assets/templario_carrasco_ataque.png",
-        [TEMPLAR_CROSSBOW] = "assets/templario_besteiro_ataque.png",
-        [TEMPLAR_STANDARD] = "assets/templario_estandarte_ataque.png",
+        [TEMPLAR_SHIELD] = "assets/templario_escudo_ataque_v2.png",
+        [TEMPLAR_EXECUTIONER] = "assets/templario_carrasco_ataque_v2.png",
+        [TEMPLAR_CROSSBOW] = "assets/templario_besteiro_ataque_v2.png",
+        [TEMPLAR_STANDARD] = "assets/templario_estandarte_ataque_v2.png",
         [TEMPLAR_MARSHAL] = "assets/templario_marechal_corte_v2.png",
     };
     for (int role = TEMPLAR_SHIELD; role <= TEMPLAR_MARSHAL; role++) {
@@ -640,10 +644,10 @@ static void StartTemplarWave(EnemyGroup *group, int wave) {
         int health;
         float speed, power;
     } stats[] = {
-        [TEMPLAR_SHIELD] = {ENEMY_COMMON_MELEE, 105, 100, 1.15f},
-        [TEMPLAR_EXECUTIONER] = {ENEMY_SPECIAL, 135, 115, 1.25f},
-        [TEMPLAR_CROSSBOW] = {ENEMY_COMMON_RANGED, 75, 115, 1.25f},
-        [TEMPLAR_STANDARD] = {ENEMY_COMMON_MELEE, 90, 84, .9f},
+        [TEMPLAR_SHIELD] = {ENEMY_COMMON_MELEE, 242, 112, 1.38f},
+        [TEMPLAR_EXECUTIONER] = {ENEMY_SPECIAL, 311, 130, 1.50f},
+        [TEMPLAR_CROSSBOW] = {ENEMY_COMMON_RANGED, 173, 125, 1.50f},
+        [TEMPLAR_STANDARD] = {ENEMY_COMMON_MELEE, 207, 84, .9f},
     };
     int formation = wave == 1 ? 0 : 1;
     int count = wave == 1 ? 5 : 6;
@@ -654,7 +658,7 @@ static void StartTemplarWave(EnemyGroup *group, int wave) {
         group->list[i] = (Enemy){
             .templarRole = role, .type = stats[role].type, .state = ENEMY_SPAWNING,
             .position = formations[formation][i].position,
-            .health = 2 * stats[role].health, .maxHealth = 2 * stats[role].health,
+            .health = stats[role].health, .maxHealth = stats[role].health,
             .speed = stats[role].speed, .power = stats[role].power,
             .attackCooldown = role == TEMPLAR_CROSSBOW ? .65f + .1f * i : .8f,
             .stateTime = -.12f * i, .lastKatanaSwing = -1
@@ -830,7 +834,7 @@ static float EnemyAttackPower(const EnemyGroup *group, const Enemy *enemy) {
             const Enemy *standard = &group->list[i];
             if (standard->templarRole == TEMPLAR_STANDARD && EnemyCanBeHit(standard) &&
                 Vector2DistanceSqr(standard->position, enemy->position) <= 220.0f * 220.0f)
-                return enemy->power * 1.25f;
+                return enemy->power * 1.35f;
         }
     }
     return enemy->power;
@@ -1160,7 +1164,7 @@ static void UpdateMarshal(EnemyGroup *group, const Clearing *map, Enemy *boss, V
     }
     boss->state = ENEMY_IDLE;
     boss->stateTime = 0;
-    boss->attackCooldown = enraged ? .22f : .43f;
+    boss->attackCooldown = enraged ? .17f : .34f;
 }
 
 void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
@@ -1268,7 +1272,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                         HurtByTemplar(group, player, playerHealth, playerDodging,
                                       (int)(18 * EnemyAttackPower(group, enemy)));
                 }
-                if (t >= 1.45f) { enemy->state = ENEMY_IDLE; enemy->stateTime = 0; }
+                if (t >= executionerAttackDuration) { enemy->state = ENEMY_IDLE; enemy->stateTime = 0; }
                 continue;
             }
             if (enemy->type == ENEMY_BOSS) {
@@ -1343,7 +1347,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                     }
                 }
             }
-            if (enemy->stateTime >= (crossbow ? 1.18f : shield ? .85f : cultist ? CULTIST_CAST_DURATION : mage ? .95f : CLEARING_MELEE_ATTACK_DURATION)) {
+            if (enemy->stateTime >= (crossbow ? crossbowAttackDuration : shield ? shieldAttackDuration : cultist ? CULTIST_CAST_DURATION : mage ? .95f : CLEARING_MELEE_ATTACK_DURATION)) {
                 enemy->state = ENEMY_IDLE;
                 enemy->stateTime = 0;
             }
@@ -1370,7 +1374,8 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 } else if (enemy->type == ENEMY_BOSS) {
                     StartGuardianCast(group, clearing, enemy, player);
                 } else {
-                    enemy->attackCooldown = 2.75f / fminf(enemy->power, 1.36f);
+                    enemy->attackCooldown = enemy->templarRole == TEMPLAR_EXECUTIONER ? 1.78f :
+                        2.75f / fminf(enemy->power, 1.36f);
                 }
             } else if (distance > (enemy->type == ENEMY_BOSS ? 110 : 100)) {
                 enemy->state = ENEMY_WALK;
@@ -1387,7 +1392,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 enemy->stateTime = 0.0f;
                 enemy->attackConnected = false;
                 enemy->attackDirection = Vector2Normalize(toPlayer);
-                enemy->attackCooldown = enemy->templarRole == TEMPLAR_CROSSBOW ? 2.05f :
+                enemy->attackCooldown = enemy->templarRole == TEMPLAR_CROSSBOW ? 1.59f :
                     group->boneland ? 2.15f : 1.5f / fminf(enemy->power, 1.36f);
             } else if (distance < RANGED_MIN_DISTANCE || distance > maxDistance || !canSeePlayer) {
                 enemy->state = ENEMY_WALK;
@@ -1403,7 +1408,8 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             enemy->stateTime = 0.0f;
             enemy->attackConnected = false;
             enemy->attackDirection = Vector2Normalize(toPlayer);
-            enemy->attackCooldown = 1.25f / fminf(enemy->power, 1.36f);
+            enemy->attackCooldown = enemy->templarRole == TEMPLAR_SHIELD ? .83f :
+                1.25f / fminf(enemy->power, 1.36f);
         } else if (distance > ENEMY_ATTACK_RANGE*0.85f) {
             enemy->state = ENEMY_WALK;
             enemy->walkTime += dt;
@@ -1857,11 +1863,11 @@ static void DrawMarshalAttackPose(const EnemyGroup *group, const Enemy *enemy, C
 static void DrawTemplarAttackPose(const EnemyGroup *group, const Enemy *enemy, Vector2 feet,
                                  int facing, int frame, float tilt, Color tint) {
     Texture2D texture = group->templarAttack[enemy->templarRole];
-    float tileW = texture.width / 4.0f, tileH = texture.height / 4.0f;
+    float tileW = texture.width / 6.0f, tileH = texture.height / 4.0f;
     float size = templarSizes[enemy->templarRole] * (enemy->templarRole == TEMPLAR_EXECUTIONER ? 1.08f : 1);
     Rectangle source = {frame * tileW, templarRows[facing] * tileH, tileW, tileH};
     DrawTexturePro(texture, source, (Rectangle){feet.x, feet.y, size, size},
-                   (Vector2){size * .5f, size * .93f}, tilt, tint);
+                   (Vector2){size * .5f, size * .94f}, tilt, tint);
 }
 
 static void DrawTemplarSprite(const EnemyGroup *group, const Enemy *enemy,
@@ -1886,12 +1892,15 @@ static void DrawTemplar(const EnemyGroup *group, const Enemy *enemy) {
     if (enemy->state == ENEMY_SPAWNING) {
         if (enemy->stateTime < 0) return;
         if (role == TEMPLAR_STANDARD && enemy->stateTime >= templarArrivalTime) {
-            float plant = (enemy->stateTime - templarArrivalTime) / templarPlantTime;
-            int frame = plant < .38f ? 0 : plant < .68f ? 1 : 2;
+            float plant = enemy->stateTime - templarArrivalTime;
+            float afterImpact = (plant - templarPlantImpact) / (templarPlantTime - templarPlantImpact);
+            int frame = plant < templarPlantImpact ?
+                (int)Clamp(3 * plant / templarPlantImpact, 0, 2) :
+                3 + (int)Clamp(3 * afterImpact, 0, 2);
             DrawTemplarEffect(group->templarDust, 2, enemy->position, (Vector2){1,0},
-                              (plant - .38f) / .62f, 110);
+                              afterImpact, 110);
             DrawTemplarAttackPose(group, enemy, enemy->position, 0, frame, 0, WHITE);
-            DrawTemplarEffect(group->templarEffects, 3, enemy->position, (Vector2){1,0}, (plant - .38f) / .62f, 205);
+            DrawTemplarEffect(group->templarEffects, 3, enemy->position, (Vector2){1,0}, afterImpact, 205);
             return;
         }
         float t = Clamp(enemy->stateTime / templarArrivalTime, 0, 1);
@@ -1923,7 +1932,8 @@ static void DrawTemplar(const EnemyGroup *group, const Enemy *enemy) {
     }
     float fall = enemy->state == ENEMY_FALLEN ? 1.0f :
                  enemy->state == ENEMY_DIE ? Clamp(enemy->stateTime / 1.2f, 0, 1) : 0;
-    int frame = enemy->state == ENEMY_WALK ? (int)(enemy->walkTime * 9) % 6 : 0;
+    float walkRate = role == TEMPLAR_MARSHAL ? 9 : 9 * enemy->speed / 100;
+    int frame = enemy->state == ENEMY_WALK ? (int)(enemy->walkTime * walkRate) % 6 : 0;
     float tilt = (enemy->facing == 2 ? -1.0f : 1.0f) * 72 * fall;
     Color tint = enemy->state == ENEMY_HURT ? (Color){255, 173, 173, 255} :
                  role == TEMPLAR_MARSHAL && fall > 0 ? Fade((Color){215, 185, 195, 255}, .80f) :
@@ -1936,8 +1946,8 @@ static void DrawTemplar(const EnemyGroup *group, const Enemy *enemy) {
         tint = (Color){255, 174, 226, 255};
     }
     if (role == TEMPLAR_STANDARD && enemy->state != ENEMY_DIE) {
-        int sway = (int)(enemy->stateTime * 3.5f) % 2;
-        DrawTemplarAttackPose(group, enemy, enemy->position, enemy->facing, 2 + sway, 0, tint);
+        float sway = .8f * sinf(enemy->stateTime * 4.5f);
+        DrawTemplarAttackPose(group, enemy, enemy->position, enemy->facing, 5, sway, tint);
         return;
     }
     if (enemy->state == ENEMY_ATTACK) {
@@ -1948,9 +1958,20 @@ static void DrawTemplar(const EnemyGroup *group, const Enemy *enemy) {
         float impact = marshal ? marshalSkills[skill].impact : role == TEMPLAR_EXECUTIONER ?
             executionerImpact : role == TEMPLAR_CROSSBOW ? crossbowRelease : shieldImpact;
         float activeEnd = marshal ? marshalSkills[skill].activeEnd : impact + .17f;
-        int pose = t < impact * .46f ? 0 : t < impact ? 1 : t < activeEnd ? 2 : 3;
+        float duration = marshal ? marshalSkills[skill].duration : role == TEMPLAR_EXECUTIONER ?
+            executionerAttackDuration : role == TEMPLAR_CROSSBOW ? crossbowAttackDuration : shieldAttackDuration;
+        float preparation = Clamp(t / impact, 0, 1);
+        float followThrough = Clamp((t - impact) / (duration - impact), 0, 1);
+        int pose = t < impact ? (preparation < .24f ? 0 : preparation < .64f ? 1 : 2) :
+            followThrough < .26f ? 3 : followThrough < .70f ? 4 : 5;
         Vector2 feet = enemy->position;
-        float recoil = t >= impact && t < activeEnd ? sinf(PI * (t - impact) / (activeEnd - impact)) : 0;
+        float recoilEnd = role == TEMPLAR_CROSSBOW ? impact + .12f : activeEnd;
+        float recoilAge = Clamp((t - impact) / (recoilEnd - impact), 0, 1);
+        float recoil = sinf(PI * recoilAge);
+        if (!marshal && role != TEMPLAR_CROSSBOW && t < impact) {
+            float brace = sinf(PI * preparation) * (role == TEMPLAR_EXECUTIONER ? 5 : 3);
+            feet = Vector2Subtract(feet, Vector2Scale(enemy->attackDirection, brace));
+        }
         if (role == TEMPLAR_CROSSBOW) {
             feet = Vector2Subtract(feet, Vector2Scale(enemy->attackDirection, recoil * 8));
             if (recoil > 0)
@@ -1988,7 +2009,7 @@ static void DrawTemplar(const EnemyGroup *group, const Enemy *enemy) {
         return;
     }
     if (enemy->state == ENEMY_WALK) {
-        float step = fmodf(enemy->walkTime * 3.6f, 1);
+        float step = fmodf(enemy->walkTime * walkRate / 3, 1);
         static const Vector2 facingDirection[] = {{0,1},{0,-1},{-1,0},{1,0}};
         Vector2 direction = facingDirection[enemy->facing];
         Vector2 heel = Vector2Subtract(enemy->position, Vector2Scale(direction, 10));

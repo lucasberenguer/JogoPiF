@@ -194,8 +194,8 @@ static void CheckTemplarBalance(void) {
                     .playableBounds = {0, 0, 1672, 941}, .spawn = {835, 840}};
     EnemyGroup group = {0};
     const int health[] = {
-        [TEMPLAR_SHIELD] = 210, [TEMPLAR_EXECUTIONER] = 270,
-        [TEMPLAR_CROSSBOW] = 150, [TEMPLAR_STANDARD] = 180,
+        [TEMPLAR_SHIELD] = 242, [TEMPLAR_EXECUTIONER] = 311,
+        [TEMPLAR_CROSSBOW] = 173, [TEMPLAR_STANDARD] = 207,
     };
     for (int wave = 1; wave <= 2; wave++) {
         StartEnemyWave(&group, &map, wave, map.spawn, 1);
@@ -209,6 +209,22 @@ static void CheckTemplarBalance(void) {
             count++;
         }
         assert(count == wave + 4);
+    }
+
+    const TemplarRole roles[] = {TEMPLAR_SHIELD, TEMPLAR_EXECUTIONER, TEMPLAR_CROSSBOW};
+    const float settle[] = {.74f, 1.26f, 1.00f};
+    for (int i=0; i<3; i++) {
+        StartEnemyWave(&group, &map, 1, map.spawn, 1);
+        for (int j=1; j<ENEMY_COUNT; j++) group.list[j].state=ENEMY_GONE;
+        Enemy *enemy=&group.list[0];
+        enemy->templarRole=roles[i];
+        enemy->type=i==2 ? ENEMY_COMMON_RANGED : i==1 ? ENEMY_SPECIAL : ENEMY_COMMON_MELEE;
+        enemy->state=ENEMY_ATTACK;
+        enemy->stateTime=settle[i]-.02f;
+        enemy->attackConnected=true;
+        int hp=100;
+        UpdateEnemies(&group,&map,map.spawn,.03f,true,&hp,100);
+        assert(enemy->state==ENEMY_IDLE);
     }
 
     StartArenaBoss(&group, &map, map.spawn, 1);

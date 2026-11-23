@@ -379,3 +379,9 @@ Na entrega do pós-boss de 18/11, build em `out/review` concluído e seis testes
 - Antes da Capela do Anjo (Clareira, Cemitério e Vila), morrer em qualquer onda ou chefe abre o Game Over, inclusive nos testes do F1. Reiniciar abre a escolha de arma e inicia uma nova partida na onda 1 da Clareira.
 - Reiniciar desenha a seleção de armas e fecha o quadro antes de processar entradas da nova tela. Isso impede que o clique do Game Over escolha a Bíblia.
 - Integração com a main em 899d58c: preservadas as notas das duas versões. Compilação, auditoria de inimigos e teste de encontro passaram.
+
+## Ataques dos templários comuns
+
+- Escudeiro 242 PV, carrasco 311 PV, besteiro 173 PV e porta-estandarte 207 PV, aumento de 15% com arredondamento para cima. Escudeiro, carrasco e besteiro andam mais rápido e têm multiplicador de dano 20% maior. Besteiro dispara a cada 1,80 s e o estandarte aumenta o dano de aliados próximos em 35%. Marechal conserva vida, dano e cadência.
+- Cada papel usa um atlas de seis poses por direção. As poses de impacto e disparo acompanham o instante do dano. O ritmo da marcha acompanha a velocidade. Compilação e auditoria de inimigos passaram.
+- Revisão de ritmo: escudeiro recupera 0,12 s mais cedo, carrasco 0,20 s e besteiro 0,19 s. A colocação do estandarte e as seis habilidades do Marechal também terminam mais cedo. Os instantes de impacto foram preservados. A poeira acompanha o ciclo de passos e a auditoria verificou a recuperação dos três atacantes.
