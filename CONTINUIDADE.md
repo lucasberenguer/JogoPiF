@@ -415,7 +415,8 @@ Na entrega do pós-boss de 18/11, build em `out/review` concluído e seis testes
 
 ## Barra de vida dos chefes
 
-- Todos os chefes usam o HUD de bronze enviado em `assets/ui/boss_health_frame.png`, com o nome acima e a vida recuando da direita para a esquerda atrás da moldura. As condições de exibição, os valores de vida, as cores e as marcações das fases vêm do encontro. O Marechal mantém o aviso “Transformando...” e os limiares de 50% e 25%.
+- A barra dos chefes fica no centro inferior, com filete de bronze, pontas em losango com selos gravados, nome gótico de tamanho 25 acima e PV no centro. A barra tem 30 px de altura e ocupa até 78% da largura da tela, limitada a 800 px. No F1, a barra sobe para acomodar o rodapé de prática. O HUD do jogador permanece no topo sem deslocamento. As condições de exibição, os valores de vida, as cores e as marcações das fases vêm do encontro. O Marechal mantém o aviso “Transformando...” e os limiares de 50% e 25%.
+- A build local `out/review/JogoPiF-HudChefes.exe` contém a moldura nova. A auditoria renderiza a barra em 1280×720 e 800×450, incluindo espaço para o rodapé em 800×450.
 - Os inimigos menores compartilham `DrawEnemyHealthBar` e conservam suas cores, posições e condições de visibilidade. Marechal e Necromante usam a barra principal do encontro.
 - Validação em `out/review/boss-hud-check`: 7/7 testes com asserts ativos. O componente sem texto ou marcadores de fase foi testado com um chefe de fase única simulado em 1280×720 e 800×450. As duas transições reais do Marechal e as barras dos inimigos comuns da Clareira foram conferidas nas capturas `audit/boss_health_*.png` e `audit/common_enemy_health_directions.png`.
 

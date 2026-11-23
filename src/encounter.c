@@ -1215,7 +1215,7 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         return;
     }
     bool bossVisible = EncounterBossVisible(e, enemies);
-    int statusY = 205 + (bossVisible ? BossHealthHudHeight() : 0);
+    int statusY = 205;
     const char *mapLabel = e->progress.map == BONELAND_MAP ? "Terra dos Ossos" : e->progress.map == 5 ? "Capela Invertida"
         : (e->progress.map == 4 ? "Porão da Capela"
         : (e->progress.map == 3 ? "Capela do Anjo"
@@ -1284,7 +1284,8 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         float markers[] = {.5f, IGRIS_FINAL_HEALTH_PERCENT / 100.0f};
         if (boss->necromancerForm) { markers[0] = .70f; markers[1] = .35f; }
         int markerCount = boss->necromancerForm || boss->templarRole == TEMPLAR_MARSHAL ? 2 : 1;
-        DrawBossHealthHud(bossLabel, phase, boss->health, boss->maxHealth, healthColor, markers, markerCount);
+        DrawBossHealthHud(bossLabel, phase, boss->health, boss->maxHealth, healthColor, markers, markerCount,
+                          e->practice ? PRACTICE_FOOTER_HEIGHT : 0);
     }
     if (!EncounterPaused(e)) return;
     DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,.86f));

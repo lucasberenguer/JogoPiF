@@ -5,70 +5,56 @@
 #define HUD_WIDTH 2082.0f
 #define HUD_HEIGHT 640.0f
 
-static const Rectangle bossFrameSource = {0, 96, 2172, 530};
-static const float bossFrameTop = 31;
-static Texture2D bossHealthFrame;
-static bool bossHealthFrameAttempted;
-
-static float BossHealthHudScale(void) {
-    return fminf(600, GetScreenWidth() * .56f) / bossFrameSource.width;
-}
-
-int BossHealthHudHeight(void) {
-    return (int)ceilf(bossFrameTop + bossFrameSource.height * BossHealthHudScale() + 4);
-}
-
 void DrawBossHealthHud(const char *name, const char *phase, int health, int maxHealth,
-                       Color fill, const float *phaseMarkers, int markerCount) {
+                       Color fill, const float *phaseMarkers, int markerCount, int bottomOffset) {
     if (maxHealth <= 0) return;
-    if (!bossHealthFrameAttempted) {
-        bossHealthFrameAttempted = true;
-        bossHealthFrame = LoadTexture("assets/ui/boss_health_frame.png");
-        if (bossHealthFrame.id) SetTextureFilter(bossHealthFrame, TEXTURE_FILTER_BILINEAR);
-    }
 
-    float scale = BossHealthHudScale();
-    float width = bossFrameSource.width * scale;
-    float x = (GetScreenWidth() - width) * .5f;
-    Rectangle track = {x + 249 * scale, bossFrameTop + (299 - bossFrameSource.y) * scale,
-                       1674 * scale, 125 * scale};
+    const Color bronze = {179, 133, 93, 255};
+    float width = floorf(fminf(800, GetScreenWidth() * .78f));
+    float x = floorf((GetScreenWidth() - width) * .5f);
+    float y = GetScreenHeight() - bottomOffset - 46;
+    Rectangle track = {x, y, width, 30};
+    DrawRectangleRec((Rectangle){x-3, y-3, width+6, 38}, Fade(BLACK, .83f));
+    DrawRectangleRec(track, (Color){24, 15, 21, 255});
     float ratio = fmaxf(0, fminf(1, (float)health / maxHealth));
-    DrawRectangleRounded(track, .45f, 8, (Color){24, 13, 17, 255});
     if (ratio > 0) {
-        Rectangle filled = {track.x, track.y, track.width * ratio, track.height};
-        DrawRectangleGradientEx(filled, ColorBrightness(fill, .27f), fill,
-                                fill, ColorBrightness(fill, .27f));
+        Rectangle filled = {x+2, y+2, (width-4)*ratio, 26};
+        Color highlight = ColorBrightness(fill, .24f);
+        DrawRectangleGradientEx(filled, highlight, fill, fill, highlight);
     }
+    DrawRectangleLinesEx(track, 1, bronze);
     for (int i = 0; i < markerCount; i++) {
-        float markerX = track.x + track.width * phaseMarkers[i];
-        DrawRectangleRec((Rectangle){markerX - 1, track.y, 2, track.height}, Fade(GOLD, .68f));
+        float markerX = x+2 + (width-4)*phaseMarkers[i];
+        DrawRectangleRec((Rectangle){markerX-1, y+2, 2, 5}, bronze);
+        DrawRectangleRec((Rectangle){markerX-1, y+23, 2, 5}, bronze);
     }
-    if (bossHealthFrame.id) {
-        DrawTexturePro(bossHealthFrame, bossFrameSource,
-            (Rectangle){x, bossFrameTop, width, bossFrameSource.height * scale},
-            (Vector2){0}, 0, WHITE);
-    } else {
-        DrawRectangleLinesEx(track, 2, (Color){170, 105, 84, 255});
+    for (int side = -1; side <= 1; side += 2) {
+        float edge = side < 0 ? x : x+width;
+        float cy = y+15;
+        DrawPoly((Vector2){edge,cy}, 4, 13, 0, (Color){27,17,23,255});
+        DrawPolyLinesEx((Vector2){edge,cy},4,12,0,1.5f,bronze);
+        DrawCircleLines((int)edge,(int)cy,4,bronze);
+        DrawLine((int)edge,(int)cy-7,(int)edge,(int)cy+7,bronze);
+        DrawLine((int)edge-6,(int)cy,(int)edge+6,(int)cy,bronze);
+        DrawPixel((int)edge,(int)cy,(Color){245,94,91,255});
+        DrawLineEx((Vector2){edge+side*13,cy},(Vector2){edge+side*24,cy},1,bronze);
     }
-    Rectangle title = {x, 4, width, 31};
+    DrawLineEx((Vector2){x+13,y-2},(Vector2){x+52,y-2},1,Fade(bronze,.7f));
+    DrawLineEx((Vector2){x+width-52,y-2},(Vector2){x+width-13,y-2},1,Fade(bronze,.7f));
+
+    Rectangle title = {x, y-30, width, 29};
     Rectangle shadow = title;
     shadow.y += 2;
-    DrawGameTextIn(name, shadow, 30, BLACK, true);
-    DrawGameTextIn(name, title, 30, (Color){255, 221, 183, 255}, true);
+    DrawGameTextIn(name, shadow, 25, BLACK, true);
+    DrawGameTextIn(name, title, 25, (Color){255, 221, 183, 255}, true);
 
     const char *status = phase && *phase ? TextFormat("%d/%d  |  %s", health, maxHealth, phase)
                                          : TextFormat("%d/%d", health, maxHealth);
-    Rectangle label = {track.x + track.width * .10f, track.y + 2, track.width * .80f, track.height - 4};
+    Rectangle label = {x+12, y+2, width-24, 26};
     shadow = label;
     shadow.y += 1;
-    DrawGameTextIn(status, shadow, 17, BLACK, false);
-    DrawGameTextIn(status, label, 17, RAYWHITE, false);
-}
-
-void UnloadBossHealthHud(void) {
-    if (bossHealthFrame.id) UnloadTexture(bossHealthFrame);
-    bossHealthFrame = (Texture2D){0};
-    bossHealthFrameAttempted = false;
+    DrawGameTextIn(status, shadow, 19, BLACK, false);
+    DrawGameTextIn(status, label, 19, RAYWHITE, false);
 }
 
 bool InitHud(Hud *hud) {
@@ -125,11 +111,11 @@ static void DrawCenteredLabel(const char *label, float centerX, float top,
 }
 
 void DrawHud(const Hud *hud, int health, int maxHealth,
-             float dodgeCooldown, float dodgeRecovery, int topOffset) {
+             float dodgeCooldown, float dodgeRecovery) {
     float width = fminf(650.0f, GetScreenWidth() * 0.38f);
     float scale = width / HUD_WIDTH;
     float x = GetScreenWidth() - width - 16.0f;
-    float y = 12.0f + topOffset;
+    float y = 12.0f;
     float healthRatio = maxHealth > 0 ? (float) health / (float) maxHealth : 0.0f;
     const Texture2D *frame = &hud->base;
     if (healthRatio <= 0.0f) frame = &hud->defeated;

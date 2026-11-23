@@ -1308,19 +1308,18 @@ int main(void) {
                 }
             EndMode2D();
 
-            int hudOffset = EncounterBossVisible(&encounter, &enemies) ? BossHealthHudHeight() : 0;
-            DrawRectangle(12, 12 + hudOffset, 490, 130, Fade(BLACK, 0.72f));
-            DrawGameText("WASD: mover  |  Espaço/botão direito: esquiva", 24, 23 + hudOffset, 17, RAYWHITE);
-            DrawGameText("F1: ferramentas | F3: colisão | Esc: pausa", 24, 76 + hudOffset, 17, RAYWHITE);
-            DrawGameText("F4/F5: testar dano e cura", 24, 104 + hudOffset, 17, RAYWHITE);
+            DrawRectangle(12, 12, 490, 130, Fade(BLACK, 0.72f));
+            DrawGameText("WASD: mover  |  Espaço/botão direito: esquiva", 24, 23, 17, RAYWHITE);
+            DrawGameText("F1: ferramentas | F3: colisão | Esc: pausa", 24, 76, 17, RAYWHITE);
+            DrawGameText("F4/F5: testar dano e cura", 24, 104, 17, RAYWHITE);
             if (altarOpen) {
                 DrawGameText(nearPedestal ? "E: Interagir com o Altar Antigo"
                                       : "Investigue o altar da clareira",
-                         24, 53 + hudOffset, 18, GOLD);
+                         24, 53, 18, GOLD);
             } else if (pedestalMessageTime > 0.0f) {
-                DrawGameText("Conclua as ondas e sele o Guardião", 24, 53 + hudOffset, 18, GOLD);
+                DrawGameText("Conclua as ondas e sele o Guardião", 24, 53, 18, GOLD);
             } else if (nearPedestal) {
-                DrawGameText("O altar está selado", 24, 53 + hudOffset, 18, GOLD);
+                DrawGameText("O altar está selado", 24, 53, 18, GOLD);
             } else {
                 DrawGameText(nearExit
                     ? (clearing.boneland ? "Passagem para o " TEMPLAR_FIELD_TITLE
@@ -1334,26 +1333,26 @@ int main(void) {
                             : "Capela do Anjo (E perto do altar / estátuas / trono)")
                         : (clearing.village ? "Chã da Tristeza"
                         : (clearing.cemetery ? "Cemitério das Raízes" : "Explore a clareira"))))),
-                    24, 53 + hudOffset, 18, RAYWHITE);
+                    24, 53, 18, RAYWHITE);
             }
             DrawHud(&hud, playerHealth, playerMaxHealth,
-                    dodgeCooldown, dodgeRecovery, hudOffset);
+                    dodgeCooldown, dodgeRecovery);
             DrawGameText(TextFormat("Arma: %s", WeaponName((Weapon)currentWeapon)),
-                     24, 150 + hudOffset, 19, GOLD);
+                     24, 150, 19, GOLD);
             if (currentWeapon == WEAPON_KATANA)
-                DrawGameText("Clique esquerdo: corte de katana", 24, 176 + hudOffset, 18, RAYWHITE);
+                DrawGameText("Clique esquerdo: corte de katana", 24, 176, 18, RAYWHITE);
             if (currentWeapon == WEAPON_BIBLE)
                 DrawGameText(bible.boostCooldown <= 0.0f
                              ? "Clique esquerdo: acelerar órbitas"
                              : TextFormat("Aceleração: %.1f s", bible.boostCooldown),
-                         24, 176 + hudOffset, 18, RAYWHITE);
+                         24, 176, 18, RAYWHITE);
             if (currentWeapon == WEAPON_GUN)
-                DrawGameText("Clique esquerdo: disparar (um tiro por clique)", 24, 176 + hudOffset, 18, RAYWHITE);
+                DrawGameText("Clique esquerdo: disparar (um tiro por clique)", 24, 176, 18, RAYWHITE);
             DrawEncounter(&encounter,&enemies);
             if (encounter.practice) {
-                DrawRectangle(0,GetScreenHeight()-28,GetScreenWidth(),28,Fade(BLACK,.8f));
+                DrawRectangle(0,GetScreenHeight()-PRACTICE_FOOTER_HEIGHT,GetScreenWidth(),PRACTICE_FOOTER_HEIGHT,Fade(BLACK,.8f));
                 DrawGameTextIn(devTools.invincible ? "PRÁTICA · Invulnerável · F1 ferramentas" :
-                    "PRÁTICA · F1 ferramentas",(Rectangle){8,GetScreenHeight()-28,GetScreenWidth()-16,28},
+                    "PRÁTICA · F1 ferramentas",(Rectangle){8,GetScreenHeight()-PRACTICE_FOOTER_HEIGHT,GetScreenWidth()-16,PRACTICE_FOOTER_HEIGHT},
                     20,GOLD,false);
             }
             if (entering) {
@@ -1379,7 +1378,6 @@ int main(void) {
     UnloadClearing(&clearing);
     UnloadVideoFrame();
     UnloadEncounterRewardUi();
-    UnloadBossHealthHud();
     UnloadGameFonts();
     CloseWindow();
     return 0;

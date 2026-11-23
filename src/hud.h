@@ -3,6 +3,8 @@
 
 #include "raylib.h"
 
+#define PRACTICE_FOOTER_HEIGHT 28
+
 typedef struct Hud {
     Texture2D base;
     Texture2D medium;
@@ -14,11 +16,9 @@ typedef struct Hud {
 
 bool InitHud(Hud *hud);
 void DrawHud(const Hud *hud, int health, int maxHealth,
-             float dodgeCooldown, float dodgeRecovery, int topOffset);
+             float dodgeCooldown, float dodgeRecovery);
 void UnloadHud(Hud *hud);
-int BossHealthHudHeight(void);
 void DrawBossHealthHud(const char *name, const char *phase, int health, int maxHealth,
-                       Color fill, const float *phaseMarkers, int markerCount);
-void UnloadBossHealthHud(void);
+                       Color fill, const float *phaseMarkers, int markerCount, int bottomOffset);
 
 #endif
