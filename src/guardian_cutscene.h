@@ -58,6 +58,7 @@ bool InitVillageCutscene(GuardianCutscene *scene, float musicVolume, float effec
 bool InitCoveiroCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume);
 bool InitIgrisCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume);
 bool InitIgrisAftermath(GuardianCutscene *scene, float musicVolume, float effectsVolume);
+bool InitBonelandAftermath(GuardianCutscene *scene, float musicVolume, float effectsVolume);
 bool InitBonelandCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume);
 bool InitGuardianCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume);
 bool InitGuardianAftermath(GuardianCutscene *scene, bool passage, float musicVolume, float effectsVolume);

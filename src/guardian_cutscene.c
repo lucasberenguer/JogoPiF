@@ -244,6 +244,10 @@ bool InitIgrisAftermath(GuardianCutscene *scene, float musicVolume, float effect
     return InitSequence(scene,"assets/cutscenes/igris_aftermath/","sequencia.ini",musicVolume,effectsVolume);
 }
 
+bool InitBonelandAftermath(GuardianCutscene *scene, float musicVolume, float effectsVolume) {
+    return InitSequence(scene,"assets/cutscenes/terra_dos_ossos_aftermath/","sequencia.ini",musicVolume,effectsVolume);
+}
+
 bool InitBonelandCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume) {
     return InitSequence(scene,"assets/cutscenes/terra_dos_ossos/","sequencia.ini",musicVolume,effectsVolume);
 }

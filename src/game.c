@@ -264,7 +264,8 @@ int main(void) {
     OpeningCutscene opening = {0};
     GuardianCutscene guardianIntro = {0};
     enum { GUARDIAN_STORY_INTRO, GUARDIAN_STORY_LIBERATION, GUARDIAN_STORY_PASSAGE,
-           VILLAGE_STORY_AFTERMATH, ANGEL_STORY, IGRIS_STORY_INTRO, IGRIS_STORY_AFTERMATH } guardianStory=GUARDIAN_STORY_INTRO;
+           VILLAGE_STORY_AFTERMATH, ANGEL_STORY, IGRIS_STORY_INTRO, IGRIS_STORY_AFTERMATH,
+           BONELAND_STORY_AFTERMATH } guardianStory=GUARDIAN_STORY_INTRO;
     DevTools devTools={.wave=1,.selected=6};
     bool devOpeningWasPaused=false,devGuardianWasPaused=false;
     bool openingPreview=false;
@@ -434,7 +435,8 @@ int main(void) {
                 else if (guardianStory==IGRIS_STORY_INTRO) CompleteIgrisIntro(&encounter,&enemies);
                 else if (guardianStory==IGRIS_STORY_AFTERMATH)
                     CompleteIgrisAftermath(&encounter,&enemies,&clearing,&player,playerHealth);
-                else CompleteGuardianPassage(&encounter,&enemies,&clearing,&player,playerHealth);
+                else if (guardianStory==GUARDIAN_STORY_PASSAGE)
+                    CompleteGuardianPassage(&encounter,&enemies,&clearing,&player,playerHealth);
                 screen=2;
                 entryFadeRemaining=guardianStory==IGRIS_STORY_INTRO ? 0 : entryFadeDuration;
             }
@@ -930,6 +932,12 @@ int main(void) {
                 katanaShockwaveCooldown = 0.0f;
                 memset(katanaShockwaves, 0, sizeof(katanaShockwaves));
                 entryFadeRemaining = entryFadeDuration;
+                if (toTemplarField && InitBonelandAftermath(&guardianIntro,
+                        menu.audio.volume[AUDIO_MUSIC]/100.0f,
+                        menu.audio.volume[AUDIO_EFFECTS]/100.0f)) {
+                    guardianStory=BONELAND_STORY_AFTERMATH;
+                    screen=GUARDIAN_SCREEN;
+                }
                 continue;
             }
         }

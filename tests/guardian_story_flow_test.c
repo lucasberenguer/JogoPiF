@@ -171,6 +171,7 @@ static bool TestEncounter(Encounter *e,EnemyGroup *enemies,const Clearing *map,V
             assert(*health == 83 && e->progress.weaponLevel[2] == 2);
             assert(LoadClearingCheckpoint(&saved) && saved.map == TEMPLAR_FIELD_MAP);
             if (mode == 2) {
+                assert(cinematicFrames >= 8);
                 assert(e->progress.stage == 1 && saved.stage == 1);
                 assert(map->exitLocked && EnemiesRemaining(enemies) == 5);
                 assert(p.x == map->spawn.x && p.y == map->spawn.y);
@@ -208,6 +209,11 @@ static void TestCinematic(GuardianCutscene *scene,float dt,GuardianCutsceneInput
         if (activeAudio->tracks[i].stream.buffer) assert(!IsMusicStreamPlaying(activeAudio->tracks[i]));
     }
     input=(GuardianCutsceneInput){0};
+    if (mode == 2) {
+        assert(active->progress.map == TEMPLAR_FIELD_MAP && active->progress.stage == 1);
+        assert(scene->count == 8 && scene->artCount == 7);
+        assert(scene->scenes[scene->current].audioEvent[0] == 0);
+    }
     if (mode >= 7 && active->phase == ENCOUNTER_IGRIS_AFTERMATH) {
         if (scene->current == 0 && scene->elapsed == 0) aftermathStarts++;
         GuardianScene *shot=&scene->scenes[scene->current];
@@ -253,7 +259,7 @@ int main(void) {
         printf("Real story loop: %s reached cemetery after %d frames.\n",mode ? "complete":"skip",frames);
     }
     for (mode=2;mode<5;mode++) {
-        frames=liberated=transported=0;
+        frames=liberated=transported=cinematicFrames=0;
         active=NULL;
         assert(ActualGameMain()==0);
         assert(transported==1);
