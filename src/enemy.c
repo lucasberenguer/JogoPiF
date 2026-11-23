@@ -943,6 +943,7 @@ static void AddEnemyImpact(EnemyGroup *group,Vector2 position,Vector2 direction)
 #define BONE_DASH_HIDE .26f
 #define BONE_DASH_REAPPEAR .63f
 #define BONE_SHOT_LIFETIME 1.65f
+#define BONE_SHOT_SPEED 680.0f
 
 static const struct {
     float range, windup, impactEnd, duration, radius;
@@ -1435,7 +1436,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
     for (int i = 0; i < ENEMY_PROJECTILE_COUNT; i++) {
         EnemyProjectile *shot = &group->projectiles[i];
         if (shot->remaining <= 0.0f) continue;
-        float speed = shot->boneShot ? 485.0f : group->cemetery ? 273.0f : group->boneland ? CULTIST_SHOT_SPEED : RANGED_SHOT_SPEED;
+        float speed = shot->boneShot ? BONE_SHOT_SPEED : group->cemetery ? 273.0f : group->boneland ? CULTIST_SHOT_SPEED : RANGED_SHOT_SPEED;
         Vector2 movement = Vector2Scale(shot->direction, speed * dt);
         int steps = (int)(Vector2Length(movement) / 6.0f) + 1;
         Vector2 step = Vector2Scale(movement, 1.0f / steps);
