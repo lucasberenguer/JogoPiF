@@ -477,7 +477,7 @@ static int WrapDialogue(const char *text, float size, float width, char lines[8]
             if (length>=512) break;
             memcpy(line,start,length);
             line[length]=0;
-            if (MeasureGameTextEx(line,size,false).x>width) break;
+            if (MeasureGameTextEx(line,size,GAME_TEXT_CUTSCENE).x>width) break;
             if (*end==' ') space=end;
             end+=bytes;
         }
@@ -508,8 +508,8 @@ int LayoutGuardianNarration(const char *text, float scale, float width,
             size_t length=(size_t)(space-text);
             memcpy(left,text,length);
             left[length]=0;
-            float a=MeasureGameTextEx(left,size,false).x;
-            float b=MeasureGameTextEx(space+1,size,false).x;
+            float a=MeasureGameTextEx(left,size,GAME_TEXT_CUTSCENE).x;
+            float b=MeasureGameTextEx(space+1,size,GAME_TEXT_CUTSCENE).x;
             if (a<=width && b<=width && fabsf(a-b)<best) {
                 best=fabsf(a-b);
                 snprintf(lines[0],512,"%s",left);
@@ -539,10 +539,10 @@ static void DrawNarration(const GuardianScene *shot, Rectangle canvas, float sca
     DrawRectangleGradientV((int)canvas.x,(int)gradientTop,(int)canvas.width,
         (int)(canvas.y+canvas.height-gradientTop),BLANK,Fade(BLACK,.87f*alpha));
     for (int i=0; i<count; i++) {
-        float width=MeasureGameTextEx(lines[i],size,false).x;
+        float width=MeasureGameTextEx(lines[i],size,GAME_TEXT_CUTSCENE).x;
         Vector2 pos={canvas.x+(canvas.width-width)/2,top+i*size*1.22f};
-        DrawGameTextEx(lines[i],(Vector2){pos.x+1.5f,pos.y+2},size,Fade(BLACK,.85f*alpha),false);
-        DrawGameTextEx(lines[i],pos,size,Fade((Color){255,237,207,255},alpha),false);
+        DrawGameTextEx(lines[i],(Vector2){pos.x+1.5f,pos.y+2},size,Fade(BLACK,.85f*alpha),GAME_TEXT_CUTSCENE);
+        DrawGameTextEx(lines[i],pos,size,Fade((Color){255,237,207,255},alpha),GAME_TEXT_CUTSCENE);
     }
 }
 
@@ -567,7 +567,7 @@ void DrawGuardianCutscene(const GuardianCutscene *scene) {
         DrawRectangleRec(box,(Color){24,11,21,241});
         DrawRectangleLinesEx(box,1.4f*scale,(Color){161,98,65,255});
         DrawGameTextEx(shot->speaker,(Vector2){box.x+24*scale,box.y+10*scale},speakerSize,
-                       (Color){246,205,141,255},false);
+                       (Color){246,205,141,255},GAME_TEXT_CUTSCENE);
         char lines[8][512], visible[512];
         int count=WrapDialogue(shot->dialogue,textSize,box.width-48*scale,lines);
         int remaining=(int)scene->letters;
@@ -575,7 +575,7 @@ void DrawGuardianCutscene(const GuardianCutscene *scene) {
             int letters=GetCodepointCount(lines[i]);
             VisibleDialogue(lines[i],remaining<0?0:remaining,visible);
             DrawGameTextEx(visible,(Vector2){box.x+24*scale,box.y+52*scale+i*textSize*1.15f},textSize,
-                           (Color){255,240,219,255},false);
+                           (Color){255,240,219,255},GAME_TEXT_CUTSCENE);
             remaining-=letters+1;
         }
         const char *controls=IsGamepadAvailable(0)
@@ -583,27 +583,27 @@ void DrawGuardianCutscene(const GuardianCutscene *scene) {
             : scene->mouseAdvance ? "Espaço / Enter / Clique    ·    Esc  Pular    ·    P  Pausar"
             : "Espaço / Enter  Completar / avançar    ·    Esc  Pular    ·    P  Pausar";
         float hintSize=fmaxf(15,18*scale);
-        float hintWidth=MeasureGameTextEx(controls,hintSize,false).x;
+        float hintWidth=MeasureGameTextEx(controls,hintSize,GAME_TEXT_CUTSCENE).x;
         DrawGameTextEx(controls,
             (Vector2){box.x+box.width-24*scale-hintWidth,box.y+box.height-hintSize-12*scale},
-            hintSize,(Color){244,226,202,255},false);
+            hintSize,(Color){244,226,202,255},GAME_TEXT_CUTSCENE);
     }
     if (shot->chapterCard) {
         DrawGameTextIn(shot->chapter,(Rectangle){canvas.x+80*scale,canvas.y+160*scale,1120*scale,50*scale},
-                       38*scale,Fade((Color){229,187,133,255},enter),false);
+                       38*scale,Fade((Color){229,187,133,255},enter),GAME_TEXT_CUTSCENE);
         DrawGameTextIn(shot->title,(Rectangle){canvas.x+60*scale,canvas.y+240*scale,1160*scale,85*scale},
-                       64*scale,Fade((Color){255,235,210,255},enter),true);
+                       64*scale,Fade((Color){255,235,210,255},enter),GAME_TEXT_TITLE);
         DrawGameTextIn(shot->subtitle,(Rectangle){canvas.x+60*scale,canvas.y+325*scale,1160*scale,85*scale},
-                       64*scale,Fade((Color){255,235,210,255},enter),true);
+                       64*scale,Fade((Color){255,235,210,255},enter),GAME_TEXT_TITLE);
         DrawGameTextIn(shot->tagline,(Rectangle){canvas.x+80*scale,canvas.y+455*scale,1120*scale,50*scale},
-                       30*scale,Fade((Color){229,205,171,255},enter),false);
+                       30*scale,Fade((Color){229,205,171,255},enter),GAME_TEXT_CUTSCENE);
     } else if (shot->title[0]) {
         Rectangle band={canvas.x,canvas.y+440*scale,canvas.width,160*scale};
         DrawRectangleRec(band,Fade((Color){18,9,22,255},.9f*enter));
         DrawGameTextIn(shot->title,(Rectangle){band.x+40*scale,band.y+20*scale,band.width-80*scale,58*scale},
-                       48*scale,Fade((Color){255,232,190,255},enter),false);
+                       48*scale,Fade((Color){255,232,190,255},enter),GAME_TEXT_CUTSCENE);
         DrawGameTextIn(shot->subtitle,(Rectangle){band.x+40*scale,band.y+85*scale,band.width-80*scale,36*scale},
-                       27*scale,Fade(RAYWHITE,enter),false);
+                       27*scale,Fade(RAYWHITE,enter),GAME_TEXT_CUTSCENE);
     }
     if (shot->type!=GUARDIAN_DIALOGUE) {
         Rectangle hint={canvas.x+24*scale,canvas.y+680*scale,canvas.width-48*scale,28*scale};
@@ -611,7 +611,7 @@ void DrawGuardianCutscene(const GuardianCutscene *scene) {
         const char *controls=IsGamepadAvailable(0)
             ? "A  Avançar    ·    B  Pular    ·    Start  Pausar"
             : "Espaço / Enter  Avançar    ·    Esc  Pular    ·    P  Pausar";
-        DrawGameTextIn(controls,hint,fmaxf(16,18*scale),(Color){244,226,202,255},false);
+        DrawGameTextIn(controls,hint,fmaxf(16,18*scale),(Color){244,226,202,255},GAME_TEXT_CUTSCENE);
     }
     if ((!shot->dialogue[0] || scene->exiting) && shot->fadeOut>0) {
         float exit=scene->exiting ? Ease(scene->exitElapsed/shot->fadeOut) :
@@ -622,9 +622,9 @@ void DrawGuardianCutscene(const GuardianCutscene *scene) {
     if (scene->paused) {
         DrawRectangleRec(canvas,Fade(BLACK,.72f));
         DrawGameTextIn("Pausa",(Rectangle){canvas.x,canvas.y+280*scale,canvas.width,60*scale},
-                       52*scale,(Color){255,232,190,255},true);
+                       52*scale,(Color){255,232,190,255},GAME_TEXT_TITLE);
         DrawGameTextIn("P ou Start para continuar",(Rectangle){canvas.x,canvas.y+350*scale,canvas.width,40*scale},
-                       26*scale,RAYWHITE,false);
+                       26*scale,RAYWHITE,GAME_TEXT_CUTSCENE);
     }
     EndScissorMode();
 }

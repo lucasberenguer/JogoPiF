@@ -101,13 +101,13 @@ int UpdateWeaponSelect(WeaponSelect *s) {
 static void DrawCardCopy(const char *const *lines, int lineCount, Rectangle area, float size) {
     float widest = 0;
     for (int line = 0; line < lineCount; line++)
-        widest = fmaxf(widest, MeasureGameTextEx(lines[line], size, false).x);
-    float height = MeasureGameTextEx(lines[0], size, false).y + (lineCount-1)*size;
+        widest = fmaxf(widest, MeasureGameTextEx(lines[line], size, GAME_TEXT_BODY).x);
+    float height = MeasureGameTextEx(lines[0], size, GAME_TEXT_BODY).y + (lineCount-1)*size;
     float scale = fminf(1, fminf(area.width/widest, area.height/height));
     size *= scale;
     float y = area.y + (area.height - height*scale)/2;
     for (int line = 0; line < lineCount; line++)
-        DrawGameTextEx(lines[line], (Vector2){area.x, y + line*size}, size, parchment, false);
+        DrawGameTextEx(lines[line], (Vector2){area.x, y + line*size}, size, parchment, GAME_TEXT_BODY);
 }
 
 static void DrawCardText(Weapon weapon, Rectangle card) {
@@ -124,7 +124,7 @@ static void DrawCardText(Weapon weapon, Rectangle card) {
     Rectangle title = RelativeRect(card, cardTitle);
     Rectangle description = RelativeRect(card, (Rectangle){.428f,.351f,.498f,.225f});
     Rectangle ability = RelativeRect(card, (Rectangle){.569f,.612f,.358f,.182f});
-    DrawGameTextIn(WeaponName(weapon), title, card.width*.084f, parchment, true);
+    DrawGameTextIn(WeaponName(weapon), title, card.width*.084f, parchment, GAME_TEXT_TITLE);
     DrawCardCopy(descriptions[weapon], 3, description, card.width*.052f);
     DrawCardCopy(abilities[weapon], abilities[weapon][2] ? 3 : 2, ability, card.width*.048f);
 }
@@ -134,7 +134,7 @@ void DrawWeaponSelect(const WeaponSelect *s) {
     DrawTexturePro(s->frame, (Rectangle){0,0,(float)s->frame.width,(float)s->frame.height},
                    screen, (Vector2){0},0,WHITE);
     Rectangle title = RelativeRect(screen, selectTitle);
-    DrawGameTextIn("Selecione sua Arma", title, title.height*.96f, parchment, true);
+    DrawGameTextIn("Selecione sua Arma", title, title.height*.96f, parchment, GAME_TEXT_TITLE);
     for (int i=0; i<WEAPON_COUNT; i++) {
         Rectangle r = CardBounds(i);
         if (i==s->selected) {
@@ -147,5 +147,5 @@ void DrawWeaponSelect(const WeaponSelect *s) {
     }
     const char *hint = "Clique na arma ou use as setas e Enter  ·  Esc para voltar";
     Rectangle footer = RelativeRect(screen, (Rectangle){.12f,.795f,.76f,.055f});
-    DrawGameTextIn(hint, footer, fmaxf(18, screen.height*.030f), parchment, false);
+    DrawGameTextIn(hint, footer, fmaxf(18, screen.height*.030f), parchment, GAME_TEXT_BODY);
 }

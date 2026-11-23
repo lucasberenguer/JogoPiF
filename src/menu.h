@@ -21,6 +21,7 @@ typedef struct Menu {
     Texture2D moon, seal, necromancer, fog, fogTexture;
     Texture2D hero[10];
     Texture2D buttons[4];
+    Texture2D creditPhotos[4];
     PauseMenu pause;
     GameAudio audio;
     int volumeFocus, volumeDrag;

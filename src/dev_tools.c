@@ -124,14 +124,14 @@ void DrawDevTools(const DevTools *tools, bool inPractice) {
     DrawRectangleRounded(panel,.025f,8,(Color){33,13,27,255});
     DrawRectangleRoundedLinesEx(panel,.025f,8,1,gold);
     DrawGameTextIn("Ferramentas de desenvolvimento",Place((Rectangle){28,16,1064,45}),
-                   34*scale,text,false);
+                   34*scale,text,GAME_TEXT_BODY);
     for (int i=DEV_OPEN_CHAPEL_BUTTON; i<DEV_CONTROL_COUNT; i++) {
         Rectangle button=Control(i);
         bool focused=tools->selected==i;
         DrawRectangleRec(button,focused ? (Color){114,37,46,255} : (Color){49,22,34,255});
         DrawRectangleLinesEx(button,focused ? 2 : 1,gold);
         DrawGameTextIn(i==DEV_OPEN_CHAPEL_BUTTON ? "Jogar Capela do Anjo" : "Jogar Capela Invertida",
-                       button,fmaxf(17,23*scale),text,true);
+                       button,fmaxf(17,23*scale),text,GAME_TEXT_TITLE);
     }
     static const char *names[]={"Mapa","Onda","Arma","Upgrade da arma","Invulnerabilidade","Colisões"};
     const char *weapons[]={"Arma de fogo","Bíblia","Katana"};
@@ -162,8 +162,8 @@ void DrawDevTools(const DevTools *tools, bool inPractice) {
         DrawRectangleLinesEx(field,1,focused ? gold : (Color){92,55,58,255});
         Rectangle label={field.x+12*scale,field.y,field.width*.43f,field.height};
         Rectangle value={field.x+field.width*.48f,field.y,field.width*.46f,field.height};
-        DrawGameTextIn(names[i],label,fmaxf(17,23*scale),text,false);
-        DrawGameTextIn(TextFormat("<  %s  >",values[i]),value,fmaxf(17,24*scale),gold,false);
+        DrawGameTextIn(names[i],label,fmaxf(17,23*scale),text,GAME_TEXT_BODY);
+        DrawGameTextIn(TextFormat("<  %s  >",values[i]),value,fmaxf(17,24*scale),gold,GAME_TEXT_BODY);
     }
     static const char *labels[]={"Iniciar onda selecionada","Boss · fase 1","Boss · fase 2",
         "Abertura em HQ","Cutscene do Guardião","Testar selo do boss",
@@ -178,14 +178,14 @@ void DrawDevTools(const DevTools *tools, bool inPractice) {
         DrawRectangleRec(button,focused && enabled ? (Color){114,37,46,255} : (Color){49,22,34,255});
         DrawRectangleLinesEx(button,focused ? 2 : 1,focused ? gold : (Color){116,65,62,255});
         DrawGameTextIn(i==6 && chapel ? "Entrar na capela" : i==6 && village ? "Entrar na Vila" : labels[i-6],(Rectangle){button.x+8*scale,button.y,button.width-16*scale,button.height},
-                       fmaxf(18,25*scale),ink,false);
+                       fmaxf(18,25*scale),ink,GAME_TEXT_BODY);
     }
     const char *status=tools->status[0] ? tools->status :
         tools->map==INVERTED_CHAPEL_MAP ? "Teste as perguntas de ressurreição. Use F4 para simular dano." :
         "Os cenários usam prática. Continuar no menu retoma seu checkpoint.";
-    DrawGameTextIn(status,Place((Rectangle){28,536,1064,45}),fmaxf(17,22*scale),gold,false);
+    DrawGameTextIn(status,Place((Rectangle){28,536,1064,45}),fmaxf(17,22*scale),gold,GAME_TEXT_BODY);
     DrawGameTextIn("Setas ajustam e navegam · Enter executa · Clique para selecionar",
-        Place((Rectangle){28,598,800,42}),fmaxf(16,21*scale),text,false);
+        Place((Rectangle){28,598,800,42}),fmaxf(16,21*scale),text,GAME_TEXT_BODY);
 }
 
 bool StartDevEncounter(const DevTools *tools, DevAction action, Encounter *e,

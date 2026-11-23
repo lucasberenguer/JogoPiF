@@ -565,22 +565,22 @@ static void CheckLegacyCheckpoints(void) {
     Rectangle retry = {centerX - btnWidth - btnGap * 0.5f, btnY, btnWidth, btnHeight};
     Rectangle backToMenu = {centerX + btnGap * 0.5f, btnY, btnWidth, btnHeight};
     DrawGameTextIn("Game Over", (Rectangle){0.0f, centerY - 190.0f, sw, 96.0f},
-                   92.0f, (Color){220, 45, 55, 255}, true);
+                   92.0f, (Color){220, 45, 55, 255}, GAME_TEXT_TITLE);
     DrawGameTextIn("Fim da tentativa", (Rectangle){0.0f, centerY - 82.0f, sw, 52.0f},
-                   48.0f, (Color){255, 119, 103, 255}, true);
+                   48.0f, (Color){255, 119, 103, 255}, GAME_TEXT_TITLE);
     DrawGameTextIn("Sua tentativa terminou.", (Rectangle){0.0f, centerY - 18.0f, sw, 32.0f},
-                   22.0f, RAYWHITE, false);
+                   22.0f, RAYWHITE, GAME_TEXT_BODY);
     DrawRectangleRec(retry, DARKGRAY);
     DrawRectangleLinesEx(retry, 2, GOLD);
     DrawGameTextIn("Repetir", (Rectangle){retry.x + 12.0f, retry.y + 8.0f, retry.width - 24.0f, retry.height - 16.0f},
-                   32.0f, RAYWHITE, true);
+                   32.0f, RAYWHITE, GAME_TEXT_TITLE);
     DrawRectangleRec(backToMenu, DARKGRAY);
     DrawRectangleLinesEx(backToMenu, 2, GOLD);
     DrawGameTextIn("Voltar ao Menu", (Rectangle){backToMenu.x + 12.0f, backToMenu.y + 8.0f, backToMenu.width - 24.0f, backToMenu.height - 16.0f},
-                   32.0f, RAYWHITE, true);
+                   32.0f, RAYWHITE, GAME_TEXT_TITLE);
     DrawGameTextIn("Enter ou R: nova tentativa  |  Esc: voltar ao menu",
                    (Rectangle){0.0f, btnY + btnHeight + 24.0f, sw, 28.0f},
-                   18.0f, LIGHTGRAY, false);
+                   18.0f, LIGHTGRAY, GAME_TEXT_BODY);
     EndTextureMode();
     uiShot = LoadImageFromTexture(uiTarget.texture);
     ImageFlipVertical(&uiShot);
