@@ -496,3 +496,13 @@ Na entrega do pós-boss de 18/11, build em `out/review` concluído e seis testes
 ## Transições de fase no HUD
 
 - As transições de fase dos chefes acionam um pulso violeta de 0,65 s no limiar correspondente do HUD, com brilho na moldura e uma caveira pixelada que se dissipa em partículas. A caveira fica junto à borda inferior para preservar a leitura do nome e dos PV. O efeito usa o relógio da transformação do próprio chefe.
+
+## Refinamento das animações de Igris
+
+- Lanças da Umbra, Erupção e Vórtice usam novos atlas de corpo sem efeitos embutidos, com 32 poses para Lanças da Umbra e 24 para cada outro feitiço, e o mesmo pivô de chão nas quatro direções. Os quadros têm a escala-base da espera de Igris. Continuam valendo os três projéteis e os efeitos separados do combate.
+- O Corte do Eclipse usa a pose de giro limpa e um único crescente construído no vetor do golpe. O Vórtice fica centrado no chão, e a Garra do Abismo só exibe a extensão separada na janela de impacto. Os tempos de dano, a IA e as áreas de acerto foram preservados.
+- Build local `out/review/JogoPiF-Igris-Refinado.exe`. Auditoria de inimigos aprovada e renderização das poses conferida. Revisão de fluidez durante a luta fica para teste em partida.
+
+- A escala do corpo de Igris foi calibrada pela altura da pose de referência em todos os atlas, da espera ao Rasgo em Z. A forma final mantém a silhueta da garra, com a mesma referência de altura corporal. Os dois atlas de caminhada foram alinhados pelo tronco e a cadência usa a distância efetivamente percorrida, com orientação estabilizada perto das diagonais. Build `out/review/JogoPiF-Igris-Escala.exe`; auditoria de inimigos, captura das poses e deslocamento em oito direções em piso livre conferidos.
+
+- As Lanças da Umbra usam os oito novos quadros por direção e selecionam a orientação pelo vetor de disparo. O crescente do Eclipse foi validado por captura nas quatro direções. Build local em `out/review/JogoPiF-Igris-Direcoes.exe`.

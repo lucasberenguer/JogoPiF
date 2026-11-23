@@ -1449,6 +1449,7 @@ static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
     bool enraged = GuardianEnraged(boss);
     if (boss->state != ENEMY_ATTACK) {
         if (*health <= 0) return;
+        int previousFacing = boss->facing;
         boss->facing = FacingToward(direction);
         if (boss->attackCooldown <= 0 && MapHasClearPath(map,boss->position,player)) {
             int skill = -1;
@@ -1496,10 +1497,18 @@ static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
             }
         }
         if (distance > 90) {
-            boss->state = ENEMY_WALK;
-            boss->walkTime += dt;
+            Vector2 start = boss->position;
             float speedScale = boss->igrisFinalForm ? 1.30f : enraged ? 1.13f : 1;
             MoveEnemy(map,boss,Vector2Scale(direction,boss->speed*dt*speedScale));
+            Vector2 step = Vector2Subtract(boss->position,start);
+            float traveled = Vector2Length(step);
+            boss->state = traveled > .01f ? ENEMY_WALK : ENEMY_IDLE;
+            if (boss->state == ENEMY_WALK) {
+                boss->walkTime += traveled / boss->speed;
+                float dx = fabsf(step.x), dy = fabsf(step.y);
+                bool horizontal = previousFacing >= 2 ? dx > dy*.85f : dx > dy/.85f;
+                boss->facing = horizontal ? (step.x < 0 ? 2 : 3) : (step.y < 0 ? 1 : 0);
+            }
         } else boss->state = ENEMY_IDLE;
         return;
     }
@@ -2240,24 +2249,24 @@ static void DrawIgrisCell(Texture2D art, int columns, int rows, int col, int row
                    (Vector2){width*anchorX,height*anchorY},tilt,tint);
 }
 
-static void DrawIgrisEclipsePose(Texture2D art, int frame, int row, Vector2 feet, Color tint) {
-    static const int edges[4][9] = {
-        {0,182,360,548,751,974,1188,1363,1536},
-        {0,181,367,550,745,973,1180,1362,1536},
-        {0,197,395,566,766,1012,1203,1371,1536},
-        {0,170,352,527,715,929,1155,1354,1536},
+// The body has a common standing height. Measure the resting pose in each sheet,
+// excluding detached effects, so larger cells and crouches do not change scale.
+#define IGRIS_BODY_HEIGHT 162.0f
+static void DrawIgrisBody(Texture2D tex, int art, int columns, int rows, int frame, int row,
+                           Vector2 feet, bool flip, float tilt, Color tint) {
+    static const struct { float body, ground; } fit[IGRIS_ART_COUNT] = {
+        [IGRIS_IDLE_ART] = {218,239}, [IGRIS_WALK_ART] = {217,239},
+        [IGRIS_MELEE_ART] = {215,269}, [IGRIS_ERUPTION_ART] = {194,264},
+        [IGRIS_SPEARS_ART] = {195,264}, [IGRIS_VORTEX_ART] = {208,264},
+        [IGRIS_FINAL_IDLE] = {232,280}, [IGRIS_FINAL_WALK] = {232,280},
+        [IGRIS_FINAL_MELEE] = {234,280}, [IGRIS_GRAB_ART] = {188,267},
+        [IGRIS_ECHO_ART] = {190,252},
+        [IGRIS_Z_DOWN] = {237,312}, [IGRIS_Z_UP] = {250,322},
+        [IGRIS_Z_LEFT] = {208,303}, [IGRIS_Z_RIGHT] = {222,304},
     };
-    static const int body[4][8] = {
-        {100,269,454,639,844,1062,1272,1441},
-        {101,270,456,622,814,1030,1259,1447},
-        {114,287,474,664,883,1080,1280,1471},
-        {96,259,431,611,814,1029,1243,1446},
-    };
-    int left = edges[row][frame], width = edges[row][frame+1]-left;
-    const float scale = .85f;
-    DrawTexturePro(art,(Rectangle){left,row*256,width,256},
-                   (Rectangle){feet.x,feet.y,width*scale,256*scale},
-                   (Vector2){(body[row][frame]-left)*scale,239*scale},0,tint);
+    float cellHeight = tex.height/(float)rows;
+    DrawIgrisCell(tex,columns,rows,frame,row,feet,cellHeight*IGRIS_BODY_HEIGHT/fit[art].body,
+                  .5f,fit[art].ground/cellHeight,flip,tilt,tint);
 }
 
 static void DrawIgrisEruption(Texture2D art, int frame, Vector2 center) {
@@ -2278,13 +2287,9 @@ static void DrawIgrisEruption(Texture2D art, int frame, Vector2 center) {
                    (Vector2){width*scale*.5f,(height-9)*scale},0,WHITE);
 }
 
-static int IgrisRow(int art, int facing) {
-    static const int basicRows[] = {0,2,3,1};
-    static const int spellRows[] = {0,3,2,1};
-    static const int eruptionRows[] = {0,3,1,2};
-    if (art == IGRIS_ERUPTION_ART) return eruptionRows[facing];
-    if (art >= IGRIS_SPEARS_ART) return spellRows[facing];
-    return basicRows[facing];
+static int IgrisRow(int facing) {
+    static const int rows[] = {0,2,3,1};
+    return rows[facing];
 }
 
 static void DrawTemplarSprite(const EnemyGroup *group, const Enemy *enemy,
@@ -2317,7 +2322,8 @@ static void DrawIgris(const EnemyGroup *group, const Enemy *enemy) {
     if (enemy->state == ENEMY_WALK || enemy->state == ENEMY_SPAWNING) {
         art = enemy->igrisFinalForm ? IGRIS_FINAL_WALK : IGRIS_WALK_ART;
         columns = enemy->igrisFinalForm ? 4 : 7;
-        frame = (int)((enemy->state == ENEMY_WALK ? enemy->walkTime : enemy->stateTime)*11)%columns;
+        float cadence = enemy->igrisFinalForm ? 8 : 10;
+        frame = (int)((enemy->state == ENEMY_WALK ? enemy->walkTime : enemy->stateTime)*cadence)%columns;
     }
     if (enemy->state == ENEMY_ATTACK) {
         int skill = enemy->bossAttack;
@@ -2325,41 +2331,38 @@ static void DrawIgris(const EnemyGroup *group, const Enemy *enemy) {
             float t = enemy->stateTime;
             int cel = t < IGRIS_ECHO_PLANT ? 0 : t >= IGRIS_ECHO_FADE ? 5 :
                 t < IgrisEchoLaunch(0) ? 1 : t < IgrisEchoLaunch(1) ? 2 : t < IgrisEchoLaunch(2) ? 3 : 4;
-            DrawIgrisCell(group->igrisArt[IGRIS_ECHO_ART],6,4,cel,IgrisRow(IGRIS_FINAL_MELEE,facing),
-                          feet,245,.5f,.88f,false,0,WHITE);
+            DrawIgrisBody(group->igrisArt[IGRIS_ECHO_ART],IGRIS_ECHO_ART,6,4,cel,IgrisRow(facing),
+                          feet,false,0,WHITE);
             return;
         }
         if (skill == IGRIS_Z_RIP) {
             int cel = 0;
             while (cel < 11 && enemy->stateTime >= igrisZFrames[cel+1]) cel++;
-            DrawIgrisCell(group->igrisArt[IGRIS_Z_DOWN+facing],4,3,cel%4,cel/4,
-                          feet,272,.5f,.88f,false,0,WHITE);
+            DrawIgrisBody(group->igrisArt[IGRIS_Z_DOWN+facing],IGRIS_Z_DOWN+facing,4,3,cel%4,cel/4,
+                          feet,false,0,WHITE);
             return;
         }
         if (skill == IGRIS_ABYSS_GRAB) {
             float t = enemy->stateTime;
             int cel = t < .22f ? 0 : t < .40f ? 1 : t < IGRIS_GRAB_IMPACT ? 2 :
                 t < .78f ? 3 : t < IGRIS_GRAB_RELEASE ? 4 : 5;
-            DrawIgrisCell(group->igrisArt[IGRIS_GRAB_ART],6,4,cel,IgrisRow(IGRIS_FINAL_MELEE,facing),
-                          feet,272.2f,.5f,.84f,false,0,WHITE);
+            DrawIgrisBody(group->igrisArt[IGRIS_GRAB_ART],IGRIS_GRAB_ART,6,4,cel,IgrisRow(facing),
+                          feet,false,0,WHITE);
             return;
         }
-        art = igrisSkills[skill].art;
-        columns = skill == IGRIS_FINAL_CLAW ? 4 : skill <= IGRIS_ECLIPSE ? 8 : 6;
-        int impactFrame = skill <= IGRIS_ECLIPSE ? 4 :
-            (skill == IGRIS_ERUPTION || skill == IGRIS_FINAL_CLAW) ? 2 : 3;
+        // A pose de giro é o corte limpo; o crescente é desenhado na direção do golpe.
+        art = skill == IGRIS_ECLIPSE ? IGRIS_VORTEX_ART : igrisSkills[skill].art;
+        if (skill == IGRIS_SPEARS || skill == IGRIS_ECLIPSE)
+            facing = FacingToward(enemy->attackDirection);
+        bool eightFrames = skill == IGRIS_MELEE || skill == IGRIS_SPEARS;
+        columns = skill == IGRIS_FINAL_CLAW ? 4 : eightFrames ? 8 : 6;
+        int impactFrame = eightFrames ? 4 : skill == IGRIS_FINAL_CLAW ? 2 : 3;
         float t = enemy->stateTime, impact = igrisSkills[skill].impact;
         frame = t < impact ? (int)(t/impact*impactFrame) :
             impactFrame+(int)((t-impact)/(igrisSkills[skill].duration-impact)*(columns-impactFrame));
         frame = (int)Clamp(frame,0,columns-1);
     }
-    bool flip = (art <= IGRIS_MELEE_ART && facing == 3) ||
-                (art == IGRIS_SPEARS_ART && facing == 2);
-    float anchorX = .50f;
-    float ground = enemy->igrisFinalForm ? .88f : (art == IGRIS_SPEARS_ART ? .78f : .94f);
-    float drawHeight = enemy->igrisFinalForm ? 245.0f :
-                       (art == IGRIS_SPEARS_ART ? 237.5f :
-                        (art == IGRIS_MELEE_ART || art == IGRIS_ERUPTION_ART) ? 213.75f : 190.0f);
+    bool flip = art <= IGRIS_MELEE_ART && facing == 3;
     bool fallen = enemy->state == ENEMY_FALLEN;
     float fall = fallen ? 1 : enemy->state == ENEMY_DIE ? Clamp(enemy->stateTime/1.2f,0,1) : 0;
     if (fallen) DrawBossGroundSeal(group->sealMarker,feet);
@@ -2368,9 +2371,8 @@ static void DrawIgris(const EnemyGroup *group, const Enemy *enemy) {
         DrawCircleV(feet,52,Fade(PURPLE,.35f+.18f*sinf(enemy->stateTime*17)));
         tint = (Color){255,174,226,255};
     }
-    if (art == IGRIS_ECLIPSE_ART) DrawIgrisEclipsePose(group->igrisArt[art],frame,IgrisRow(art,facing),feet,tint);
-    else DrawIgrisCell(group->igrisArt[art],columns,4,frame,IgrisRow(art,facing),feet,
-                       drawHeight,anchorX,ground,flip,fall*72,tint);
+    DrawIgrisBody(group->igrisArt[art],art,columns,4,frame,IgrisRow(facing),
+                       feet,flip,fall*72,tint);
     if (fallen) DrawGameText("E: selar",(int)feet.x-30,(int)feet.y+12,18,GOLD);
 }
 
@@ -2547,7 +2549,7 @@ static void DrawIgrisEchoes(const EnemyGroup *group, const Enemy *boss) {
         if (age < -IGRIS_ECHO_WARNING) continue;
         Vector2 from = boss->igrisEchoFrom[i], to = boss->igrisEchoTo[i];
         Vector2 direction = Vector2Subtract(to,from);
-        int row = IgrisRow(IGRIS_FINAL_MELEE,FacingToward(direction));
+        int row = IgrisRow(FacingToward(direction));
         if (age < 0) {
             float opacity = 1+age/IGRIS_ECHO_WARNING;
             DrawLineEx(from,to,2*IGRIS_ECHO_WIDTH,Fade(PURPLE,.15f+.19f*opacity));
@@ -2569,6 +2571,21 @@ static void DrawIgrisEchoes(const EnemyGroup *group, const Enemy *boss) {
     }
 }
 
+static void DrawIgrisEclipseArc(const Enemy *boss, float progress, float reach) {
+    const float spread = acosf(igrisSkills[IGRIS_ECLIPSE].arcDot);
+    float fade = 1-progress;
+    float radius = reach*(.40f+.60f*progress);
+    for (int i=0;i<24;i++) {
+        float low = Lerp(-spread,spread,i/24.0f);
+        float high = Lerp(-spread,spread,(i+1)/24.0f);
+        Vector2 a = Vector2Add(boss->position,Vector2Scale(Vector2Rotate(boss->attackDirection,low),radius));
+        Vector2 b = Vector2Add(boss->position,Vector2Scale(Vector2Rotate(boss->attackDirection,high),radius));
+        float width = 2+9*sinf((i+.5f)*PI/24);
+        DrawLineEx(a,b,width*1.6f,Fade(PURPLE,fade*.62f));
+        DrawLineEx(a,b,width*.6f,Fade((Color){237,155,255,255},fade));
+    }
+}
+
 static void DrawIgrisWarning(const EnemyGroup *group, const Enemy *boss) {
     if (boss->state != ENEMY_ATTACK) return;
     int skill = boss->bossAttack;
@@ -2583,13 +2600,12 @@ static void DrawIgrisWarning(const EnemyGroup *group, const Enemy *boss) {
             DrawLineEx(boss->position,end,2*IGRIS_GRAB_HALF_WIDTH,Fade(PURPLE,.24f));
             DrawLineEx(boss->position,end,4,Fade(VIOLET,.82f));
         }
-        if (t >= .40f && t < IGRIS_GRAB_RELEASE) {
+        if (t >= IGRIS_GRAB_IMPACT && t < IGRIS_GRAB_RELEASE) {
             Texture2D art = group->igrisArt[IGRIS_GRAB_FX];
-            int frame = t < IGRIS_GRAB_IMPACT ? 2 : t < .79f ? 3 : 4;
+            int frame = t < .79f ? 3 : 4;
             float w = art.width/6.0f, h = art.height/4.0f;
             float angle = atan2f(boss->attackDirection.y,boss->attackDirection.x)*RAD2DEG;
-            float length = t < IGRIS_GRAB_IMPACT ? IGRIS_GRAB_REACH :
-                Lerp(IGRIS_GRAB_REACH,95,Clamp((t-IGRIS_GRAB_IMPACT)/(IGRIS_GRAB_RELEASE-IGRIS_GRAB_IMPACT),0,1));
+            float length = Lerp(IGRIS_GRAB_REACH,95,Clamp((t-IGRIS_GRAB_IMPACT)/(IGRIS_GRAB_RELEASE-IGRIS_GRAB_IMPACT),0,1));
             Vector2 anchor = {boss->position.x,boss->position.y-28};
             DrawTexturePro(art,(Rectangle){frame*w,h,w,h},
                            (Rectangle){anchor.x,anchor.y,length,140},(Vector2){0,70},angle,WHITE);
@@ -2631,17 +2647,18 @@ static void DrawIgrisWarning(const EnemyGroup *group, const Enemy *boss) {
         return;
     }
     float progress = Clamp((t-impact)/(igrisSkills[skill].duration-impact),0,.999f);
-    int facing = boss->facing;
     if (skill == IGRIS_ECLIPSE) {
-        center = Vector2Add(center,Vector2Scale(boss->attackDirection,radius*(.42f+.32f*progress)));
-        DrawIgrisCell(group->igrisArt[IGRIS_ECLIPSE_FX],8,4,(int)(progress*8),IgrisRow(IGRIS_ECLIPSE_ART,facing),
-                      center,145,.5f,.57f,false,0,WHITE);
+        DrawIgrisEclipseArc(boss,progress,radius);
     } else if (skill == IGRIS_ERUPTION) {
         int frame = (int)(progress*24);
         DrawIgrisEruption(group->igrisArt[IGRIS_ERUPTION_FX],frame,center);
     } else if (skill == IGRIS_VORTEX) {
-        DrawIgrisCell(group->igrisArt[IGRIS_VORTEX_FX],6,4,(int)(progress*6),IgrisRow(IGRIS_VORTEX_ART,facing),
-                      center,360,.5f,.60f,false,0,WHITE);
+        Texture2D art = group->igrisArt[IGRIS_VORTEX_FX];
+        float w = art.width/6.0f, h = art.height/4.0f;
+        int frame = 1+(int)(progress*5);
+        DrawTexturePro(art,(Rectangle){frame*w,0,w,h},
+                       (Rectangle){center.x,center.y,radius*2,radius*1.2f},
+                       (Vector2){radius,radius*.68f},0,Fade(WHITE,1-.55f*progress));
     }
 }
 
