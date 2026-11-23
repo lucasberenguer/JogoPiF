@@ -2235,9 +2235,11 @@ static void DrawIgris(const EnemyGroup *group, const Enemy *enemy) {
     }
     bool flip = (art <= IGRIS_MELEE_ART && facing == 3) ||
                 (art == IGRIS_SPEARS_ART && facing == 2);
-    float anchorX = art <= IGRIS_MELEE_ART ? (facing == 2 ? .50f : facing == 3 ? .50f : .61f) : .50f;
+    float anchorX = .50f;
     float ground = enemy->igrisFinalForm ? .84f : art == IGRIS_SPEARS_ART && facing == 0 ? .84f : .94f;
     if (enemy->igrisFinalForm && art == IGRIS_FINAL_WALK && facing == 0) ground = .92f;
+    float drawHeight = enemy->igrisFinalForm ? (art == IGRIS_FINAL_MELEE ? 243.0f : 238.0f) :
+                       (art == IGRIS_MELEE_ART ? 213.75f : 190.0f);
     bool fallen = enemy->state == ENEMY_FALLEN;
     float fall = fallen ? 1 : enemy->state == ENEMY_DIE ? Clamp(enemy->stateTime/1.2f,0,1) : 0;
     if (fallen) DrawBossGroundSeal(group->sealMarker,feet);
@@ -2248,7 +2250,7 @@ static void DrawIgris(const EnemyGroup *group, const Enemy *enemy) {
     }
     if (art == IGRIS_ECLIPSE_ART) DrawIgrisEclipsePose(group->igrisArt[art],frame,IgrisRow(art,facing),feet,tint);
     else DrawIgrisCell(group->igrisArt[art],columns,4,frame,IgrisRow(art,facing),feet,
-                       enemy->igrisFinalForm ? 238 : 190,anchorX,ground,flip,fall*72,tint);
+                       drawHeight,anchorX,ground,flip,fall*72,tint);
     if (fallen) DrawGameText("E: selar",(int)feet.x-30,(int)feet.y+12,18,GOLD);
 }
 
