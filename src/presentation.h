@@ -8,6 +8,7 @@ typedef struct StagePresentation {
     int wave, waveTotal;
     bool boss;
     bool separateBossWave;
+    bool igrisIntro;
     const char *mapName, *bossName;
     const char *announcement;
     const char *areaSubtitle;

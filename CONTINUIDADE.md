@@ -510,3 +510,8 @@ Na entrega do pós-boss de 18/11, build em `out/review` concluído e seis testes
 - A escala do corpo de Igris foi calibrada pela altura da pose de referência em todos os atlas, da espera ao Rasgo em Z. A forma final mantém a silhueta da garra, com a mesma referência de altura corporal. Os dois atlas de caminhada foram alinhados pelo tronco e a cadência usa a distância efetivamente percorrida, com orientação estabilizada perto das diagonais. Build `out/review/JogoPiF-Igris-Escala.exe`; auditoria de inimigos, captura das poses e deslocamento em oito direções em piso livre conferidos.
 
 - As Lanças da Umbra usam os oito novos quadros por direção e selecionam a orientação pelo vetor de disparo. O crescente do Eclipse foi validado por captura nas quatro direções. Build local em `out/review/JogoPiF-Igris-Direcoes.exe`.
+
+## Cartela de apresentação de Igris
+
+- Ao terminar ou pular a cutscene pré-luta, a cartela de chefe aparece por 2,3 s. Usa o retrato frontal em `assets/igris/portrait.png`, com recorte na altura das coxas, aproximação curta e brasas violetas. A faixa inclinada e as linhas douradas seguem o modelo anterior. A indicação de onda continua na cartela de onda.
+- A simulação de combate fica pausada durante a cartela. O HUD, a trilha de combate e o intervalo inicial de ataque seguem na retomada. Build local em `out/review/JogoPiF-Igris-Apresentacao.exe`; captura em `out/review/audit/igris_apresentacao.png`.

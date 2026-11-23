@@ -124,7 +124,7 @@ typedef struct EnemyGroup {
     Texture2D sealMarker;
     Texture2D bossSprites, bossWalk, bossAttack, roots, rootWave, curse, guardianMelee;
     Texture2D guardianSpawn, guardianDefeat;
-    Texture2D bossPortrait, cemeteryPortrait, boneLordPortrait;
+    Texture2D bossPortrait, cemeteryPortrait, boneLordPortrait, igrisPortrait;
     Enemy list[ENEMY_COUNT];
     EnemyProjectile projectiles[ENEMY_PROJECTILE_COUNT];
     EnemyRoot rootAttacks[ENEMY_ROOT_COUNT];

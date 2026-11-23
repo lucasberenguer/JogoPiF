@@ -92,15 +92,26 @@ void DrawStagePresentation(const StagePresentation *p,Texture2D sprite,int colum
         float offset=(1-alpha)*w*.8f;
         Vector2 a={-offset,h*.23f},b={w-offset,h*.34f};
         Vector2 c={w-offset,h*.77f},d={-offset,h*.66f};
-        Color band=Fade(p->waveTotal > 0 ? (Color){65,25,21,255} : (Color){48,28,58,255},alpha);
+        Color band=Fade(p->igrisIntro ? (Color){42,19,53,255} : p->waveTotal > 0 ? (Color){65,25,21,255} : (Color){48,28,58,255},alpha);
         DrawTriangle(a,d,c,band); DrawTriangle(a,c,b,band);
         DrawLineEx(a,b,3,Fade(GOLD,alpha));
         DrawLineEx(d,c,3,Fade(GOLD,alpha));
-        float size=fminf(h*.60f,w*.43f);
+        if (p->igrisIntro) {
+            // Brasas da pluma acompanham o retrato dentro da cartela violeta.
+            for (int i=0;i<24;i++) {
+                float age = fmodf(elapsed*.52f+i*.37f,1.0f);
+                float x = w*p->portraitCenterX+((i*37)%101-50)*w*.002f-offset;
+                float y = h*(.70f-.38f*age);
+                DrawRectangleRec((Rectangle){x,y,2+i%3,2+i%3},Fade(VIOLET,alpha*(1-age)*.65f));
+            }
+        }
+        float size=fminf(h*(p->igrisIntro ? .77f : .60f),w*.43f);
         if (sprite.id && columns>0 && rows>0) {
             float cw=(float)sprite.width/columns,ch=(float)sprite.height/rows;
+            if (p->igrisIntro) ch = floorf(ch*.76f);
             int frame=(int)(elapsed*6)%columns;
-            float zoom=1+.025f*sinf(elapsed*1.5f);
+            float zoom=p->igrisIntro ? .91f+.09f*fminf(1,elapsed/.50f) :
+                1+.025f*sinf(elapsed*1.5f);
             float widthLimit = w * (1 - p->portraitCenterX - .025f) * 2;
             float drawHeight=fminf(size*zoom, widthLimit*ch/cw);
             float drawWidth=drawHeight*cw/ch;

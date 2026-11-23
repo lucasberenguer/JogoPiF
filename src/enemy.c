@@ -361,6 +361,7 @@ static void UnloadEnemyMapAssets(EnemyGroup *group) {
     UnloadTexIfLoaded(&group->bossPortrait);
     UnloadTexIfLoaded(&group->cemeteryPortrait);
     UnloadTexIfLoaded(&group->boneLordPortrait);
+    UnloadTexIfLoaded(&group->igrisPortrait);
     UnloadTexIfLoaded(&group->templarEffects);
     for (int i = 0; i < IGRIS_ART_COUNT; i++)
         UnloadTexIfLoaded(&group->igrisArt[i]);
@@ -575,6 +576,9 @@ static bool LoadTemplarEnemyAssets(EnemyGroup *group) {
         SetTextureFilter(group->templarWalk[role], TEXTURE_FILTER_POINT);
         SetTextureFilter(group->templarAttack[role], TEXTURE_FILTER_POINT);
     }
+    group->igrisPortrait = LoadTexture("assets/igris/portrait.png");
+    if (!group->igrisPortrait.id) return false;
+    SetTextureFilter(group->igrisPortrait, TEXTURE_FILTER_BILINEAR);
     static const char *const igrisFiles[IGRIS_ART_COUNT] = {
         "idle", "walk", "melee", "eclipse", "eclipse_fx", "eruption", "eruption_fx",
         "spears", "spears_fx", "vortex", "vortex_fx", "final_idle", "final_walk", "final_melee",

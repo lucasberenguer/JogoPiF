@@ -1398,6 +1398,13 @@ int main(void) {
     assert(templars.phase == ENCOUNTER_IGRIS_CINEMATIC && EncounterPaused(&templars));
     assert(!EncounterBossVisible(&templars, &enemies) && !EnemyCanBeHit(&enemies.list[0]));
     CompleteIgrisIntro(&templars, &enemies);
+    assert(EncounterPaused(&templars) && !EncounterBossVisible(&templars,&enemies));
+    assert(templars.presentation.igrisIntro && templars.presentation.boss && templars.presentation.wave==0);
+    assert(strcmp(templars.presentation.bossName,IGRIS_TITLE)==0);
+    assert(enemies.igrisPortrait.id);
+    UpdateStagePresentation(&templars.presentation,.7f);
+    Capture("audit/igris_apresentacao.png",&templars,&enemies,&field,stairFoot);
+    UpdateStagePresentation(&templars.presentation,templars.presentation.remaining);
     assert(!EncounterPaused(&templars) && EncounterBossVisible(&templars, &enemies));
     assert(EnemiesRemaining(&enemies) == 1 && enemies.list[0].attackCooldown >= 1.5f);
     UpdateEncounter(&templars, &enemies, &field, stairFoot, &fieldHealth);

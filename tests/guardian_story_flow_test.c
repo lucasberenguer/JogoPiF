@@ -13,7 +13,7 @@ static GameAudio *activeAudio;
 static Vector2 igrisApproach;
 static int igrisStarts;
 static int aftermathStarts, aftermathLines;
-static bool igrisDefeated;
+static bool igrisDefeated, igrisCardCleared;
 static void TestWindow(int w,int h,const char *title);
 static void IgnoreResize(int w,int h);
 static void IgnoreToggle(void);
@@ -134,6 +134,16 @@ static bool TestEncounter(Encounter *e,EnemyGroup *enemies,const Clearing *map,V
                 assert(igrisStarts==1 && EncounterPaused(e) && !EnemyCanBeHit(&enemies->list[0]));
             }
             return changed;
+        }
+        if (e->presentation.igrisIntro && e->presentation.remaining > 0) {
+            assert(EncounterPaused(e) && !EncounterBossVisible(e,enemies));
+            return UpdateEncounter(e,enemies,map,p,health);
+        }
+        assert(e->presentation.igrisIntro && e->presentation.remaining == 0);
+        if (!igrisCardCleared) {
+            // O áudio seleciona a faixa antes de atualizar a cartela no loop.
+            igrisCardCleared = true;
+            return UpdateEncounter(e,enemies,map,p,health);
         }
         assert(e->phase==ENCOUNTER_FIGHT && !EncounterPaused(e) && EncounterBossVisible(e,enemies));
         assert(igrisStarts==1 && enemies->list[0].state==ENEMY_IDLE && enemies->list[0].attackCooldown>1);
@@ -265,6 +275,7 @@ int main(void) {
         assert(transported==1);
     }
     for (mode=5;mode<7;mode++) {
+        igrisCardCleared=false;
         frames=transported=cinematicFrames=igrisStarts=0;
         active=NULL;
         assert(ActualGameMain()==0);
@@ -272,6 +283,7 @@ int main(void) {
         printf("Real Igris loop: %s restored gameplay after %d frames.\n",mode==5 ? "skip" : "complete",frames);
     }
     for (mode=7;mode<=8;mode++) {
+        igrisCardCleared=false;
         frames=transported=cinematicFrames=igrisStarts=aftermathStarts=aftermathLines=0;
         igrisDefeated=false;
         active=NULL;

@@ -349,7 +349,9 @@ void CompleteIgrisIntro(Encounter *e, EnemyGroup *enemies) {
     boss->attackCooldown = 1.6f;
     ClearEnemyAttacks(enemies);
     e->phase = ENCOUNTER_FIGHT;
-    e->presentation = (StagePresentation){0};
+    BeginStagePresentation(&e->presentation,0,TEMPLAR_FIELD_TITLE,IGRIS_TITLE);
+    e->presentation.igrisIntro = true;
+    e->presentation.duration = e->presentation.remaining = 2.3f;
 }
 
 bool BeginIgrisAftermath(Encounter *e, EnemyGroup *enemies, int health) {
@@ -1320,10 +1322,10 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         Texture2D bossSprite = e->progress.map == BONELAND_MAP ? enemies->boneLordPortrait
             : e->progress.map == 2 ? enemies->villageBossWalk
             : (e->progress.map == 1 ? enemies->cemeteryPortrait : enemies->bossPortrait);
-        if (e->progress.map == TEMPLAR_FIELD_MAP) bossSprite = enemies->igrisArt[IGRIS_IDLE_ART];
+        if (e->progress.map == TEMPLAR_FIELD_MAP) bossSprite = enemies->igrisPortrait;
         if (e->progress.map == NECROMANCER_MAP) bossSprite = enemies->necromancerPortrait;
         bool animatedPortrait = e->progress.map == 2;
-        int cols = animatedPortrait ? 6 : e->progress.map == TEMPLAR_FIELD_MAP ? 8 : 1;
+        int cols = animatedPortrait ? 6 : 1;
         int rows = cols > 1 ? 4 : 1;
         DrawStagePresentation(&e->presentation, bossSprite, cols, rows);
         return;
