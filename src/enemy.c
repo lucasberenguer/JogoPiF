@@ -1324,29 +1324,68 @@ static void FireUmbraSpears(EnemyGroup *group, const Enemy *boss, int damage) {
     }
 }
 
-static bool PlanIgrisZ(const Clearing *map, Enemy *boss, int facing, float distance) {
-    static const Vector2 directions[] = {{0,1},{0,-1},{-1,0},{1,0}};
-    Vector2 forward = directions[facing];
-    float side = facing < 2 ? -1 : 1;
-    Vector2 across = {-forward.y*side,forward.x*side};
-    Vector2 start = boss->position;
-    for (float scale = 1; scale >= .54f; scale -= .15f) {
-        Vector2 along = Vector2Scale(forward,Clamp(distance+55,190,305)*scale);
-        Vector2 offset = Vector2Scale(across,172*scale);
-        Vector2 points[] = {start,Vector2Add(start,along),Vector2Add(start,offset),
-                            Vector2Add(Vector2Add(start,offset),along)};
-        bool clear = true;
-        for (int i = 0; i < 3 && clear; i++) {
-            int steps = (int)ceilf(Vector2Distance(points[i],points[i+1])/4);
-            clear = MapHasClearPath(map,points[i],points[i+1]);
-            for (int j = 1; j <= steps && clear; j++)
-                clear = !IsMapActorBlocked(map,Vector2Lerp(points[i],points[i+1],(float)j/steps));
-        }
-        if (!clear) continue;
-        memcpy(boss->igrisZPath,points,sizeof(points));
-        return true;
+static Vector2 NearestOnIgrisLeg(Vector2 point, Vector2 from, Vector2 to) {
+    Vector2 leg = Vector2Subtract(to,from);
+    float length = Vector2LengthSqr(leg);
+    if (length <= 0) return from;
+    float along = Clamp(Vector2DotProduct(Vector2Subtract(point,from),leg)/length,0,1);
+    return Vector2Add(from,Vector2Scale(leg,along));
+}
+
+static bool IgrisZPathClear(const Clearing *map, const Vector2 points[4]) {
+    for (int i = 0; i < 3; i++) {
+        int steps = (int)ceilf(Vector2Distance(points[i],points[i+1])/4);
+        for (int j = 1; j <= steps; j++)
+            if (IsMapActorBlocked(map,Vector2Lerp(points[i],points[i+1],(float)j/steps)))
+                return false;
     }
-    return false;
+    return true;
+}
+
+static bool PlanIgrisZ(const Clearing *map, Enemy *boss, Vector2 player) {
+    static const Vector2 directions[] = {{0,1},{0,-1},{-1,0},{1,0}};
+    const float scales[] = {1,.85f,.70f,.55f};
+    const float widths[] = {172,116,220};
+    const Vector2 start = boss->position;
+    const Vector2 target = Vector2Subtract(player,start);
+    const float length = Clamp(Vector2Length(target)+55,190,305);
+    int bestFacing = -1;
+    float bestScore = 0;
+    for (int facing = 0; facing < 4; facing++) {
+        Vector2 forward = directions[facing];
+        if (Vector2DotProduct(forward,target) < 0) continue;
+        float preferredSide = facing < 2 ? -1 : 1;
+        for (int mirror = 0; mirror < 2; mirror++) {
+            float side = mirror ? -preferredSide : preferredSide;
+            Vector2 across = {-forward.y*side,forward.x*side};
+            for (int s = 0; s < 4; s++) {
+                Vector2 along = Vector2Scale(forward,length*scales[s]);
+                for (int w = 0; w < 3; w++) {
+                    Vector2 offset = Vector2Scale(across,widths[w]*scales[s]);
+                    Vector2 points[] = {start,Vector2Add(start,along),Vector2Add(start,offset),
+                                        Vector2Add(Vector2Add(start,offset),along)};
+                    float score = 0;
+                    for (int leg = 0; leg < 3; leg++) {
+                        Vector2 contact = NearestOnIgrisLeg(player,points[leg],points[leg+1]);
+                        float margin = IGRIS_Z_RADIUS-8-Vector2Distance(player,contact);
+                        if (margin > score && MapHasClearPath(map,contact,player)) score = margin;
+                    }
+                    float finish = (92-Vector2Distance(player,points[3]))*.55f;
+                    if (finish > score && MapHasClearPath(map,points[3],player)) score = finish;
+                    if (score <= 0) continue;
+                    if (facing == boss->facing) score += 3;
+                    score -= 3*s + (w != 0 ? 2 : 0);
+                    if (score <= bestScore || !IgrisZPathClear(map,points)) continue;
+                    bestScore = score;
+                    bestFacing = facing;
+                    memcpy(boss->igrisZPath,points,sizeof(points));
+                }
+            }
+        }
+    }
+    if (bestFacing < 0) return false;
+    boss->facing = bestFacing;
+    return true;
 }
 
 static void UpdateIgrisZ(EnemyGroup *group, const Clearing *map, Enemy *boss,
@@ -1359,10 +1398,7 @@ static void UpdateIgrisZ(EnemyGroup *group, const Clearing *map, Enemy *boss,
         Vector2 from = boss->position;
         Vector2 next = Vector2Lerp(boss->igrisZPath[leg],boss->igrisZPath[leg+1],fraction);
         MoveEnemy(map,boss,Vector2Subtract(next,from));
-        Vector2 traveled = Vector2Subtract(boss->position,from);
-        float length = Vector2LengthSqr(traveled);
-        float nearest = length > 0 ? Clamp(Vector2DotProduct(Vector2Subtract(player,from),traveled)/length,0,1) : 0;
-        Vector2 contact = Vector2Add(from,Vector2Scale(traveled,nearest));
+        Vector2 contact = NearestOnIgrisLeg(player,from,boss->position);
         if (!boss->attackConnected && !dodging && Vector2Distance(player,contact) <= IGRIS_Z_RADIUS &&
             MapHasClearPath(map,contact,player)) {
             boss->attackConnected = true;
@@ -1377,7 +1413,7 @@ static void UpdateIgrisZ(EnemyGroup *group, const Clearing *map, Enemy *boss,
     if (t >= igrisZFrames[12]) {
         boss->state = ENEMY_IDLE;
         boss->stateTime = 0;
-        boss->attackCooldown = .24f;
+        boss->attackCooldown = .36f;
     }
 }
 
@@ -1498,11 +1534,14 @@ static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
                     skill = IGRIS_ECLIPSE_ECHOES;
                 else if (boss->attackBurst == 2 && distance <= IGRIS_GRAB_REACH)
                     skill = IGRIS_ABYSS_GRAB;
-                else if ((boss->attackBurst == 1 || distance > 178) &&
-                    distance <= 340 && PlanIgrisZ(map,boss,boss->facing,distance))
+                else if (boss->bossAttack != IGRIS_Z_RIP && (boss->attackBurst == 1 || distance > 178) &&
+                    distance <= 340 && PlanIgrisZ(map,boss,player))
                     skill = IGRIS_Z_RIP;
                 else if (distance > 178 && distance <= IGRIS_GRAB_REACH)
                     skill = IGRIS_ABYSS_GRAB;
+                else if (distance > IGRIS_GRAB_REACH && distance <= 420 &&
+                         boss->bossAttack != IGRIS_ECLIPSE_ECHOES && PlanIgrisEchoes(map,boss,player,direction))
+                    skill = IGRIS_ECLIPSE_ECHOES;
                 float reach = skill == IGRIS_ECLIPSE_ECHOES ? 420 : skill == IGRIS_ABYSS_GRAB ? IGRIS_GRAB_REACH :
                     skill == IGRIS_Z_RIP ? 340 : igrisSkills[skill].reach;
                 if (distance > reach) skill = -1;
@@ -1538,7 +1577,7 @@ static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
         if (distance > 90) {
             Vector2 start = boss->position;
             float speedScale = boss->igrisFinalForm ? 1.30f : enraged ? 1.13f : 1;
-            MoveEnemy(map,boss,Vector2Scale(direction,boss->speed*dt*speedScale));
+            MoveEnemyTactically(group,map,boss,player,boss->speed*dt*speedScale);
             Vector2 step = Vector2Subtract(boss->position,start);
             float traveled = Vector2Length(step);
             boss->state = traveled > .01f ? ENEMY_WALK : ENEMY_IDLE;
@@ -2676,15 +2715,17 @@ static void DrawIgrisWarning(const EnemyGroup *group, const Enemy *boss) {
         return;
     }
     if (skill == IGRIS_Z_RIP) {
-        if (boss->stateTime < igrisZFrames[1]) {
-            for (int leg = 0; leg < 3; leg++) {
-                DrawLineEx(boss->igrisZPath[leg],boss->igrisZPath[leg+1],2*IGRIS_Z_RADIUS,Fade(PURPLE,.18f));
-                DrawLineEx(boss->igrisZPath[leg],boss->igrisZPath[leg+1],4,Fade(VIOLET,.8f));
-            }
-            DrawCircleLinesV(boss->igrisZPath[3],104,Fade(VIOLET,.8f));
-        } else if (boss->stateTime >= igrisZFrames[10] && boss->stateTime < igrisZFrames[11]) {
-            DrawCircleLinesV(boss->position,104,Fade(VIOLET,.55f));
+        float time = boss->stateTime;
+        for (int leg = 0; leg < 3; leg++) {
+            if (time >= igrisZFrames[igrisZLegEnd[leg]]) continue;
+            bool pending = time < igrisZFrames[igrisZLegStart[leg]];
+            Vector2 start = pending ? boss->igrisZPath[leg] : boss->position;
+            Vector2 end = boss->igrisZPath[leg+1];
+            DrawLineEx(start,end,2*IGRIS_Z_RADIUS,Fade(PURPLE,pending ? .16f : .08f));
+            DrawLineEx(start,end,3,Fade(VIOLET,pending ? .8f : .4f));
         }
+        if (time < igrisZFrames[11])
+            DrawCircleLinesV(boss->igrisZPath[3],104,Fade(VIOLET,.66f));
         return;
     }
     float t = boss->stateTime, impact = igrisSkills[skill].impact;
