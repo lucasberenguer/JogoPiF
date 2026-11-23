@@ -13,6 +13,7 @@
 #define INVERTED_CHAPEL_MAP 5
 #define BONELAND_MAP 6
 #define TEMPLAR_FIELD_MAP 7
+#define TEMPLAR_FIELD_TITLE "Portão da Última Sentença"
 #define NECROMANCER_MAP 8
 #define TEMPLAR_FIELD_WAVES 2
 #define CLEARING_BOSS_STAGE 5

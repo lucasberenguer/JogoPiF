@@ -146,7 +146,7 @@ void DrawDevTools(const DevTools *tools, bool inPractice) {
         snprintf(waveText,sizeof(waveText),"%d / %d",tools->wave,waves);
     snprintf(levelText,sizeof(levelText),"%d / %d",tools->weaponLevel,MAX_WEAPON_LEVEL);
     static const char *mapNames[] = {"Clareira", "Cemitério", "Chã da Tristeza", "Capela do Anjo", "Capela Invertida",
-                                    "Terra dos Ossos", "Campo dos Templários", "Topo do Palácio"};
+                                    "Terra dos Ossos", TEMPLAR_FIELD_TITLE, "Topo do Palácio"};
     int mapIndex=PracticeMapIndex(tools->map);
     bool chapel=IsPracticeChapel(tools->map);
     bool village=tools->map==VILLAGE_MAP;
@@ -244,6 +244,7 @@ bool StartDevEncounter(const DevTools *tools, DevAction action, Encounter *e,
     } else if (action==DEV_SEAL) {
         Enemy *boss=&enemies->list[0];
         boss->guardianPhase=GUARDIAN_PHASE_TWO;
+        boss->igrisFinalForm=map->templarField;
         boss->health=0;
         if (map->necromancerArena) {
             boss->necromancerForm=3;

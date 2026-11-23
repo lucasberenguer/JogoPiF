@@ -1,5 +1,6 @@
 #include "game_text.h"
 #include "encounter.h"
+#include "hud.h"
 #include "menu.h"
 #include "raymath.h"
 #include <stdio.h>
@@ -110,7 +111,7 @@ static const char boneLordName[] = "Rasga-Ossos";
 
 /* Tabela única de dificuldade dos selos por mapa (LogicDifficultyScore [min, max]).
    Guarda todas as linhas, inclusive as dormentes (Cemitério V/F, Chã da Tristeza V/F e boss,
-   Terra dos Ossos V/F e Campo dos Templários V/F). Mapas 3, 4 e 5 não possuem linha. */
+   Terra dos Ossos V/F e Portão da Última Sentença V/F). Mapas 3, 4 e 5 não possuem linha. */
 static const EncounterSealDifficultyRow sealDifficultyTable[MAX_CAMPAIGN_MAPS] = {
     [0] = { .map = 0, .hasSpecialVF = true,  .specialMin = 2, .specialMax = 3, .hasBossMC = true, .bossMin = 4,  .bossMax = 5  },
     [1] = { .map = 1, .hasSpecialVF = true,  .specialMin = 3, .specialMax = 4, .hasBossMC = true, .bossMin = 5,  .bossMax = 6  },
@@ -180,14 +181,14 @@ static void StartStage(Encounter *e, EnemyGroup *enemies, const Clearing *cleari
     } else {
         e->phase = ENCOUNTER_FIGHT;
         const char *areaTitle = clearing->necromancerArena ? "Topo do Palácio" :
-            clearing->templarField ? "Campo de Batalha dos Templários"
+            clearing->templarField ? TEMPLAR_FIELD_TITLE
             : clearing->boneland ? "Terra dos Ossos" : clearing->invertedChapel ? "Capela Invertida"
             : (clearing->basement ? "Porão da Capela"
             : (clearing->chapel ? "Capela do Anjo"
             : (clearing->village ? "Chã da Tristeza"
             : (clearing->cemetery ? "Cemitério das Raízes" : "Clareira do Selo"))));
         const char *bossTitle = clearing->necromancerArena ? "Necromante" :
-            clearing->templarField ? "Marechal Carmesim"
+            clearing->templarField ? IGRIS_TITLE
             : clearing->boneland ? boneLordName : (clearing->village || clearing->chapel || clearing->basement || clearing->invertedChapel) ? NULL
             : (clearing->cemetery ? "Coveiro das Raízes" : "Guardião da Clareira");
         int wave = e->progress.stage;
@@ -814,10 +815,11 @@ bool AnswerEncounterSeal(Encounter *e, EnemyGroup *enemies, int *health, int cho
         snprintf(e->notice,sizeof(e->notice),"Selo incorreto: o inimigo voltou mais forte");
         if (enemy->type==ENEMY_BOSS) {
             enemy->guardianPhase = GUARDIAN_PHASE_ONE;
+            enemy->igrisFinalForm = false;
             enemy->guardianMelee = false;
             enemy->guardianMeleeCooldown = 0;
             enemy->attackBurst = 0;
-            enemy->bossAttack = enemy->templarRole == TEMPLAR_MARSHAL ? MARSHAL_SLASH :
+            enemy->bossAttack = enemy->templarRole == TEMPLAR_MARSHAL ? IGRIS_MELEE :
                 enemies->boneland ? BONE_DASH :
                 (enemies->cemetery ? COVEIRO_ATTACK_COUNT : GUARDIAN_ATTACK_COUNT) - 1;
             if (enemy->templarRole == TEMPLAR_MARSHAL) enemy->attackCooldown = .25f;
@@ -967,11 +969,11 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
                     : (e->progress.map == 1 ? "A saída à direita leva a Chã da Tristeza"
                                             : "O altar agora leva ao cemiterio");
                 BeginStagePresentation(&e->presentation, 0, sub, NULL);
-                e->presentation.announcement = clearing->templarField ? "Marechal Carmesim derrotado"
+                e->presentation.announcement = clearing->templarField ? "Igris derrotado"
                     : clearing->boneland ? "Terra dos Ossos limpa" : e->progress.map == 2 ? "CHÃ DA TRISTEZA LIMPA"
                     : (e->progress.map == 1 ? "CEMITERIO LIMPO" : "CLAREIRA LIMPA");
                 e->presentation.duration=e->presentation.remaining=2.5f;
-                if (clearing->boneland) QueueAreaUnlock(&e->presentation, "Campo de Batalha dos Templários");
+                if (clearing->boneland) QueueAreaUnlock(&e->presentation, TEMPLAR_FIELD_TITLE);
                 else if (!clearing->templarField) QueueAreaUnlock(&e->presentation, e->progress.map == 2 ? "Capela do Anjo"
                     : (e->progress.map == 1 ? "Chã da Tristeza" : "Cemitério das Raízes"));
                 if (!e->practice) SaveClearingCheckpoint(&e->progress);
@@ -1198,10 +1200,10 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         Texture2D bossSprite = e->progress.map == BONELAND_MAP ? enemies->boneLordPortrait
             : e->progress.map == 2 ? enemies->villageBossWalk
             : (e->progress.map == 1 ? enemies->cemeteryPortrait : enemies->bossPortrait);
-        if (e->progress.map == TEMPLAR_FIELD_MAP) bossSprite = enemies->marshalPortrait;
+        if (e->progress.map == TEMPLAR_FIELD_MAP) bossSprite = enemies->igrisArt[IGRIS_IDLE_ART];
         if (e->progress.map == NECROMANCER_MAP) bossSprite = enemies->necromancerPortrait;
         bool animatedPortrait = e->progress.map == 2;
-        int cols = animatedPortrait ? 6 : 1;
+        int cols = animatedPortrait ? 6 : e->progress.map == TEMPLAR_FIELD_MAP ? 8 : 1;
         int rows = cols > 1 ? 4 : 1;
         bool gothic = e->progress.map == BONELAND_MAP || e->progress.map == TEMPLAR_FIELD_MAP ||
                       e->progress.map == NECROMANCER_MAP;
@@ -1209,7 +1211,7 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         return;
     }
     bool bossVisible = EncounterBossVisible(e, enemies);
-    int statusY = 205 + (bossVisible ? ENCOUNTER_BOSS_HUD_HEIGHT : 0);
+    int statusY = 205 + (bossVisible ? BossHealthHudHeight() : 0);
     const char *mapLabel = e->progress.map == BONELAND_MAP ? "Terra dos Ossos" : e->progress.map == 5 ? "Capela Invertida"
         : (e->progress.map == 4 ? "Porão da Capela"
         : (e->progress.map == 3 ? "Capela do Anjo"
@@ -1219,7 +1221,7 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         : (e->progress.map == 1 ? "Cemitério limpo - siga pela saída à direita"
                                 : "Clareira limpa - altar liberado");
     const char *bossLabel = e->progress.map == NECROMANCER_MAP ? "Necromante" : e->progress.map == BONELAND_MAP ? boneLordName
-        : e->progress.map == TEMPLAR_FIELD_MAP ? "Marechal Carmesim"
+        : e->progress.map == TEMPLAR_FIELD_MAP ? IGRIS_TITLE
         : e->progress.map == 2 ? "Líder da Vila"
         : (e->progress.map == 1 ? "Coveiro das Raízes" : "Guardião da Clareira");
     if (e->progress.map == NECROMANCER_MAP) {
@@ -1230,8 +1232,8 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
             form>0 ? TextFormat("Fase %d/3 • %s",form,forms[form-1]) : "Topo do Palácio";
         DrawGameText(status,24,statusY,20,GOLD);
     } else if (e->progress.map == TEMPLAR_FIELD_MAP) {
-        const char *status = e->phase == ENCOUNTER_CLEAR ? "Marechal derrotado"
-            : e->progress.stage == CLEARING_BOSS_STAGE ? "Encontro 3/3 - Marechal Carmesim"
+        const char *status = e->phase == ENCOUNTER_CLEAR ? "Igris derrotado"
+            : e->progress.stage == CLEARING_BOSS_STAGE ? "Encontro 3/3 - " IGRIS_TITLE
             : TextFormat("Encontro %d/3 | Restantes: %d", e->progress.stage, EnemiesRemaining(enemies));
         DrawGameText(status, 24, statusY, 20, GOLD);
     } else if (e->progress.map == BONELAND_MAP) {
@@ -1270,19 +1272,15 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
                             phaseTwo ? "Fase 2/2" : "Fase 1/2";
         if(boss->necromancerForm && boss->guardianPhase!=GUARDIAN_PHASE_TRANSITION)
             phase=TextFormat("Fase %d/3",boss->necromancerForm);
+        if (boss->templarRole == TEMPLAR_MARSHAL)
+            phase = boss->guardianPhase == GUARDIAN_PHASE_TRANSITION ? "Transformando..." :
+                boss->igrisFinalForm ? "Fase 3/3" : phaseTwo ? "Fase 2/3" : "Fase 1/3";
         Color healthColor=boss->necromancerForm==3 ? (Color){211,48,92,255} :
             boss->necromancerForm==2 || phaseTwo ? PURPLE : MAROON;
-        int w=(int)fminf(600,GetScreenWidth()*.5f), x=(GetScreenWidth()-w)/2;
-        DrawRectangle(x-8,8,w+16,46,Fade(BLACK,.78f));
-        DrawRectangle(x,31,w,16,DARKGRAY);
-        DrawRectangle(x,31,w*boss->health/boss->maxHealth,16,healthColor);
-        if(boss->necromancerForm) {
-            DrawRectangle(x+w*70/100,31,2,16,Fade(GOLD,.72f));
-            DrawRectangle(x+w*35/100,31,2,16,Fade(GOLD,.72f));
-        } else DrawRectangle(x+w/2,31,2,16,Fade(GOLD,.65f));
-        const char *label = TextFormat("%s  %d/%d  |  %s",bossLabel,
-                                       boss->health,boss->maxHealth,phase);
-        DrawGameText(label,(GetScreenWidth()-MeasureGameText(label,18))/2,10,18,GOLD);
+        float markers[] = {.5f, IGRIS_FINAL_HEALTH_PERCENT / 100.0f};
+        if (boss->necromancerForm) { markers[0] = .70f; markers[1] = .35f; }
+        int markerCount = boss->necromancerForm || boss->templarRole == TEMPLAR_MARSHAL ? 2 : 1;
+        DrawBossHealthHud(bossLabel, phase, boss->health, boss->maxHealth, healthColor, markers, markerCount);
     }
     if (!EncounterPaused(e)) return;
     DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,.86f));

@@ -934,13 +934,14 @@ int main(void) {
                     katanaShockwaves[s].life = 0.0f;
             }
         }
-        bool dodgePressed = !entering && (IsKeyPressed(KEY_SPACE) ||
+        bool grabbed = IgrisHoldingPlayer(&enemies);
+        bool dodgePressed = !entering && !grabbed && (IsKeyPressed(KEY_SPACE) ||
                             IsMouseButtonPressed(MOUSE_BUTTON_RIGHT));
         bool bibleActivationStarted = false;
         if (currentWeapon == WEAPON_BIBLE) {
             float previousActivation = bible.activationRemaining;
             UpdateBible(&bible, entering ? 0.0f : deltaTime,
-                        !entering && dodgeRemaining <= 0.0f && !dodgePressed &&
+                        !entering && !grabbed && dodgeRemaining <= 0.0f && !dodgePressed &&
                         IsMouseButtonPressed(MOUSE_BUTTON_LEFT),
                         weaponLevel, !entering && EnemiesRemaining(&enemies) > 0, player);
             bibleActivationStarted = previousActivation <= 0.0f &&
@@ -948,11 +949,11 @@ int main(void) {
         }
 
         Vector2 direction = {
-            entering ? 0.0f : (float) IsKeyDown(KEY_D) - (float) IsKeyDown(KEY_A),
-            entering ? 0.0f : (float) IsKeyDown(KEY_S) - (float) IsKeyDown(KEY_W)
+            entering || grabbed ? 0.0f : (float) IsKeyDown(KEY_D) - (float) IsKeyDown(KEY_A),
+            entering || grabbed ? 0.0f : (float) IsKeyDown(KEY_S) - (float) IsKeyDown(KEY_W)
         };
         Camera2D camera = FitClearing(&clearing);
-        if (!entering && currentWeapon == WEAPON_KATANA &&
+        if (!entering && !grabbed && currentWeapon == WEAPON_KATANA &&
             IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
             katanaAttackCooldown <= 0.0f && dodgeRemaining <= 0.0f) {
             Vector2 cursor = GetScreenToWorld2D(GetMousePosition(), camera);
@@ -1056,7 +1057,7 @@ int main(void) {
             float previousPose = gun.poseRemaining;
             UpdateGun(&gun, &clearing, player, aimWorld,
                       entering ? 0.0f : deltaTime,
-                      !entering && !dodging && IsMouseButtonPressed(MOUSE_BUTTON_LEFT),
+                      !entering && !grabbed && !dodging && IsMouseButtonPressed(MOUSE_BUTTON_LEFT),
                       weaponLevel);
             if (gun.poseRemaining > previousPose) gunAttackFacing = facing;
         }
@@ -1134,6 +1135,7 @@ int main(void) {
             UpdateEnemies(&enemies, &clearing, player, deltaTime,
                           dodging || enemies.practiceInvincible,
                           &playerHealth, playerMaxHealth);
+            if (playerHealth > 0) ApplyIgrisGrab(&enemies,&clearing,&player,deltaTime);
             if (villageHorde && (initialEmergence || enemies.villageSpawnRemaining<remainingVillagers))
                 PlayVillageEmergence(&menu.audio,initialEmergence);
         }
@@ -1306,7 +1308,7 @@ int main(void) {
                 }
             EndMode2D();
 
-            int hudOffset = EncounterBossVisible(&encounter, &enemies) ? ENCOUNTER_BOSS_HUD_HEIGHT : 0;
+            int hudOffset = EncounterBossVisible(&encounter, &enemies) ? BossHealthHudHeight() : 0;
             DrawRectangle(12, 12 + hudOffset, 490, 130, Fade(BLACK, 0.72f));
             DrawGameText("WASD: mover  |  Espaço/botão direito: esquiva", 24, 23 + hudOffset, 17, RAYWHITE);
             DrawGameText("F1: ferramentas | F3: colisão | Esc: pausa", 24, 76 + hudOffset, 17, RAYWHITE);
@@ -1321,9 +1323,9 @@ int main(void) {
                 DrawGameText("O altar está selado", 24, 53 + hudOffset, 18, GOLD);
             } else {
                 DrawGameText(nearExit
-                    ? (clearing.boneland ? "Passagem para o Campo dos Templários"
+                    ? (clearing.boneland ? "Passagem para o " TEMPLAR_FIELD_TITLE
                         : clearing.village ? "Entrar na Capela do Anjo" : "Saída para Chã da Tristeza")
-                    : (clearing.templarField ? (clearing.exitLocked ? "Derrote o Marechal para liberar a escadaria"
+                    : (clearing.templarField ? (clearing.exitLocked ? "Derrote Igris para liberar a escadaria"
                         : "Suba ao Topo do Palácio") : clearing.necromancerArena ? "Topo do Palácio" : clearing.boneland ? "Terra dos Ossos"
                         : clearing.invertedChapel ? "Capela Invertida - saída ao sul"
                         : (clearing.basement ? "Porão da Capela (E nas placas da parede e nos 4 pilares)"
@@ -1377,6 +1379,7 @@ int main(void) {
     UnloadClearing(&clearing);
     UnloadVideoFrame();
     UnloadEncounterRewardUi();
+    UnloadBossHealthHud();
     UnloadGameFonts();
     CloseWindow();
     return 0;

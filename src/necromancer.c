@@ -490,8 +490,6 @@ void DrawNecromancer(const EnemyGroup *g,Vector2 player,bool foreground) {
         DrawTexturePro(texture,(Rectangle){frame*tile,row*height,flip?-tile:tile,height},
                        (Rectangle){boss->position.x,boss->position.y+offset,tile*scale,height*scale},
                        (Vector2){tile*.5f*scale,ground*scale},0,Fade(WHITE,alpha));
-        if (!throne && boss->guardianPhase != GUARDIAN_PHASE_TRANSITION)
-            DrawEnemyHealthBar(boss, boss->position.y + offset - ground * scale - 8);
     }
     if(foreground && boss->state==ENEMY_ATTACK &&
        (boss->bossAttack==BLADE || boss->bossAttack==FLIGHT)) {

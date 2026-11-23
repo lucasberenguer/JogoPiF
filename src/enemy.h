@@ -12,7 +12,14 @@ typedef enum GuardianAttack {
     GUARDIAN_ROOTS, GUARDIAN_ROOT_WAVE, GUARDIAN_CURSE, GUARDIAN_ATTACK_COUNT
 } GuardianAttack;
 enum { COVEIRO_ROOTS, COVEIRO_SHOVEL, COVEIRO_CHARGE, COVEIRO_ATTACK_COUNT };
-enum { MARSHAL_SLASH, MARSHAL_CHARGE, MARSHAL_RETURN, MARSHAL_RUPTURE, MARSHAL_SPIN, MARSHAL_SHOCKWAVE };
+enum { IGRIS_MELEE, IGRIS_ECLIPSE, IGRIS_ERUPTION, IGRIS_SPEARS, IGRIS_VORTEX, IGRIS_SKILL_COUNT };
+enum { IGRIS_IDLE_ART, IGRIS_WALK_ART, IGRIS_MELEE_ART, IGRIS_ECLIPSE_ART, IGRIS_ECLIPSE_FX,
+       IGRIS_ERUPTION_ART, IGRIS_ERUPTION_FX, IGRIS_SPEARS_ART, IGRIS_SPEARS_FX,
+       IGRIS_VORTEX_ART, IGRIS_VORTEX_FX, IGRIS_FINAL_IDLE, IGRIS_FINAL_WALK,
+       IGRIS_FINAL_MELEE, IGRIS_Z_DOWN, IGRIS_Z_UP, IGRIS_Z_LEFT, IGRIS_Z_RIGHT,
+       IGRIS_GRAB_ART, IGRIS_GRAB_FX, IGRIS_ECHO_ART, IGRIS_ECHO_FX, IGRIS_ART_COUNT };
+#define IGRIS_TITLE "Igris - O Comandante"
+#define IGRIS_FINAL_HEALTH_PERCENT 25
 enum { BONE_CLAW, BONE_RANGED, BONE_RAIN, BONE_DASH, BONE_BLAST, BONE_ATTACK_COUNT };
 enum { BONE_IDLE_SHEET, BONE_WALK_SHEET, BONE_CLAW_SHEET, BONE_RANGED_SHEET,
        BONE_RAIN_SHEET, BONE_RAIN_FX_SHEET, BONE_DASH_SHEET, BONE_BLAST_SHEET,
@@ -32,7 +39,7 @@ typedef struct EnemyProjectile {
     Vector2 direction;
     float remaining;
     int damage;
-    bool boneShot;
+    bool boneShot, umbraSpear;
 } EnemyProjectile;
 
 typedef struct EnemyImpact { Vector2 position; float remaining; Vector2 direction; } EnemyImpact;
@@ -78,6 +85,10 @@ typedef struct Enemy {
     bool pickupAvailable;
     bool dropRolled;
     GuardianPhase guardianPhase;
+    bool igrisFinalForm;
+    Vector2 igrisZPath[4];
+    Vector2 igrisEchoFrom[3], igrisEchoTo[3];
+    unsigned igrisEchoHits;
     bool guardianMelee;
     float guardianMeleeCooldown;
     int bossAttack;
@@ -99,14 +110,14 @@ typedef struct EnemyGroup {
     Texture2D necromancerWalk[NECROMANCER_FORMS], necromancerSkills[NECROMANCER_FORMS];
     Texture2D necromancerBlade, necromancerEffects, necromancerThrone, necromancerPortrait;
     NecromancerFight necromancer;
-    Texture2D marshalSlam, marshalCharge, templarEffects, templarDust;
+    Texture2D igrisArt[IGRIS_ART_COUNT], templarEffects, templarDust;
     Texture2D templarWalk[TEMPLAR_MARSHAL + 1], templarAttack[TEMPLAR_MARSHAL + 1];
     Texture2D bonelandGhoul, bonelandCultist;
     Texture2D boneLordSheets[BONE_SHEET_COUNT];
     Texture2D sealMarker;
     Texture2D bossSprites, bossWalk, bossAttack, roots, rootWave, curse, guardianMelee;
     Texture2D guardianSpawn, guardianDefeat;
-    Texture2D bossPortrait, cemeteryPortrait, boneLordPortrait, marshalPortrait;
+    Texture2D bossPortrait, cemeteryPortrait, boneLordPortrait;
     Enemy list[ENEMY_COUNT];
     EnemyProjectile projectiles[ENEMY_PROJECTILE_COUNT];
     EnemyRoot rootAttacks[ENEMY_ROOT_COUNT];
@@ -148,6 +159,8 @@ void DrawHumanBoss(const EnemyGroup *group, const Enemy *enemy, bool foreground)
 void DrawHealthPickup(Vector2 position);
 void DrawBossGroundSeal(Texture2D sealMarker, Vector2 position);
 void DamageEnemy(Enemy *enemy, int damage);
+bool IgrisHoldingPlayer(const EnemyGroup *group);
+void ApplyIgrisGrab(const EnemyGroup *group, const Clearing *map, Vector2 *player, float dt);
 void DamageEnemyFrom(Enemy *enemy, int damage, Vector2 source);
 void KnockbackEnemy(Enemy *enemy, const Clearing *clearing,
                     Vector2 source, float distance);

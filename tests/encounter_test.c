@@ -4,6 +4,7 @@
 #include "dev_tools.h"
 #include "bible.h"
 #include "gun.h"
+#include "hud.h"
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -31,6 +32,37 @@ static void Capture(const char *name, Encounter *encounter, EnemyGroup *enemies,
     assert(ExportImage(shot,name));
     UnloadImage(shot);
     UnloadRenderTexture(target);
+}
+
+static void CheckSinglePhaseBossHud(void) {
+    const int sizes[][2] = {{1280, 720}, {800, 450}};
+    for (int i = 0; i < 2; i++) {
+        int w = sizes[i][0], h = sizes[i][1];
+        SetWindowSize(w, h);
+        RenderTexture2D target = LoadRenderTexture(w, h);
+        BeginTextureMode(target);
+        ClearBackground((Color){9, 16, 19, 255});
+        DrawBossHealthHud("Chefe de fase única", NULL, 50, 100, MAROON, NULL, 0);
+        Enemy common = {.position={w*.5f, h*.5f},.health=25,.maxHealth=50,.state=ENEMY_IDLE};
+        DrawEnemyHealthBar(&common, h/2);
+        EndTextureMode();
+        Image shot = LoadImageFromTexture(target.texture);
+        ImageFlipVertical(&shot);
+        float scale = fminf(600, w*.56f)/2172;
+        int barY = (int)(31 + (354 - 96)*scale);
+        Color filled = GetImageColor(shot, (int)(w*.5f-530*scale), barY);
+        Color empty = GetImageColor(shot, (int)(w*.5f+530*scale), barY);
+        assert(filled.r > empty.r + 50);
+        Color commonFill = GetImageColor(shot, w/2-12, h/2+2);
+        Color commonEmpty = GetImageColor(shot, w/2+12, h/2+2);
+        assert(ColorToInt(commonFill) == ColorToInt(RED));
+        assert(ColorToInt(commonEmpty) == ColorToInt(DARKGRAY));
+        assert(ExportImage(shot, i == 0 ? "audit/boss_health_single_phase.png"
+                                        : "audit/boss_health_single_phase_compact.png"));
+        UnloadImage(shot);
+        UnloadRenderTexture(target);
+    }
+    SetWindowSize(1280, 720);
 }
 
 static void CheckVillageZombies(Encounter *encounter, EnemyGroup *enemies, Clearing *map) {
@@ -842,6 +874,7 @@ int main(void) {
     assert(IsWindowReady());
     LoadGameFonts();
     CheckLegacyCheckpoints();
+    CheckSinglePhaseBossHud();
     Clearing clearing={0};
     EnemyGroup enemies={0};
     assert(InitClearing(&clearing));
@@ -874,6 +907,9 @@ int main(void) {
         }
     }
     Capture("audit/clearing_melee_directions.png",&encounter,&meleePreview,&clearing,player);
+    meleePreview.list[0].health = 22;
+    meleePreview.list[1].health = 34;
+    Capture("audit/common_enemy_health_directions.png",&encounter,&meleePreview,&clearing,player);
     for (int i=0;i<12;i++) meleePreview.list[i].type=ENEMY_COMMON_RANGED;
     Capture("audit/clearing_archer_directions.png",&encounter,&meleePreview,&clearing,player);
     for (int i=0;i<12;i++) {
@@ -1301,44 +1337,59 @@ int main(void) {
         assert(fieldProgress.angelSceneCompleted && fieldProgress.angelBlessingUses == 1);
     }
     assert(templars.progress.stage == CLEARING_BOSS_STAGE && EnemiesRemaining(&enemies) == 1);
-    assert(enemies.marshalPortrait.id && templars.presentation.separateBossWave);
+    assert(enemies.igrisArt[IGRIS_IDLE_ART].id && templars.presentation.separateBossWave);
     assert(templars.presentation.wave == 3 && !templars.presentation.boss);
     UpdateStagePresentation(&templars.presentation, templars.presentation.remaining);
     assert(templars.presentation.boss && templars.presentation.remaining > 0);
     Enemy *marshal = &enemies.list[0];
     assert(marshal->templarRole == TEMPLAR_MARSHAL && !IsMapActorBlocked(&field, marshal->position));
-    for (int role = TEMPLAR_SHIELD; role <= TEMPLAR_MARSHAL; role++)
+    for (int i = 0; i < IGRIS_ART_COUNT; i++) assert(enemies.igrisArt[i].id);
+    for (int role = TEMPLAR_SHIELD; role < TEMPLAR_MARSHAL; role++)
         assert(enemies.templarAttack[role].id);
     marshal->state = ENEMY_IDLE;
     Vector2 marshalStart = marshal->position;
-    UpdateEnemies(&enemies, &field, field.spawn, .3f, false, &fieldHealth, 100);
-    assert(marshal->state == ENEMY_ATTACK && marshal->bossAttack == MARSHAL_CHARGE);
+    Vector2 eclipseTarget = {marshalStart.x, marshalStart.y + 120};
+    UpdateEnemies(&enemies, &field, eclipseTarget, .3f, false, &fieldHealth, 100);
+    assert(marshal->state == ENEMY_ATTACK && marshal->bossAttack == IGRIS_ECLIPSE);
     marshal->state = ENEMY_IDLE;
     DamageEnemy(marshal, marshal->maxHealth);
     assert(marshal->guardianPhase == GUARDIAN_PHASE_TRANSITION);
+    Encounter marshalHud = templars;
+    marshalHud.presentation = (StagePresentation){0};
+    assert(EncounterBossVisible(&marshalHud, &enemies) && marshal->health == marshal->maxHealth / 2);
+    Capture("audit/boss_health_marshal_phase2.png",&marshalHud,&enemies,&field,field.spawn);
     UpdateEnemies(&enemies, &field, field.spawn, 2, true, &fieldHealth, 100);
     assert(marshal->guardianPhase == GUARDIAN_PHASE_TWO);
-    marshal->state = ENEMY_ATTACK;
-    marshal->bossAttack = MARSHAL_CHARGE;
-    marshal->attackDirection = (Vector2){0,1};
-    marshal->stateTime = 1.35f;
-    UpdateEnemies(&enemies, &field, field.spawn, .05f, false, &fieldHealth, 100);
-    assert(marshal->state == ENEMY_ATTACK && marshal->bossAttack == MARSHAL_RETURN);
     marshal->state = ENEMY_IDLE;
     marshal->position = marshalStart;
     marshal->attackCooldown = 0;
     marshal->attackBurst = 3;
     Vector2 target = {marshalStart.x, marshalStart.y + 125};
     UpdateEnemies(&enemies, &field, target, .01f, false, &fieldHealth, 100);
-    assert(marshal->bossAttack == MARSHAL_RUPTURE);
+    assert(marshal->bossAttack == IGRIS_ERUPTION);
     int before = fieldHealth;
-    marshal->stateTime = .70f;
+    marshal->stateTime = .78f;
     UpdateEnemies(&enemies, &field, target, .02f, true, &fieldHealth, 100);
     assert(fieldHealth == before && enemies.templarBlood.remaining <= 0);
-    marshal->stateTime = .70f;
+    marshal->stateTime = .78f;
     marshal->attackConnected = false;
     UpdateEnemies(&enemies, &field, target, .02f, false, &fieldHealth, 100);
     assert(fieldHealth < before && enemies.templarBlood.remaining > 0);
+    DamageEnemy(marshal, marshal->health);
+    assert(marshal->igrisFinalForm && marshal->guardianPhase == GUARDIAN_PHASE_TRANSITION);
+    assert(marshal->health == marshal->maxHealth * IGRIS_FINAL_HEALTH_PERCENT / 100);
+    assert(EncounterBossVisible(&marshalHud, &enemies));
+    Capture("audit/boss_health_marshal_phase3.png",&marshalHud,&enemies,&field,field.spawn);
+    DamageEnemy(marshal, marshal->maxHealth);
+    assert(marshal->health == marshal->maxHealth * IGRIS_FINAL_HEALTH_PERCENT / 100);
+    UpdateEnemies(&enemies, &field, target, 2, true, &fieldHealth, 100);
+    assert(EnemyCanBeHit(marshal));
+    enemies.playerHitCooldown = 0;
+    int clawHealth = 100;
+    UpdateEnemies(&enemies, &field, target, .25f, false, &clawHealth, 100);
+    assert(marshal->state == ENEMY_ATTACK);
+    UpdateEnemies(&enemies, &field, target, .38f, false, &clawHealth, 100);
+    assert(clawHealth == 64 && marshal->attackConnected);
     DamageEnemy(marshal, marshal->health);
     UpdateEnemies(&enemies, &field, field.spawn, 1.5f, true, &fieldHealth, 100);
     assert(marshal->state == ENEMY_FALLEN && !EnemyCanBeHit(marshal));
@@ -1350,8 +1401,10 @@ int main(void) {
     float marshalPowerBefore = templars.progress.bossPower;
     assert(AnswerEncounterSeal(&templars, &enemies, &fieldHealth, (templars.answer + 1) % 3));
     assert(templars.phase == ENCOUNTER_FIGHT && templars.progress.bossPower > marshalPowerBefore);
-    assert(marshal->health == marshal->maxHealth && EnemyCanBeHit(marshal));
+    assert(marshal->health == marshal->maxHealth && EnemyCanBeHit(marshal) && !marshal->igrisFinalForm);
     DamageEnemy(marshal, marshal->maxHealth);
+    UpdateEnemies(&enemies, &field, field.spawn, 2, true, &fieldHealth, 100);
+    DamageEnemy(marshal, marshal->health);
     UpdateEnemies(&enemies, &field, field.spawn, 2, true, &fieldHealth, 100);
     DamageEnemy(marshal, marshal->health);
     UpdateEnemies(&enemies, &field, field.spawn, 1.5f, true, &fieldHealth, 100);
@@ -1388,6 +1441,10 @@ int main(void) {
     finalProgress.angelBlessingUses=1;
     int finalHealth=100;
     BeginEncounter(&final,&enemies,&palace,finalProgress,palace.spawn);
+    assert(enemies.loadedMap == NECROMANCER_MAP);
+    for (int i = 0; i < IGRIS_ART_COUNT; i++) assert(!enemies.igrisArt[i].id);
+    for (int role = TEMPLAR_SHIELD; role < TEMPLAR_MARSHAL; role++)
+        assert(!enemies.templarWalk[role].id && !enemies.templarAttack[role].id);
     assert(enemies.necromancerPortrait.id);
     Enemy *necromancer=&enemies.list[0];
     assert(necromancer->necromancerForm==1 && !EnemyCanBeHit(necromancer));
@@ -1594,6 +1651,7 @@ int main(void) {
     UnloadEnemies(&enemies);
     UnloadClearing(&clearing);
     UnloadEncounterRewardUi();
+    UnloadBossHealthHud();
     UnloadGameFonts();
     CloseWindow();
     puts("Four waves, boss fifth wave, rewards, boss roots, seals and checkpoints passed");
