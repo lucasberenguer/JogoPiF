@@ -18,6 +18,7 @@ typedef struct PauseMenu {
 } PauseMenu;
 typedef struct Menu {
     Texture2D background;
+    Texture2D logo;
     Texture2D moon, seal, necromancer, fog, fogTexture;
     Texture2D hero[10];
     Texture2D buttons[4];
