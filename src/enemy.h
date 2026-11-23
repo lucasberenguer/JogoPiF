@@ -94,7 +94,10 @@ typedef struct Enemy {
     Vector2 igrisEchoFrom[3], igrisEchoTo[3];
     unsigned igrisEchoHits;
     bool guardianMelee;
+    bool coveiroPhaseOpening;
     float guardianMeleeCooldown;
+    float guardianDodgeCooldown, guardianDodgeTime;
+    Vector2 guardianDodgeDirection;
     int bossAttack;
     int attackBurst;
     Vector2 attackTarget;

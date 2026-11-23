@@ -8,10 +8,9 @@
 #define CUTSCENE_FONT_PATH "assets/fonts/CrimsonText-SemiBold.ttf"
 #define LOGIC_SYMBOLS_FONT_PATH "assets/fonts/LogicSymbols.ttf"
 
-static Font cutsceneFont;
-static Font gothicFont;
+static Font gameFont;
 
-static Font LoadGameFont(const char *path, const char *donorSymbolsPath, bool readableTitle) {
+static Font LoadGameFont(const char *path, const char *donorSymbolsPath) {
     if (!path || !FileExists(path)) return (Font){0};
     // ASCII, Latin-1 (incluindo acentos do português) e pontuação editorial.
     int codepoints[256];
@@ -29,28 +28,6 @@ static Font LoadGameFont(const char *path, const char *donorSymbolsPath, bool re
     GlyphInfo *baseGlyphs = LoadFontData(fileData, dataSize, GAME_FONT_BASE_SIZE, codepoints, count, FONT_DEFAULT);
     UnloadFileData(fileData);
     if (!baseGlyphs) return (Font){0};
-
-    // O S da Unifraktur parece um G. Troca só essa inicial no atlas gótico.
-    if (readableTitle) {
-        int size = 0;
-        unsigned char *data = LoadFileData(CUTSCENE_FONT_PATH, &size);
-        if (data) {
-            int letter = 'S';
-            GlyphInfo *glyph = LoadFontData(data, size, GAME_FONT_BASE_SIZE * 5 / 4, &letter, 1, FONT_DEFAULT);
-            UnloadFileData(data);
-            if (glyph) {
-                if (glyph->image.data) {
-                    const GlyphInfo *original = &baseGlyphs[letter - 32];
-                    glyph->offsetY = original->offsetY + original->image.height - glyph->image.height;
-                    UnloadImage(baseGlyphs[letter - 32].image);
-                    baseGlyphs[letter - 32] = *glyph;
-                    MemFree(glyph);
-                } else {
-                    UnloadFontData(glyph, 1);
-                }
-            }
-        }
-    }
 
     GlyphInfo *mergedGlyphs = baseGlyphs;
     int totalCount = count;
@@ -110,8 +87,7 @@ static Font LoadGameFont(const char *path, const char *donorSymbolsPath, bool re
 
 void LoadGameFontsWithSymbolsPath(const char *symbolsPath) {
     UnloadGameFonts();
-    gothicFont = LoadGameFont("assets/fonts/UnifrakturMaguntia-Book.ttf", symbolsPath, true);
-    cutsceneFont = LoadGameFont(CUTSCENE_FONT_PATH, gothicFont.texture.id ? NULL : symbolsPath, false);
+    gameFont = LoadGameFont(CUTSCENE_FONT_PATH, symbolsPath);
 }
 
 void LoadGameFonts(void) {
@@ -119,15 +95,13 @@ void LoadGameFonts(void) {
 }
 
 void UnloadGameFonts(void) {
-    if (cutsceneFont.texture.id) UnloadFont(cutsceneFont);
-    if (gothicFont.texture.id) UnloadFont(gothicFont);
-    cutsceneFont = (Font){0};
-    gothicFont = (Font){0};
+    if (gameFont.texture.id) UnloadFont(gameFont);
+    gameFont = (Font){0};
 }
 
 static Font TextFont(GameTextStyle style) {
-    if (style != GAME_TEXT_CUTSCENE && gothicFont.texture.id) return gothicFont;
-    return cutsceneFont.texture.id ? cutsceneFont : GetFontDefault();
+    (void)style;
+    return gameFont.texture.id ? gameFont : GetFontDefault();
 }
 
 bool GameTextHasGlyph(int codepoint) {
