@@ -2880,6 +2880,7 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
     }
     if (group->village) {
         VillageDrawEnemies(group, player, foreground);
+        if (foreground) DrawSealMarkers(group);
         return;
     }
     if (group->cemetery) {

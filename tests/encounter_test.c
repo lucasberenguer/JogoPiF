@@ -72,8 +72,8 @@ static void CheckVillageZombies(Encounter *encounter, EnemyGroup *enemies, Clear
     assert(EnemiesRemaining(enemies) == 64 && enemies->villageSpawnRemaining == 34);
     for (int i = 0; i < VILLAGE_HORDE_INITIAL; i++) {
         const Enemy *zombie = &enemies->list[i];
-        assert(zombie->type == ENEMY_COMMON_MELEE && zombie->state == ENEMY_SPAWNING);
         bool brute=i==10 || i==21;
+        assert(zombie->type == (brute ? ENEMY_SPECIAL : ENEMY_COMMON_MELEE) && zombie->state == ENEMY_SPAWNING);
         assert(zombie->villageBrute==brute && !EnemyCanBeHit(zombie));
         assert(zombie->health==(brute?300:90) && zombie->maxHealth==zombie->health);
     }

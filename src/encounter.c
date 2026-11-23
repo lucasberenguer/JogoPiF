@@ -172,7 +172,8 @@ static const char *WeaponTitle(int weapon) {
 }
 
 static bool IsEpicRewardStage(const Encounter *e) {
-    return e->progress.stage == CampaignWaveCount(e->progress.map);
+    return e->progress.stage == CampaignWaveCount(e->progress.map) ||
+           (e->progress.map == 2 && e->progress.stage == CLEARING_BOSS_STAGE && e->villageHordeStarted);
 }
 
 static void StartStage(Encounter *e, EnemyGroup *enemies, const Clearing *clearing, Vector2 player) {
@@ -791,6 +792,19 @@ bool ChooseEncounterReward(Encounter *e, EnemyGroup *enemies, const Clearing *cl
                            Vector2 player, int *health, int choice) {
     if (e->phase!=ENCOUNTER_REWARD || choice<0 || choice>=e->rewardCount) return false;
     ApplyReward(e,e->rewards[choice],health);
+    if (e->progress.map == 2 && e->progress.stage == CLEARING_BOSS_STAGE && e->villageHordeStarted) {
+        e->progress.stage = CLEARING_COMPLETE_STAGE;
+        e->progress.health = *health;
+        e->phase = ENCOUNTER_CLEAR;
+        e->notice[0] = 0;
+        BeginStagePresentation(&e->presentation, 0,
+            "Ultimo registro: \"Sobrevivi, mas falhei em salva-los...\"", NULL);
+        e->presentation.announcement = "CHÃ DA TRISTEZA LIMPA";
+        e->presentation.duration = e->presentation.remaining = 2.5f;
+        QueueAreaUnlock(&e->presentation, "Capela do Anjo");
+        if (!e->practice) SaveClearingCheckpoint(&e->progress);
+        return true;
+    }
     bool lastWave = e->progress.stage == CampaignWaveCount(e->progress.map);
     e->progress.stage = lastWave ? CLEARING_BOSS_STAGE : e->progress.stage + 1;
     if (lastWave && clearing->boneland) e->progress.guardianIntroSeen=false;
@@ -1052,7 +1066,9 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
         }
         if (EnemiesRemaining(enemies)==0) {
             ClearEnemyAttacks(enemies);
-            if (e->progress.stage==CLEARING_BOSS_STAGE) {
+            if (e->progress.map == 2 && e->progress.stage == CLEARING_BOSS_STAGE && e->villageHordeStarted) {
+                e->phase=ENCOUNTER_REWARD; e->rerolled=false; RollRewards(e);
+            } else if (e->progress.stage==CLEARING_BOSS_STAGE) {
                 e->progress.stage=CLEARING_COMPLETE_STAGE;
                 e->progress.health=*health;
                 e->phase=ENCOUNTER_CLEAR;
