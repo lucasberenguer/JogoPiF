@@ -442,7 +442,20 @@ Na entrega do pós-boss de 18/11, build em `out/review` concluído e seis testes
 - As cartelas usam UnifrakturMaguntia em todos os mapas. O S maiúsculo do atlas usa o desenho da Crimson Text Semibold, alinhado ao tamanho e à base das capitais góticas, para que “Selo” seja legível sem trocar a fonte da cartela.
 - A entrada por F1 em uma onda ou mapa exibe a apresentação da área, inclusive na Vila e nas Capelas. Áreas sem ondas não mostram uma onda fictícia. A Clareira e o Cemitério exibem a contagem completa das etapas, incluindo o chefe. Quando uma cutscene apresenta o chefe na entrada, a cartela do mapa permanece na fila.
 - Build local em `out/review/JogoPiF-Apresentacoes.exe`. O teste de encontro verificou as cartelas das ondas iniciais via F1, a Vila e as Capelas.
+
 ## Pré-luta de Igris
 
 - **Pré-luta de Igris:** após a recompensa da última onda no Portão da Última Sentença, a indicação manda caminhar até a base da escadaria. A cutscene em `assets/cutscenes/igris/` usa as cinco artes finais, a trilha enviada, um piscar de 0,55 s em preto e sem trilha e quatro falas manuais. Espaço ou Enter completam e avançam as falas, P pausa e Esc pula. Concluir ou pular volta à posição anterior, libera o HUD **IGRIS — O COMANDANTE**, inicia a trilha de combate pelo fade existente e dá 1,6 s antes que o chefe possa iniciar um ataque. O trecho toca uma vez por entrada no encontro, inclusive ao retomar um checkpoint do duelo. Os atalhos diretos de fase ou selo do F1 podem ir direto ao chefe.
   - **Validação:** 7/7 testes com asserções ativas em `out/review/boss-hud-check`. O teste da sequência verificou cinco artes, diálogo, silêncio e encerramento da trilha. O loop real verificou a caminhada até o gatilho, o pulo, a conclusão, a retomada de movimento, a barra, o início da trilha de combate e o estado de Igris. Capturas do diálogo e do desafio em `audit/guardian_cinematic_igris_*_800.png`.
+
+## Novas animações de ataque do Coveiro
+
+- Pazada, raízes, giro/arremesso e investida usam os quatro atlas `assets/coveiro_ataque_*.png`, com oito poses nas quatro direções. As folhas originais estão em `design/coveiro_ataques/`. Os recortes isolam cada silhueta e alinham os quadros pelo chão para evitar sobras de poses vizinhas e saltos na troca de quadro.
+- A pazada e as raízes entram na pose de impacto junto ao dano. No arremesso, a pose de mãos vazias começa quando o projétil reaproveitado aparece. A investida tem preparação, passada e freada, incluindo a pausa entre as duas arrancadas da segunda fase.
+- Os efeitos de raízes e investida e a pá giratória continuam com os atlas anteriores. Os tempos de dano e a movimentação física foram preservados.
+- Espera, corrida normal, aparição e queda usam as novas folhas `assets/coveiro_visual_*.png`. Os oito atlas do corpo têm oito quadros por direção e a mesma ordem de linhas. A reação ao dano usa a pose de espera com tintura, e o corpo caído permanece no último quadro até o selo. A cartela de chefe usa o retrato recortado da nova espera. A cutscene narrativa conserva as ilustrações próprias.
+- Build local em `out/review/JogoPiF-Coveiro-Completo.exe`. A auditoria cobre direção e seleção de quadros nos estados e ataques.
+- Caminhada do Coveiro com cadência guiada pela distância percorrida e direção do movimento após a colisão. O ciclo para ao ficar bloqueado e usa a oscilação das próprias poses. Velocidade de perseguição e investidas preservadas.
+
+- A folha de caminhada foi realinhada pela altura da cabeça nas quatro direções. O desnível máximo por direção caiu de 17 para 2 pixels no atlas, mantendo as mesmas poses e a cadência guiada pelo deslocamento.
+- A caminhada também foi alinhada pelo centro horizontal da cabeça (o desvio chegava a 65 px no atlas). A orientação usa uma margem perto das diagonais para evitar alternância de vistas. A auditoria confirmou trajetórias retas e direção estável nos quatro eixos e nas quatro diagonais em piso livre. Build local em `out/review/JogoPiF-Coveiro-Caminhada-Reta.exe`.

@@ -144,6 +144,7 @@ void CemeteryUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
     if (*health <= 0) return;
     Vector2 offset = Vector2Subtract(player, boss->position);
     float distance = Vector2Length(offset);
+    int previousFacing = boss->facing;
     boss->facing = fabsf(offset.x) > fabsf(offset.y) ? (offset.x < 0 ? 2 : 3) : (offset.y < 0 ? 1 : 0);
     bool melee = distance <= COVEIRO_MELEE_RANGE && boss->guardianMeleeCooldown <= 0 &&
                  MapHasClearPath(map, boss->position, player);
@@ -165,9 +166,19 @@ void CemeteryUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
         boss->attackDirection = distance > .01f ? Vector2Normalize(offset) : (Vector2){0, 1};
         boss->attackCooldown = phaseTwo ? 1.75f : 2.65f;
     } else if (distance > 110) {
-        boss->state = ENEMY_WALK;
-        boss->walkTime+=dt;
-        MoveEnemy(map, boss, Vector2Scale(Vector2Normalize(offset), boss->speed * COVEIRO_MOVEMENT_SCALE * (phaseTwo ? 1.5f : 1) * dt));
+        Vector2 start = boss->position;
+        float speed = boss->speed * COVEIRO_MOVEMENT_SCALE;
+        MoveEnemy(map, boss, Vector2Scale(Vector2Normalize(offset), speed * (phaseTwo ? 1.5f : 1) * dt));
+        Vector2 step = Vector2Subtract(boss->position, start);
+        float traveled = Vector2Length(step);
+        boss->state = traveled > .01f ? ENEMY_WALK : ENEMY_IDLE;
+        if (boss->state == ENEMY_WALK) {
+            boss->walkTime += traveled / speed;
+            float dx = fabsf(step.x), dy = fabsf(step.y);
+            // Evita trocar a vista a cada quadro quando o vetor fica perto de 45 graus.
+            bool horizontal = previousFacing >= 2 ? dx > dy * .85f : dx > dy / .85f;
+            boss->facing = horizontal ? (step.x < 0 ? 2 : 3) : (step.y < 0 ? 1 : 0);
+        }
     } else boss->state = ENEMY_IDLE;
 }
 
@@ -223,47 +234,41 @@ void CemeteryUpdateSpecial(EnemyGroup *group, const Clearing *map, Enemy *enemy,
 CemeteryPose CemeteryAnimationPose(const Enemy *enemy) {
     CemeteryPose p;
     if (enemy->type == ENEMY_BOSS) {
-        const int basicRows[] = {0, 2, 3, 1};
-        const int emergeRows[] = {2, 3, 1, 0};
-        p = (CemeteryPose){CEM_BOSS_IDLE, 4, 4, basicRows[enemy->facing], 0, false};
+        const int rows[] = {0, 3, 1, 2}; // frente, costas, esquerda, direita
+        p = (CemeteryPose){CEM_BOSS_IDLE, 8, 4, rows[enemy->facing], 0, false};
         float t = enemy->stateTime;
         if (enemy->state == ENEMY_SPAWNING) {
-            int frames = enemy->facing < 2 ? 8 : 9;
-            p = (CemeteryPose){CEM_BOSS_EMERGE, 14, 4, emergeRows[enemy->facing],
-                               5 + (int)Clamp(t * frames, 0, frames - 1), false};
+            p.atlas = CEM_BOSS_EMERGE;
+            p.frame = (int)Clamp(t * p.columns, 0, p.columns - 1);
         } else if (enemy->state == ENEMY_DIE || enemy->state == ENEMY_FALLEN) {
-            int frame = enemy->state == ENEMY_FALLEN ? 6 : (int)Clamp(t / .85f * 7, 0, 6);
-            p = (CemeteryPose){CEM_BOSS_FALL, 7, 4, emergeRows[enemy->facing], frame, false};
+            p.atlas = CEM_BOSS_FALL;
+            p.frame = enemy->state == ENEMY_FALLEN ? p.columns - 1
+                : (int)Clamp(t / .85f * p.columns, 0, p.columns - 1);
         } else if (enemy->state == ENEMY_WALK) {
             p.atlas = CEM_BOSS_WALK;
-            p.columns = 9;
-            p.frame = (int)(enemy->walkTime * 18) % p.columns;
+            p.frame = (int)(enemy->walkTime * 11) % p.columns;
         } else if (enemy->state == ENEMY_IDLE) {
-            p.frame = (int)(t * 5) % 4;
-        } else if (enemy->state == ENEMY_ATTACK && enemy->guardianMelee) {
-            p.atlas = CEM_BOSS_MELEE;
-            p.columns = 11;
-            p.frame = t < COVEIRO_MELEE_WINDUP ? (int)Clamp(t / COVEIRO_MELEE_WINDUP * 7, 0, 6)
-                : 7 + (int)Clamp((t - COVEIRO_MELEE_WINDUP) /
-                                 (COVEIRO_MELEE_DURATION - COVEIRO_MELEE_WINDUP) * 4, 0, 3);
+            p.frame = (int)(t * 6) % p.columns;
         } else if (enemy->state == ENEMY_ATTACK) {
-            p.atlas = CEM_BOSS_SLAM + enemy->bossAttack;
-            p.row = enemy->facing;
-            if (enemy->bossAttack == COVEIRO_SHOVEL) {
-                p.columns = 12;
-                p.frame = t < .8f ? (int)Clamp(t / .8f * 6, 0, 5)
-                    : 6 + (int)Clamp((t - .8f) / .85f * 6, 0, 5);
+            p.atlas = enemy->guardianMelee ? CEM_BOSS_MELEE : CEM_BOSS_SLAM + enemy->bossAttack;
+            if (enemy->guardianMelee) {
+                p.frame = t < COVEIRO_MELEE_WINDUP ? (int)Clamp(t / COVEIRO_MELEE_WINDUP * 4, 0, 3)
+                    : 4 + (int)Clamp((t - COVEIRO_MELEE_WINDUP) /
+                                     (COVEIRO_MELEE_DURATION - COVEIRO_MELEE_WINDUP) * 4, 0, 3);
             } else if (enemy->bossAttack == COVEIRO_CHARGE) {
-                p.columns = 9;
                 bool phaseTwo = enemy->guardianPhase == GUARDIAN_PHASE_TWO;
-                if (t < .8f) p.frame = (int)Clamp(t / .8f * 3, 0, 2);
-                else if (phaseTwo && t >= 1.12f && t < 1.45f) p.frame = 2;
-                else if (t < (phaseTwo ? 1.77f : 1.35f)) p.frame = 3 + (int)(t * 12) % 3;
-                else p.frame = t < (phaseTwo ? 1.9f : 1.52f) ? 7 : 8;
+                if (t < COVEIRO_WINDUP) p.frame = (int)Clamp(t / COVEIRO_WINDUP * 3, 0, 2);
+                else if (phaseTwo && t >= 1.12f && t < 1.45f)
+                    p.frame = t < 1.25f ? 6 : 2;
+                else if (t < (phaseTwo ? 1.77f : 1.35f)) {
+                    float runTime = t - (phaseTwo && t >= 1.45f ? 1.45f : COVEIRO_WINDUP);
+                    p.frame = 3 + (int)(runTime * 12) % 3;
+                } else p.frame = t < (phaseTwo ? 1.9f : 1.52f) ? 6 : 7;
             } else {
-                p.columns = 9;
-                p.frame = t < .8f ? (int)Clamp(t / .8f * 4, 0, 3)
-                    : 4 + (int)Clamp((t - .8f) / .85f * 5, 0, 4);
+                // A pá some da mão no mesmo instante em que o projétil nasce.
+                int release = enemy->bossAttack == COVEIRO_SHOVEL ? 5 : 4;
+                p.frame = t < COVEIRO_WINDUP ? (int)Clamp(t / COVEIRO_WINDUP * release, 0, release - 1)
+                    : release + (int)Clamp((t - COVEIRO_WINDUP) / .85f * (8 - release), 0, 7 - release);
             }
         }
         return p;
@@ -348,13 +353,7 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
         float bob=0;
         float lean=0;
         if(boss && !fallen && enemy->state!=ENEMY_DIE) {
-            if(enemy->state==ENEMY_WALK) {bob=-fabsf(sinf(enemy->walkTime*14))*3;lean=sinf(enemy->walkTime*14)*1.5f;}
-            else if(enemy->state==ENEMY_ATTACK) {
-                float t=enemy->stateTime;
-                float motion=t<.8f?-sinf(t/.8f*PI/2):sinf(fminf((t-.8f)/.85f,1)*PI);
-                lean=motion*(pose.flip?-5:5);
-                bob=-fabsf(sinf(t*9))*2;
-            } else bob=sinf(enemy->stateTime*5)*1.2f;
+            if (enemy->state == ENEMY_IDLE) bob=sinf(enemy->stateTime*5)*1.2f;
         } else if ((boss || special) && collapse > 0.0f) {
             lean = (enemy->facing == 2 ? -1.0f : 1.0f) * 82.0f * collapse;
         }
