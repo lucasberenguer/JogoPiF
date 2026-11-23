@@ -329,7 +329,18 @@ int main(void) {
     assert(InitVillageCutscene(&scene,.12f,.12f));
     assert(scene.count==5 && scene.artCount==4);
     const char *villageImages[]={"cha_de_alegria.png","febre.png","selo.png","presente.png","presente.png"};
-    for (int i=0;i<scene.count;i++) assert(!strcmp(scene.scenes[i].image,villageImages[i]));
+    for (int i=0;i<scene.count;i++) {
+        const GuardianScene *shot=&scene.scenes[i];
+        assert(!strcmp(shot->image,villageImages[i]));
+        assert(shot->type==GUARDIAN_NARRATION && shot->narration[0] && !shot->waitsForInput);
+        float readingTime=shot->narrationAt+shot->narrationDuration/2;
+        assert(GuardianNarrationOpacity(shot,readingTime)==1);
+        scene.current=i;
+        scene.elapsed=readingTime;
+        Capture(&scene,800,shot->id);
+    }
+    scene.current=0;
+    scene.elapsed=0;
     assert(!strcmp(scene.scenes[3].narration,"Eu só queria salvá-los..."));
     assert(!strcmp(scene.scenes[4].narration,"Mas fui eu quem condenou todos eles."));
     if (IsAudioDeviceReady()) assert(scene.music.stream.buffer && scene.scenes[1].cue.stream.buffer);

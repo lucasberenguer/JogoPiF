@@ -459,19 +459,19 @@ static bool LoadCemeteryEnemyAssets(EnemyGroup *group) {
         group->cemeterySpecial[i] = LoadTexture(specialSheets[i]);
         if (group->cemeterySpecial[i].id) SetTextureFilter(group->cemeterySpecial[i], TEXTURE_FILTER_POINT);
     }
-    group->coveiroIdle = LoadTexture("assets/coveiro_novo_idle.png");
-    group->coveiroWalk = LoadTexture("assets/coveiro_novo_run.png");
-    group->coveiroEmerge = LoadTexture("assets/coveiro_novo_emerge.png");
-    group->coveiroFall = LoadTexture("assets/coveiro_novo_fall.png");
-    group->coveiroMelee = LoadTexture("assets/coveiro_novo_melee.png");
+    group->coveiroIdle = LoadTexture("assets/coveiro_visual_espera.png");
+    group->coveiroWalk = LoadTexture("assets/coveiro_visual_corrida.png");
+    group->coveiroEmerge = LoadTexture("assets/coveiro_visual_emergencia.png");
+    group->coveiroFall = LoadTexture("assets/coveiro_visual_queda.png");
+    group->coveiroMelee = LoadTexture("assets/coveiro_ataque_pazada.png");
     group->cemeterySpell = LoadTexture("assets/zumbi_lanterna_projetil.png");
-    group->boss[0] = LoadTexture("assets/coveiro_novo_pull.png");
-    group->boss[1] = LoadTexture("assets/coveiro_novo_spin.png");
-    group->boss[2] = LoadTexture("assets/coveiro_novo_charge.png");
+    group->boss[0] = LoadTexture("assets/coveiro_ataque_raizes.png");
+    group->boss[1] = LoadTexture("assets/coveiro_ataque_arremesso.png");
+    group->boss[2] = LoadTexture("assets/coveiro_ataque_investida.png");
     group->effects[0] = LoadTexture("assets/coveiro_novo_pull_effect.png");
     group->effects[1] = LoadTexture("assets/coveiro_pa_vento_v4.png");
     group->effects[2] = LoadTexture("assets/coveiro_efeito_investida.png");
-    group->cemeteryPortrait = LoadTexture("assets/coveiro_intro_pixel.png");
+    group->cemeteryPortrait = LoadTexture("assets/coveiro_visual_retrato.png");
     if (!group->cemeteryZombie[0].id || !group->cemeteryZombie[1].id || !group->cemeteryZombie[2].id ||
         !group->cemeteryLantern[0].id || !group->cemeteryLantern[1].id || !group->cemeteryLantern[2].id ||
         !group->cemeterySpecial[0].id || !group->cemeterySpecial[1].id || !group->cemeterySpecial[2].id ||

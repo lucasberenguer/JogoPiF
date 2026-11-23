@@ -5,6 +5,30 @@
 #include <math.h>
 #include <string.h>
 
+static void CheckCoveiroWalk(void) {
+    Clearing map = {.cemetery=true, .background={.width=1600,.height=1200},
+                    .playableBounds={0,0,1600,1200}};
+    EnemyGroup group = {0};
+    Vector2 start = {800,600};
+    const Vector2 directions[] = {{0,1},{0,-1},{-1,0},{1,0},
+                                  {-1,-1},{1,-1},{-1,1},{1,1}};
+    const int faces[] = {0,1,2,3,2,3,2,3};
+    for (int i=0; i<8; i++) {
+        Vector2 axis = Vector2Normalize(directions[i]);
+        Vector2 target = Vector2Add(start,Vector2Scale(axis,400));
+        Enemy boss = {.type=ENEMY_BOSS,.state=ENEMY_WALK,.position=start,.speed=160,
+                      .facing=faces[i],.attackCooldown=10,.guardianMeleeCooldown=10};
+        int health = 100;
+        for (int frame=0; frame<30; frame++) {
+            CemeteryUpdateBoss(&group,&map,&boss,target,1.0f/60,false,&health);
+            Vector2 traveled = Vector2Subtract(boss.position,start);
+            assert(boss.state==ENEMY_WALK && boss.facing==faces[i]);
+            assert(Vector2DotProduct(traveled,axis)>0);
+            assert(fabsf(traveled.x*axis.y-traveled.y*axis.x)<.02f);
+        }
+    }
+}
+
 static void CheckBonelandWaves(void) {
     Clearing map = {.boneland = true, .background = {.width = 1672, .height = 941},
                     .playableBounds = {0, 0, 1672, 941}, .spawn = {835, 840}};
@@ -379,6 +403,7 @@ static void CheckNecromancerPressure(void) {
 }
 
 int main(void) {
+    CheckCoveiroWalk();
     CheckNecromancerPressure();
     CheckTemplarBalance();
     const int expected[] = {20, 25, 45, 65, 100};
@@ -511,7 +536,7 @@ int main(void) {
     UpdateEnemies(&group,&map,target,.34f,false,&health,100);
     assert(health==100 && !coveiro->attackConnected);
     UpdateEnemies(&group,&map,target,.03f,false,&health,100);
-    assert(health==70 && coveiro->attackConnected && CemeteryAnimationPose(coveiro).frame==7);
+    assert(health==70 && coveiro->attackConnected && CemeteryAnimationPose(coveiro).frame==4);
     UpdateEnemies(&group,&map,target,.45f,false,&health,100);
     assert(coveiro->state==ENEMY_IDLE && !coveiro->guardianMelee && coveiro->guardianMeleeCooldown>0);
     coveiro->position=(Vector2){800,600};
@@ -637,14 +662,23 @@ int main(void) {
         poseEnemy.bossAttack=attack;poseEnemy.facing=face;poseEnemy.stateTime=f*.01f;
         CemeteryPose pose=CemeteryAnimationPose(&poseEnemy);
         assert(pose.frame>=0 && pose.frame<pose.columns && pose.row>=0 && pose.row<4);
-        assert(!pose.flip && pose.row==face);
+        assert(!pose.flip && pose.row==((int[]){0,3,1,2})[face] && pose.columns==8);
     }
-    poseEnemy.state=ENEMY_DIE;
-    poseEnemy.stateTime=.50f;
-    poseEnemy.facing=3;
-    assert(CemeteryAnimationPose(&poseEnemy).atlas==CEM_BOSS_FALL);
-    poseEnemy.state=ENEMY_FALLEN;
-    assert(CemeteryAnimationPose(&poseEnemy).frame==6);
+    const EnemyState coveiroStates[] = {ENEMY_SPAWNING, ENEMY_IDLE, ENEMY_WALK,
+                                        ENEMY_HURT, ENEMY_DIE, ENEMY_FALLEN};
+    const int coveiroAtlases[] = {CEM_BOSS_EMERGE, CEM_BOSS_IDLE, CEM_BOSS_WALK,
+                                 CEM_BOSS_IDLE, CEM_BOSS_FALL, CEM_BOSS_FALL};
+    for (int i=0; i<6; i++) for (int face=0; face<4; face++) {
+        poseEnemy.state=coveiroStates[i];
+        poseEnemy.facing=face;
+        poseEnemy.stateTime=.5f;
+        poseEnemy.walkTime=.25f;
+        CemeteryPose pose=CemeteryAnimationPose(&poseEnemy);
+        assert(pose.atlas==coveiroAtlases[i] && pose.columns==8 && pose.rows==4);
+        assert(pose.row==((int[]){0,3,1,2})[face] && !pose.flip);
+        assert(pose.frame>=0 && pose.frame<pose.columns);
+        if (poseEnemy.state==ENEMY_FALLEN) assert(pose.frame==7);
+    }
     Clearing arena=map;arena.cemetery=false;
     /* Clareira: 3 ondas de 10/14/18, vida +10% e dano +15% sobre a base. */
     for (int wave=1;wave<=3;wave++) {
