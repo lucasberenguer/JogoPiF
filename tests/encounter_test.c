@@ -1376,7 +1376,6 @@ int main(void) {
 
     Clearing palace = {0};
     assert(InitCampaignMap(&palace, NECROMANCER_MAP));
-    assert(enemies.necromancerPortrait.id);
     assert(MapHasClearPath(&palace, palace.spawn, palace.pedestal));
     assert(!IsMapActorBlocked(&palace, (Vector2){836,260}));
     assert(IsMapActorBlocked(&palace, (Vector2){836,180}));
@@ -1389,6 +1388,7 @@ int main(void) {
     finalProgress.angelBlessingUses=1;
     int finalHealth=100;
     BeginEncounter(&final,&enemies,&palace,finalProgress,palace.spawn);
+    assert(enemies.necromancerPortrait.id);
     Enemy *necromancer=&enemies.list[0];
     assert(necromancer->necromancerForm==1 && !EnemyCanBeHit(necromancer));
     assert(final.presentation.areaEntry && final.presentation.wave==0);
@@ -1558,6 +1558,7 @@ int main(void) {
     assert(StartDevEncounter(&villageTools,DEV_STAGE,&encounter,&enemies,&clearing,
                              &villagePracticePlayer,&villagePracticeHealth));
     assert(clearing.village && encounter.practice && encounter.progress.map==VILLAGE_MAP);
+    assert(enemies.villageBruteWalk.id && enemies.villageBruteAttack.id);
     assert(encounter.progress.stage==CLEARING_BOSS_STAGE && enemies.list[0].type==ENEMY_BOSS);
     assert(encounter.progress.weaponLevel[2]==2 && villagePracticeHealth==100);
     Enemy *leader=&enemies.list[0];
@@ -1578,6 +1579,7 @@ int main(void) {
     int chapelHealth;
     assert(StartDevEncounter(&chapelTools,DEV_STAGE,&encounter,&enemies,&clearing,&chapelPlayer,&chapelHealth));
     assert(clearing.chapel && encounter.practice && !OpenAngelRevival(&encounter,4,&revival));
+    assert(!enemies.villageBruteWalk.id && !enemies.villageBruteAttack.id);
     chapelTools.map=INVERTED_CHAPEL_MAP;
     assert(StartDevEncounter(&chapelTools,DEV_STAGE,&encounter,&enemies,&clearing,&chapelPlayer,&chapelHealth));
     assert(clearing.invertedChapel && encounter.practice && OpenAngelRevival(&encounter,5,&revival));
