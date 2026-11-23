@@ -4,6 +4,14 @@ Atualizado em 22/11/2026. Leia junto do código e de `git status` antes de retom
 
 ## Retomada rápida
 
+- **22/11 — Combate do Cérbero:** depois da investida, o chefe persegue o jogador até alcançar o raio de 220 unidades da explosão. O aviso no chão precede a onda de choque visível de 38 de dano base, evitável com esquiva. A marcha subiu de 132 para 170 unidades/s, a investida ficou mais rápida e os ataques ganharam dano, preparação e recuperação mais curtas. A fase 2 acelera mais. Release compilada em `out/review`; `enemy_audit` e `clearing_encounter` passaram. Ajuste de dificuldade em partida completa ainda pendente.
+
+- **Validação da introdução do Cérbero:** Release compilada em `out/review`. `clearing_encounter` passou com o bloqueio do combate e a liberação após a cena. Um teste isolado do player em raylib confirmou o carregamento das artes, a ordem e duração dos sete planos, a conclusão automática e o pulo. O teste geral `guardian_cutscene` excedeu o limite de 35 s. A mixagem ainda não foi verificada em partida.
+
+- **22/11 — O Despertar do Cérbero dos Ossos:** introdução de 35 s após aceitar a recompensa da terceira onda. Reutiliza o player do Guardião e suspende o combate e a interface até concluir ou pular. O checkpoint do chefe registra a conclusão. Sete planos em `assets/cutscenes/terra_dos_ossos/data/sequencia.ini`, com trilha contínua reaproveitada do Coveiro e efeitos reaproveitados das cutscenes existentes. As cenas 2–5 têm as artes enviadas. Faltam `images/cena_01.png`, `images/cena_06.png` e `images/cena_07.png`; até o envio, esses planos ficam em preto. As quatro artes são exibidas sem pan ou zoom. Cinco planos têm legendas de narração, e a cena 6 usa um rugido sintetizado de 3,5 s. A trilha dedicada e a revisão audiovisual em partida continuam pendentes. A revisão compilou em Release e passou em enemy_audit, clearing_encounter e na verificação isolada do player e do WAV.
+
+- **22/11 — Trilha da Capela:** o MP3 `take-1-take-1 (2).mp3` foi convertido em `assets/audio/capela.wav`, um loop de 59,048 s com sobreposição de 2 s entre fim e começo. A Capela do Anjo, o puzzle do Porão Secreto e a Capela Invertida selecionam a mesma faixa, mantendo a posição nas transições entre mapas. A cutscene do altar conserva sua trilha própria. Build Release em `out/review` concluída e emenda verificada nas amostras PCM. Escuta em partida completa pendente.
+
 Projeto universitário em C99 + raylib 5.5, aprovado pelo professor. Equipe de quatro pessoas, prazo apertado. **Roguelike** 2D top-down em pixel art sombrio (ao morrer, perde tudo e reinicia). O usuário participa de game design, arte e código. Clareira e cemitério estão jogáveis e foram considerados bem nivelados pelo usuário.
 
 Repositório: https://github.com/lucasberenguer/JogoPiF.git — branch `main`.
@@ -355,14 +363,19 @@ Na entrega do pós-boss de 18/11, build em `out/review` concluído e seis testes
 - Necromante reformulado: nas duas primeiras formas mantém distância, encadeia leques de projéteis e invoca espectros temporários nos flancos. A última forma combina combo e rasante com salvas autônomas sinalizadas. Novos sprites de lâmina e efeitos de combate. Build e auditoria passaram, incluindo salvas, invocação, limpeza na transição e magia simultânea ao ataque.
 - Caveiras invocadas: 230 PV, barra padrão, atingíveis pelas três armas e um projétil por segundo cada. Auditoria confere a cadência, o dano recebido e a remoção na transição.
 
+- **Especial do Cemitério — investida:** a criatura de lápide inicia o golpe a até 150 unidades, fixa a direção e sinaliza o trajeto e a área de impacto. Avança a 360 unidades/s entre 0,27 s e 0,52 s, por até 90 unidades, com colisão do cenário. O golpe ocorre uma vez aos 0,52 s e pode ser esquivado. A auditoria verificou preparação, deslocamento, dano único, esquiva e saída do alcance. O teste de encontro passou. O executável de revisão foi gerado em `out/review/JogoPiF-dash.exe` porque o arquivo padrão não pôde ser sobrescrito.
+
+- **22/11 — Novo combate do Rasga-Ossos:** o chefe da Terra dos Ossos carrega as folhas do usuário em `assets/rasga_ossos/`, com alfa original. Repouso, marcha e garra têm quatro direções. As folhas laterais dos especiais são espelhadas para o lado esquerdo. O novo ciclo contém garra, disparo com projétil, chuva em área marcada, reposicionamento invisível para um flanco válido seguido de investida e explosão ao redor do chefe. A chuva e a explosão desenham efeitos próprios no chão. Alcances, janelas e dano dos ataques ficam na tabela `boneAttacks`.
+  - **Validação:** Release em `out/review`, nove PNGs conferidos no build e cinco ataques capturados em `out/review/audit/rasga_ossos_*.png`. A auditoria de inimigos e o teste gráfico isolado da Terra dos Ossos passaram com afirmações ativas. O teste geral de encontro, executado com afirmações ativas, parou na verificação da ruptura do Marechal.
+
 ## Morte na campanha e ressurreição
 
 - A partir da Capela Invertida, a bênção recebida na Capela abre uma questão de equivalência com três alternativas na primeira morte em combate da partida. O acerto consome a bênção, devolve metade da vida máxima e retoma o mesmo encontro. Um erro encerra a tentativa e volta direto à escolha da arma.
-- Na morte definitiva da campanha, Repetir volta à escolha da arma e inicia uma nova partida na Clareira. Voltar ao Menu encerra a tentativa. O mesmo fluxo vale no modo de treino, em ondas e contra chefes.
+- Na morte definitiva da campanha, Reiniciar volta à escolha da arma e inicia uma nova partida na Clareira. Voltar ao Menu encerra a tentativa. O mesmo fluxo vale no modo de treino, em ondas e contra chefes.
 - O terceiro erro do Grande Selo Profano encerra a tentativa. A bênção passou a atuar nas mortes em combate.
 - Validação em out/review: jogo compilado e teste de encontro passou, incluindo acerto, erro e histórico da bênção.
 - F1 oferece Capela do Anjo e Capela Invertida. O menu principal também tem atalhos de prática para as duas. Na Capela Invertida, F4 simula dano. A auditoria confirmou uma ressurreição com 50 PV, ausência de uma segunda questão e preservação do checkpoint da campanha. Os dois executáveis de out/review foram sincronizados.
-- No Cemitério, morte definitiva leva direto à seleção de arma na campanha e na prática, inclusive contra o Coveiro. A nova tentativa sempre carrega a onda 1 da Clareira. As ferramentas ficam bloqueadas durante essa transição.
 - Validação da morte no Cemitério: simulação do loop do jogo passou na onda 4 e no Coveiro, na campanha e na prática, confirmando a tela de armas e a onda 1 da Clareira com atributos de nova partida.
 - Antes da Capela do Anjo (Clareira, Cemitério e Vila), morrer em qualquer onda ou chefe abre o Game Over, inclusive nos testes do F1. Reiniciar abre a escolha de arma e inicia uma nova partida na onda 1 da Clareira.
 - Reiniciar desenha a seleção de armas e fecha o quadro antes de processar entradas da nova tela. Isso impede que o clique do Game Over escolha a Bíblia.
+- Integração com a main em 899d58c: preservadas as notas das duas versões. Compilação, auditoria de inimigos e teste de encontro passaram.

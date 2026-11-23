@@ -3,7 +3,7 @@
 
 #include "raylib.h"
 
-typedef enum GameTrack { TRACK_MENU, TRACK_COMBAT, TRACK_MINIBOSS, TRACK_COUNT, TRACK_SILENT } GameTrack;
+typedef enum GameTrack { TRACK_MENU, TRACK_COMBAT, TRACK_MINIBOSS, TRACK_CHAPEL, TRACK_COUNT, TRACK_SILENT } GameTrack;
 typedef enum AudioChannel { AUDIO_MUSIC, AUDIO_EFFECTS, AUDIO_CHANNELS } AudioChannel;
 
 typedef struct GameAudio {

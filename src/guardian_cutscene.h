@@ -15,7 +15,7 @@ enum { CINEMATIC_LEAVES = 1, CINEMATIC_FOG = 2, CINEMATIC_SHAKE = 4,
 
 typedef struct GuardianScene {
     char id[64], image[96], speaker[48], dialogue[512];
-    char narration[512];
+    char narration[512], fallbackImage[96];
     GuardianEventType type;
     float narrationAt, narrationDuration, narrationFade;
     char audioEvent[64], music[160], title[128], subtitle[160];
@@ -55,6 +55,7 @@ float GuardianNarrationOpacity(const GuardianScene *shot, float elapsed);
 bool InitAngelCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume);
 bool InitVillageCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume);
 bool InitCoveiroCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume);
+bool InitBonelandCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume);
 bool InitGuardianCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume);
 bool InitGuardianAftermath(GuardianCutscene *scene, bool passage, float musicVolume, float effectsVolume);
 void UpdateGuardianCutscene(GuardianCutscene *scene, float dt, GuardianCutsceneInput input);

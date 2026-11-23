@@ -13,7 +13,10 @@ typedef enum GuardianAttack {
 } GuardianAttack;
 enum { COVEIRO_ROOTS, COVEIRO_SHOVEL, COVEIRO_CHARGE, COVEIRO_ATTACK_COUNT };
 enum { MARSHAL_SLASH, MARSHAL_CHARGE, MARSHAL_RETURN, MARSHAL_RUPTURE, MARSHAL_SPIN, MARSHAL_SHOCKWAVE };
-enum { BONE_CHARGE, BONE_CLAW, BONE_DASH, BONE_ATTACK_COUNT };
+enum { BONE_CLAW, BONE_RANGED, BONE_RAIN, BONE_DASH, BONE_BLAST, BONE_ATTACK_COUNT };
+enum { BONE_IDLE_SHEET, BONE_WALK_SHEET, BONE_CLAW_SHEET, BONE_RANGED_SHEET,
+       BONE_RAIN_SHEET, BONE_RAIN_FX_SHEET, BONE_DASH_SHEET, BONE_BLAST_SHEET,
+       BONE_BLAST_FX_SHEET, BONE_SHEET_COUNT };
 typedef enum GuardianPhase {
     GUARDIAN_PHASE_ONE, GUARDIAN_PHASE_TRANSITION, GUARDIAN_PHASE_TWO
 } GuardianPhase;
@@ -29,6 +32,7 @@ typedef struct EnemyProjectile {
     Vector2 direction;
     float remaining;
     int damage;
+    bool boneShot;
 } EnemyProjectile;
 
 typedef struct EnemyImpact { Vector2 position; float remaining; Vector2 direction; } EnemyImpact;
@@ -95,7 +99,7 @@ typedef struct EnemyGroup {
     Texture2D marshalSlam, marshalCharge, templarEffects, templarDust;
     Texture2D templarWalk[TEMPLAR_MARSHAL + 1], templarAttack[TEMPLAR_MARSHAL + 1];
     Texture2D bonelandGhoul, bonelandCultist;
-    Texture2D boneLordWalk, boneLordPounce, boneLordClaw, boneLordDash, boneLordBite;
+    Texture2D boneLordSheets[BONE_SHEET_COUNT];
     Texture2D sealMarker;
     Texture2D bossSprites, bossWalk, bossAttack, roots, rootWave, curse, guardianMelee;
     Texture2D guardianSpawn, guardianDefeat;
