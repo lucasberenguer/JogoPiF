@@ -3,6 +3,7 @@
 #include "menu.h"
 #include "raymath.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define COMMON_DAMAGE_BONUS 0.15f
@@ -39,6 +40,8 @@ typedef struct RewardUiAssets {
 } RewardUiAssets;
 
 static RewardUiAssets rewardUiAssets = {0};
+static Texture2D ritualFrames[2];
+static bool ritualFramesAttempted;
 
 static Texture2D LoadRewardArtwork(const char *path, bool rareFrame) {
     if (!FileExists(path)) return (Texture2D){0};
@@ -85,6 +88,11 @@ void UnloadEncounterRewardUi(void) {
     if (rewardUiAssets.rerollButton.id) UnloadTexture(rewardUiAssets.rerollButton);
     if (rewardUiAssets.banner.id) UnloadTexture(rewardUiAssets.banner);
     rewardUiAssets = (RewardUiAssets){0};
+    for (int i = 0; i < 2; i++) {
+        if (ritualFrames[i].id) UnloadTexture(ritualFrames[i]);
+        ritualFrames[i] = (Texture2D){0};
+    }
+    ritualFramesAttempted = false;
 }
 
 static const int mapRarityWeights[MAX_CAMPAIGN_MAPS][RARITY_COUNT] = {
@@ -507,10 +515,76 @@ static void RollRewards(Encounter *e) {
     }
 }
 
+static Rectangle RitualPanel(int index) {
+    float w = GetScreenWidth(), h = GetScreenHeight();
+    bool stacked = w < h * 1.25f;
+    float gap = Clamp(w * .012f, 6, 16);
+    float width = stacked ? fminf(w - 2 * gap, (h - 3 * gap) * .75f)
+                          : fminf((w - 3 * gap) * .5f, (h - 2 * gap) * 1.5f);
+    width = fminf(width, 740);
+    float height = width / 1.5f;
+    if (stacked)
+        return (Rectangle){(w-width)*.5f, (h-2*height-gap)*.5f+index*(height+gap), width, height};
+    return (Rectangle){(w-2*width-gap)*.5f+index*(width+gap), (h-height)*.5f, width, height};
+}
+
+static Rectangle RitualArea(Rectangle panel, float x, float y, float width, float height) {
+    return (Rectangle){panel.x+x*panel.width, panel.y+y*panel.height,
+                       width*panel.width, height*panel.height};
+}
+
 static Rectangle ChoiceRect(int index, int count) {
-    float w=fminf(330, (GetScreenWidth()-80.0f)/count-16);
-    return (Rectangle){GetScreenWidth()/2.0f-(count*w+(count-1)*16)/2+index*(w+16),
-                       GetScreenHeight()/2.0f-30,w,140};
+    Rectangle panel = RitualPanel(1);
+    float row = .48f/count;
+    return RitualArea(panel,.19f,.275f+index*row,.62f,row-.016f);
+}
+
+static void DrawRitualText(const char *text, Rectangle area, float size, Color color) {
+    // Wrap at a space near the middle, preserving UTF-8 operators and words.
+    char wrapped[384];
+    int length = snprintf(wrapped,sizeof(wrapped),"%s",text);
+    if (length > 0 && length < (int)sizeof(wrapped) &&
+        MeasureGameTextEx(wrapped,size,false).x > area.width && area.height >= 28) {
+        int split = -1;
+        for (int i = 1; i < length-1; i++)
+            if (wrapped[i]==' ' && (split<0 || abs(i-length/2)<abs(split-length/2))) split=i;
+        if (split>=0) wrapped[split]='\n';
+    }
+    DrawGameTextIn(wrapped,area,size,color,false);
+}
+
+void DrawRitualQuestion(const char *title, const char *prompt, const char *detail,
+                        const char *const choices[], int count) {
+    if (!ritualFramesAttempted) {
+        ritualFramesAttempted = true;
+        ritualFrames[0] = LoadRewardArtwork("assets/ui/ritual_proposition_frame.png",false);
+        ritualFrames[1] = LoadRewardArtwork("assets/ui/ritual_answers_frame.png",false);
+    }
+    Rectangle question = RitualPanel(0), answers = RitualPanel(1);
+    for (int i = 0; i < 2; i++) {
+        Texture2D art = ritualFrames[i];
+        Rectangle panel = i ? answers : question;
+        if (art.id)
+            DrawTexturePro(art,(Rectangle){0,0,art.width,art.height},panel,(Vector2){0},0,WHITE);
+        else {
+            DrawRectangleRec(panel,(Color){34,16,29,255});
+            DrawRectangleLinesEx(panel,2,GOLD);
+        }
+    }
+    float font = Clamp(question.width*.059f,16,34);
+    DrawGameTextIn(title,RitualArea(question,.19f,.267f,.62f,.105f),font,GOLD,true);
+    DrawRitualText(prompt,RitualArea(question,.17f,.39f,.66f,.18f),font,RAYWHITE);
+    if (detail && detail[0])
+        DrawRitualText(detail,RitualArea(question,.17f,.57f,.66f,.09f),font*.72f,GOLD);
+
+    for (int i = 0; i < count; i++) {
+        Rectangle box = ChoiceRect(i,count);
+        bool hover = CheckCollisionPointRec(GetMousePosition(),box);
+        DrawRectangleRec(box,hover ? (Color){87,34,91,245} : (Color){44,20,42,239});
+        DrawRectangleLinesEx(box,hover ? 2 : 1,hover ? (Color){246,156,250,255} : (Color){149,83,122,255});
+        DrawRitualText(TextFormat("%d. %s",i+1,choices[i]),
+                       (Rectangle){box.x+6,box.y+3,box.width-12,box.height-6},font*.86f,RAYWHITE);
+    }
 }
 
 static Rectangle RewardCardRect(int index, int count) {
@@ -550,6 +624,11 @@ static int ChoiceInput(int count, Rectangle (*choiceRect)(int, int)) {
     }
     return -1;
 }
+
+int ReadRitualChoice(int count) {
+    return ChoiceInput(count,ChoiceRect);
+}
+
 
 static void ApplyCommonBuffKind(Encounter *e, int kind, int *health) {
     if (kind == REWARD_DAMAGE) {
@@ -771,7 +850,7 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
         }
         if (e->phase == ENCOUNTER_BASEMENT_PILLAR) {
             if (IsKeyPressed(KEY_ESCAPE)) { e->phase = ENCOUNTER_FIGHT; return false; }
-            int sel = ChoiceInput(2, ChoiceRect);
+            int sel = ReadRitualChoice(2);
             if (sel >= 0) {
                 static const int solution[4] = {0, 1, 0, 1}; /* NW=V(0), NE=F(1), SW=V(0), SE=F(1) */
                 int t = e->basementTarget;
@@ -911,7 +990,7 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
         }
     } else if (e->phase==ENCOUNTER_SEAL) {
         Enemy *enemy=&enemies->list[e->sealEnemy];
-        int selected=ChoiceInput(enemy->type==ENEMY_BOSS?3:2, ChoiceRect);
+        int selected=ReadRitualChoice(enemy->type==ENEMY_BOSS?3:2);
         if (selected>=0) return AnswerEncounterSeal(e,enemies,health,selected);
     }
     return false;
@@ -1299,27 +1378,14 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         return;
     }
     if (e->phase == ENCOUNTER_BASEMENT_PILLAR) {
-        int sw = GetScreenWidth();
-        int titleY = (int)(GetScreenHeight() / 2 - 160);
-        static const char *pnames[4] = {
-            "Pilar Noroeste (Sup. Esq.)",
-            "Pilar Nordeste (Sup. Dir.)",
-            "Pilar Sudoeste (Inf. Esq.)",
-            "Pilar Sudeste (Inf. Dir.)"
+        static const char *pnames[] = {
+            "Pilar Noroeste (Sup. Esq.)", "Pilar Nordeste (Sup. Dir.)",
+            "Pilar Sudoeste (Inf. Esq.)", "Pilar Sudeste (Inf. Dir.)"
         };
         int t = (e->basementTarget >= 0 && e->basementTarget < 4) ? e->basementTarget : 0;
-        DrawGameTextIn(pnames[t], (Rectangle){0, (float)titleY, (float)sw, 49}, 38, GOLD, true);
-        const char *prompt = "Qual estado lógico deduzido pelas placas ativa este pilar?";
-        DrawGameText(prompt, (sw - MeasureGameText(prompt, 22)) / 2, titleY + 60, 22, RAYWHITE);
-        for (int i = 0; i < 2; i++) {
-            Rectangle box = ChoiceRect(i, 2);
-            DrawRectangleRec(box, CheckCollisionPointRec(GetMousePosition(), box) ? (Color){80,45,50,255} : (Color){40,25,35,255});
-            DrawRectangleLinesEx(box, 2, GOLD);
-            const char *lbl = i == 0 ? "1. Verdadeiro (V)" : "2. Falso (F)";
-            DrawGameText(lbl, (int)box.x + 18, (int)box.y + 20, 20, RAYWHITE);
-        }
-        const char *escHint = "[1 / 2 ou Clique] Escolher  |  [Esc] Voltar";
-        DrawGameText(escHint, (sw - MeasureGameText(escHint, 18)) / 2, GetScreenHeight() / 2 + 145, 18, GOLD);
+        const char *choices[] = {"Verdadeiro (V)", "Falso (F)"};
+        DrawRitualQuestion(pnames[t],"Qual valor as placas indicam para este pilar?",
+                           "Esc para voltar",choices,2);
         return;
     }
     if (e->phase == ENCOUNTER_LETTER) {
@@ -1364,49 +1430,27 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         DrawRewardScreen(e);
         return;
     }
-    int titleY=(int)(GetScreenHeight()/2-160);
-    const char *title=e->phase==ENCOUNTER_SEAL ? (e->progress.map==NECROMANCER_MAP ?
-                        "Grande Selo Profano" : "Selo - combate pausado") : "Fim da tentativa";
-    DrawGameTextIn(title,(Rectangle){0,titleY,GetScreenWidth(),49},42,GOLD,true);
-    if (e->phase==ENCOUNTER_DEFEAT) {
-        DrawGameText("Enter: repetir | Esc: voltar ao menu",GetScreenWidth()/2-270,titleY+80,20,RAYWHITE);
+    if (e->phase == ENCOUNTER_DEFEAT) {
+        float width = GetScreenWidth(), center = GetScreenHeight()*.5f;
+        DrawGameTextIn("Fim da tentativa",(Rectangle){0,center-160,width,49},42,GOLD,true);
+        DrawGameTextIn("Enter: repetir | Esc: voltar ao menu",
+                       (Rectangle){0,center-80,width,38},20,RAYWHITE,false);
         return;
     }
-    int count=enemies->list[e->sealEnemy].type==ENEMY_BOSS ? 3 : 2;
-    if (e->phase==ENCOUNTER_SEAL) {
-        if (count == 3) {
-            const char *prompt = TextFormat("Qual expressão equivale a: %s ?", e->sealQuestion.mc.questionText);
-            if (e->progress.map==NECROMANCER_MAP) {
-                DrawGameTextIn(prompt,(Rectangle){18,titleY+46,GetScreenWidth()-36,35},22,RAYWHITE,false);
-                DrawGameTextIn(TextFormat("Tentativa %d/3",e->progress.finalSealFailures+1),
-                    (Rectangle){18,titleY+81,GetScreenWidth()-36,27},18,GOLD,false);
-            } else {
-                DrawGameTextIn(prompt,(Rectangle){18,titleY+56,GetScreenWidth()-36,35},22,RAYWHITE,false);
-            }
-        } else {
-            const char *valuesLine = e->sealQuestion.vf.valuesText;
-            const char *prompt = TextFormat("Qual o valor de: %s?", e->sealQuestion.vf.exprText);
-            DrawGameTextIn(valuesLine, (Rectangle){18, titleY + 46, GetScreenWidth() - 36, 30}, 20, GOLD, false);
-            DrawGameTextIn(prompt, (Rectangle){18, titleY + 78, GetScreenWidth() - 36, 34}, 22, RAYWHITE, false);
-        }
-    }
-    for (int i=0;i<count;i++) {
-        Rectangle box=ChoiceRect(i,count);
-        bool hovered = CheckCollisionPointRec(GetMousePosition(),box);
-        DrawRectangleRec(box,hovered?(Color){80,45,50,255}:(Color){40,25,35,255});
-        DrawRectangleLinesEx(box,2,GOLD);
-        const char *label = count==2 ? (i==0?"Verdadeiro":"Falso")
-                                     : e->sealQuestion.mc.choices[i];
-        if (e->phase==ENCOUNTER_SEAL && e->progress.map==NECROMANCER_MAP)
-            DrawGameTextIn(TextFormat("%d. %s",i+1,label),
-                (Rectangle){box.x+8,box.y+6,box.width-16,box.height-12},19,RAYWHITE,false);
-        else {
-            const char *optText = TextFormat("%d. %s", i + 1, label);
-            Rectangle optArea = {box.x + 14.0f, box.y + 16.0f, box.width - 24.0f, 34.0f};
-            if (MeasureGameText(optText, 19) > (int)optArea.width)
-                DrawGameTextIn(optText, optArea, 19.0f, RAYWHITE, false);
-            else
-                DrawGameText(optText, (int)box.x + 14, (int)box.y + 20, 19, RAYWHITE);
-        }
+    if (e->phase != ENCOUNTER_SEAL) return;
+
+    bool boss = enemies->list[e->sealEnemy].type == ENEMY_BOSS;
+    bool final = e->progress.map == NECROMANCER_MAP;
+    const char *title = final ? "Grande Selo Profano" : "Selo";
+    if (boss) {
+        const LogicMCQuestion *question = &e->sealQuestion.mc;
+        const char *choices[] = {question->choices[0],question->choices[1],question->choices[2]};
+        char hint[64] = "Escolha a expressão equivalente";
+        if (final) snprintf(hint,sizeof(hint),"Expressão equivalente · Tentativa %d/3",
+                            e->progress.finalSealFailures+1);
+        DrawRitualQuestion(title,question->questionText,hint,choices,3);
+    } else {
+        const char *choices[] = {"Verdadeiro","Falso"};
+        DrawRitualQuestion(title,e->sealQuestion.vf.exprText,e->sealQuestion.vf.valuesText,choices,2);
     }
 }

@@ -434,7 +434,7 @@ int main(void) {
     UpdateEnemies(&group,&map,target,.34f,false,&health,100);
     assert(health==100 && !coveiro->attackConnected);
     UpdateEnemies(&group,&map,target,.03f,false,&health,100);
-    assert(health==72 && coveiro->attackConnected && CemeteryAnimationPose(coveiro).frame==5);
+    assert(health==72 && coveiro->attackConnected && CemeteryAnimationPose(coveiro).frame==7);
     UpdateEnemies(&group,&map,target,.45f,false,&health,100);
     assert(coveiro->state==ENEMY_IDLE && !coveiro->guardianMelee && coveiro->guardianMeleeCooldown>0);
     coveiro->position=(Vector2){800,600};

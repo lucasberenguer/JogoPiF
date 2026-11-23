@@ -236,23 +236,23 @@ CemeteryPose CemeteryAnimationPose(const Enemy *enemy) {
             p = (CemeteryPose){CEM_BOSS_FALL, 7, 4, emergeRows[enemy->facing], frame, false};
         } else if (enemy->state == ENEMY_WALK) {
             p.atlas = CEM_BOSS_WALK;
-            p.columns = 10;
-            p.frame = (int)(enemy->walkTime * 18) % 10;
+            p.columns = 9;
+            p.frame = (int)(enemy->walkTime * 18) % p.columns;
         } else if (enemy->state == ENEMY_IDLE) {
             p.frame = (int)(t * 5) % 4;
         } else if (enemy->state == ENEMY_ATTACK && enemy->guardianMelee) {
             p.atlas = CEM_BOSS_MELEE;
-            p.columns = 10;
-            p.frame = t < COVEIRO_MELEE_WINDUP ? (int)Clamp(t / COVEIRO_MELEE_WINDUP * 5, 0, 4)
-                : 5 + (int)Clamp((t - COVEIRO_MELEE_WINDUP) /
-                                 (COVEIRO_MELEE_DURATION - COVEIRO_MELEE_WINDUP) * 5, 0, 4);
+            p.columns = 11;
+            p.frame = t < COVEIRO_MELEE_WINDUP ? (int)Clamp(t / COVEIRO_MELEE_WINDUP * 7, 0, 6)
+                : 7 + (int)Clamp((t - COVEIRO_MELEE_WINDUP) /
+                                 (COVEIRO_MELEE_DURATION - COVEIRO_MELEE_WINDUP) * 4, 0, 3);
         } else if (enemy->state == ENEMY_ATTACK) {
             p.atlas = CEM_BOSS_SLAM + enemy->bossAttack;
             p.row = enemy->facing;
             if (enemy->bossAttack == COVEIRO_SHOVEL) {
-                p.columns = 10;
-                p.frame = t < .8f ? (int)Clamp(t / .8f * 4, 0, 3)
-                    : 4 + (int)Clamp((t - .8f) / .85f * 6, 0, 5);
+                p.columns = 12;
+                p.frame = t < .8f ? (int)Clamp(t / .8f * 6, 0, 5)
+                    : 6 + (int)Clamp((t - .8f) / .85f * 6, 0, 5);
             } else if (enemy->bossAttack == COVEIRO_CHARGE) {
                 p.columns = 9;
                 bool phaseTwo = enemy->guardianPhase == GUARDIAN_PHASE_TWO;
@@ -261,9 +261,9 @@ CemeteryPose CemeteryAnimationPose(const Enemy *enemy) {
                 else if (t < (phaseTwo ? 1.77f : 1.35f)) p.frame = 3 + (int)(t * 12) % 3;
                 else p.frame = t < (phaseTwo ? 1.9f : 1.52f) ? 7 : 8;
             } else {
-                p.columns = 8;
+                p.columns = 9;
                 p.frame = t < .8f ? (int)Clamp(t / .8f * 4, 0, 3)
-                    : 4 + (int)Clamp((t - .8f) / .85f * 4, 0, 3);
+                    : 4 + (int)Clamp((t - .8f) / .85f * 5, 0, 4);
             }
         }
         return p;
@@ -342,7 +342,7 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
         Texture2D tex=atlases[pose.atlas];
         int frame=pose.frame,row=pose.row;
         float cw=(float)tex.width/pose.columns,ch=(float)tex.height/pose.rows;
-        float baseSize=boss?ch*(210.0f/256.0f):special?128:96;
+        float baseSize=boss?288*(210.0f/256.0f):special?128:96;
         float height=baseSize*(1.0f-.22f*collapse);
         float width=baseSize*cw/ch;
         float bob=0;
@@ -379,7 +379,7 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
         }
         DrawTexturePro(tex, (Rectangle){frame*cw, row*ch, pose.flip?-cw:cw, ch},
             (Rectangle){enemy->position.x, enemy->position.y+bob, width, height},
-            (Vector2){width/2,boss?(ch-16)*(210.0f/256.0f):height*.914f}, lean, tint);
+            (Vector2){width/2,boss?height*(272.0f/288.0f):height*.914f}, lean, tint);
 
         if (fallen) DrawGameText("E: selar", (int)enemy->position.x-30, (int)enemy->position.y+10, 16, GOLD);
         if (!boss && EnemyCanBeHit(enemy) && enemy->health < enemy->maxHealth) {
