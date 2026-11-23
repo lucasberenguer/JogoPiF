@@ -54,6 +54,8 @@ typedef struct RunProgress {
     bool angelSceneCompleted;
     int angelBlessingUses;
     int finalSealFailures;
+    double runSeconds;
+    bool runEligible;
     VillageAftermath villageAftermath;
     bool igrisAftermathPending;
     GuardianAftermathState guardianAftermath;

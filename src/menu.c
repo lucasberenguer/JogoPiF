@@ -1,5 +1,6 @@
 #include "game_text.h"
 #include "menu.h"
+#include "speedrun.h"
 #include <stdio.h>
 #include <math.h>
 #include "rlgl.h"
@@ -128,6 +129,11 @@ bool SaveClearingCheckpoint(const RunProgress *p) {
         size_t used=strlen(data);
         snprintf(data+used,sizeof(data)-used,"final_seal_failures=%d\n",p->finalSealFailures);
     }
+    {
+        size_t used=strlen(data);
+        snprintf(data+used,sizeof(data)-used,"run_seconds=%.2f\nrun_eligible=%d\n",
+                 SpeedrunTime(),SpeedrunEligible()?1:0);
+    }
     return SaveFileText(SavePath(), data);
 }
 
@@ -214,6 +220,14 @@ bool LoadClearingCheckpoint(RunProgress *p) {
     bool initWeaponValid=!initW || (sscanf(initW+1,"initial_weapon=%d",&parsedInitWeapon)==1 &&
         parsedInitWeapon>=0 && parsedInitWeapon<3);
     loaded.initialWeapon=parsedInitWeapon;
+    const char *runTime=strstr(data,"\nrun_seconds=");
+    const char *runEligible=strstr(data,"\nrun_eligible=");
+    int eligible=0;
+    bool runValid=runTime && runEligible &&
+        sscanf(runTime+1,"run_seconds=%lf",&loaded.runSeconds)==1 &&
+        sscanf(runEligible+1,"run_eligible=%d",&eligible)==1 &&
+        isfinite(loaded.runSeconds) && loaded.runSeconds>=0 && eligible>=0 && eligible<=1;
+    loaded.runEligible=runValid && eligible==1;
     UnloadFileText(data);
     /* A quarta onda antiga da Clareira ou do Cemitério agora é a etapa do chefe. */
     if ((loaded.map==CLEARING_MAP || loaded.map==CEMETERY_MAP) &&
@@ -283,6 +297,15 @@ bool InitMenu(Menu *m) {
         if (!m->buttons[i].id) { UnloadMenu(m); return false; }
         SetTextureFilter(m->buttons[i], TEXTURE_FILTER_POINT);
     }
+    static const char *creditFiles[4] = {
+        "assets/credits/arthur.png", "assets/credits/marcos.png",
+        "assets/credits/silvio.png", "assets/credits/joao_paulo.png"
+    };
+    for (int i=0; i<4; i++) {
+        m->creditPhotos[i] = LoadTexture(creditFiles[i]);
+        if (!m->creditPhotos[i].id) { UnloadMenu(m); return false; }
+        SetTextureFilter(m->creditPhotos[i], TEXTURE_FILTER_BILINEAR);
+    }
     m->hasSave = LoadMenuCheckpointWeapon() >= 0;
     m->pause.background = LoadTexture("assets/pausa_fundo.png");
     m->pause.frame = LoadPauseFrame();
@@ -324,6 +347,7 @@ void UnloadMenu(Menu *m) {
     if (m->videoFrame.id) UnloadTexture(m->videoFrame);
     CloseMenuVideo(m->video);
     for (int i=0; i<4; i++) if (m->buttons[i].id) UnloadTexture(m->buttons[i]);
+    for (int i=0; i<4; i++) if (m->creditPhotos[i].id) UnloadTexture(m->creditPhotos[i]);
     for (int i=0; i<10; i++) if (m->hero[i].id) UnloadTexture(m->hero[i]);
     if (m->fog.id) UnloadTexture(m->fog);
     if (m->fogTexture.id) UnloadTexture(m->fogTexture);
@@ -544,7 +568,7 @@ static void DrawButtonLabel(const char *label, Rectangle bounds, Color tint) {
                           bounds.width*.553f, bounds.height*.52f};
     Color ink = ColorTint(buttonText, tint);
     if (ink.a < 170) ink.a = 170;
-    DrawGameTextIn(label, textArea, bounds.height*.35f, ink, true);
+    DrawGameTextIn(label, textArea, bounds.height*.35f, ink, GAME_TEXT_TITLE);
 }
 
 static void DrawLabeledButton(const Menu *menu, int index, const char *label,
@@ -552,7 +576,7 @@ static void DrawLabeledButton(const Menu *menu, int index, const char *label,
     Texture2D button = menu->buttons[index];
     if (!menu->pause.shader.id) {
         DrawPausePlate(menu, bounds, tint);
-        DrawGameTextIn(label, bounds, bounds.height*.33f, ColorTint(buttonText, tint), true);
+        DrawGameTextIn(label, bounds, bounds.height*.33f, ColorTint(buttonText, tint), GAME_TEXT_TITLE);
         return;
     }
     DrawPauseLayer(&menu->pause, MENU_BUTTON, button, (Rectangle){0, 0, button.width, button.height}, bounds, tint);
@@ -574,7 +598,7 @@ static void DrawPauseButton(const Menu *menu, Rectangle canvas, int index) {
 
     DrawPausePlate(menu, bounds, tint);
     if (!pause->shader.id || !pause->labels.id) {
-        DrawGameTextIn(labels[index], bounds, bounds.height*.33f, ColorTint(buttonText, tint), true);
+        DrawGameTextIn(labels[index], bounds, bounds.height*.33f, ColorTint(buttonText, tint), GAME_TEXT_TITLE);
         return;
     }
 
@@ -596,7 +620,7 @@ static void DrawPauseTextButton(const Menu *menu, Rectangle canvas, Rectangle lo
     float focus = CheckCollisionPointRec(GetMousePosition(), bounds) ? 1.0f : 0.0f;
     Color tint = MenuButtonTint(bounds, focus, false);
     DrawPausePlate(menu, bounds, tint);
-    DrawGameTextIn(label, bounds, fontSize*canvas.width/1672.0f, ColorTint(buttonText, tint), false);
+    DrawGameTextIn(label, bounds, fontSize*canvas.width/1672.0f, ColorTint(buttonText, tint), GAME_TEXT_BODY);
 }
 
 static void DrawSettingsTabs(const Menu *menu, Rectangle canvas) {
@@ -608,7 +632,7 @@ static void DrawSettingsTabs(const Menu *menu, Rectangle canvas) {
         if (!active) tint = ColorBrightness(tint, -.35f);
         DrawPausePlate(menu, bounds, tint);
         DrawGameTextIn(names[tab], bounds, 32*canvas.width/1672.0f,
-                       active ? GOLD : ColorTint(buttonText, tint), false);
+                       active ? GOLD : ColorTint(buttonText, tint), GAME_TEXT_BODY);
     }
 }
 
@@ -636,7 +660,7 @@ static void DrawVideoSettings(const Menu *menu, Rectangle canvas) {
             case VIDEO_ROW_COUNTER: value = video->showFps ? "Ligado" : "Desligado"; break;
         }
         DrawGameTextIn(TextFormat("<   %s   >", value), PauseRect(canvas, VideoValue(row)),
-                       31*scale, focused ? GOLD : RAYWHITE, false);
+                       31*scale, focused ? GOLD : RAYWHITE, GAME_TEXT_BODY);
     }
     const char *hint = "Setas ou clique alteram  ·  Tab troca de aba";
     if (menu->videoFocus == VIDEO_ROW_RENDER)
@@ -647,7 +671,7 @@ static void DrawVideoSettings(const Menu *menu, Rectangle canvas) {
 static void DrawSettings(const Menu *menu, Rectangle canvas) {
     DrawMenuPanel(PauseRect(canvas, (Rectangle){395, 148, 882, 668}));
     DrawGameTextIn("Configurações", PauseRect(canvas, (Rectangle){395, 198, 882, 76}),
-                   62*canvas.width/1672.0f, buttonText, true);
+                   62*canvas.width/1672.0f, buttonText, GAME_TEXT_TITLE);
     DrawSettingsTabs(menu, canvas);
     if (menu->settingsTab == 1) {
         DrawVideoSettings(menu, canvas);
@@ -706,7 +730,7 @@ void DrawPauseMenu(const Menu *menu) {
             DrawPauseLayer(pause, PAUSE_FRAME, pause->frame, source, destination, WHITE);
         }
         DrawGameTextIn("Pausa", PauseRect(canvas, (Rectangle){720, 144, 232, 66}),
-                       63*canvas.width/1672.0f, buttonText, true);
+                       63*canvas.width/1672.0f, buttonText, GAME_TEXT_TITLE);
         for (int i = 0; i < 4; i++) DrawPauseButton(menu, canvas, i);
         return;
     }
@@ -719,7 +743,7 @@ void DrawPauseMenu(const Menu *menu) {
     DrawMenuPanel(panel);
     DrawPauseTextButton(menu, canvas, pauseBack, "Voltar  ·  Esc", 28);
     DrawGameTextIn("Controles", PauseRect(canvas, (Rectangle){395, 198, 882, 80}),
-                   65*canvas.width/1672.0f, buttonText, true);
+                   65*canvas.width/1672.0f, buttonText, GAME_TEXT_TITLE);
     DrawPauseText(canvas, "WASD  ·  Mover", 331, 37, RAYWHITE);
     DrawPauseText(canvas, "Espaço / Clique direito  ·  Esquivar com qualquer arma", 400, 34, RAYWHITE);
     DrawPauseText(canvas, "Clique esquerdo  ·  Atacar ou acelerar a Bíblia", 469, 34, RAYWHITE);
@@ -745,6 +769,11 @@ MenuAction UpdateMenu(Menu *m) {
         if (pixels) UpdateTexture(m->videoFrame, pixels);
     }
     m->hasSave = LoadMenuCheckpointWeapon() >= 0;
+    if (m->page == 4) {
+        if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_BACKSPACE) || IsKeyPressed(KEY_L)) m->page=0;
+        return MENU_NONE;
+    }
+    if (m->page == 0 && IsKeyPressed(KEY_L)) { m->page=4; return MENU_NONE; }
     if (m->page == 3) {
         if (IsKeyPressed(KEY_ESCAPE)) m->page = 0;
         if (IsKeyPressed(KEY_ENTER)) { m->page = 0; return MENU_START; }
@@ -841,6 +870,28 @@ static void DrawMenuBackground(const Menu *m) {
 void DrawMenu(const Menu *m) {
     DrawMenuBackground(m);
     DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,0.25f));
+    if (m->page==4) {
+        SpeedrunBoard board;
+        SpeedrunLoad(&board);
+        float w=fminf(560,GetScreenWidth()-32.0f);
+        Rectangle panel={(GetScreenWidth()-w)/2,12,w,GetScreenHeight()-24.0f};
+        DrawMenuPanel(panel);
+        float rowHeight=fminf(42.0f,(panel.height-112.0f)/SPEEDRUN_TOP);
+        DrawGameTextIn("Ranking de speedrun",(Rectangle){panel.x+12,panel.y+12,w-24,44},
+                       34,buttonText,GAME_TEXT_TITLE);
+        if (!board.count) DrawGameTextIn("Nenhuma campanha concluída ainda",
+            (Rectangle){panel.x+16,panel.y+80,w-32,40},24,RAYWHITE,GAME_TEXT_BODY);
+        for (int i=0;i<board.count;i++) {
+            char timeText[40], row[80];
+            SpeedrunFormat(timeText,sizeof(timeText),board.times[i]);
+            snprintf(row,sizeof(row),"%2d.  %s",i+1,timeText);
+            DrawGameTextIn(row,(Rectangle){panel.x+28,panel.y+66+i*rowHeight,w-56,rowHeight},
+                           (int)fminf(26.0f,rowHeight*.78f),i==0?GOLD:RAYWHITE,GAME_TEXT_BODY);
+        }
+        DrawGameTextIn("L ou Esc: voltar",(Rectangle){panel.x+16,panel.y+panel.height-48,w-32,32},
+                       20,LIGHTGRAY,GAME_TEXT_BODY);
+        return;
+    }
     if (m->page == 0) {
         static const char *labels[] = {"Iniciar Jogo", "Continuar", "Configurações", "Créditos"};
         for (int i=0; i<4; i++) {
@@ -849,42 +900,88 @@ void DrawMenu(const Menu *m) {
             DrawLabeledButton(m, i, labels[i], b, MenuButtonTint(b, m->buttonFocus[i], disabled));
         }
         if (!m->hasSave) {
-            const char *hint = "Continuar disponível após iniciar uma partida";
-            float width = fminf(GetScreenWidth()-32, MeasureGameText(hint, 20)+24);
-            Rectangle notice = {(GetScreenWidth()-width)/2, GetScreenHeight()-46, width, 30};
+            const char *hint = "Continuar disponível\napós iniciar uma partida";
+            Rectangle button = ButtonBounds(1);
+            float x = button.x + button.width + 12;
+            float width = fminf(224, GetScreenWidth()-x-12);
+            Rectangle notice = {x, button.y + (button.height-54)/2, width, 54};
             DrawRectangleRounded(notice, .35f, 8, Fade(BLACK, .65f));
-            DrawGameTextIn(hint, notice, 20, RAYWHITE, false);
+            DrawGameTextIn(hint, (Rectangle){notice.x+8,notice.y+4,notice.width-16,notice.height-8},
+                           18, RAYWHITE, GAME_TEXT_BODY);
         }
         Rectangle testBox = TestButtonBounds();
+        DrawGameTextIn("L: Ranking de speedrun",(Rectangle){16,GetScreenHeight()-48,280,30},
+                       19,GOLD,GAME_TEXT_BODY);
         bool testHover = CheckCollisionPointRec(GetMousePosition(), testBox);
         DrawRectangleRounded(testBox, .25f, 8, testHover ? (Color){92, 34, 40, 235} : (Color){38, 18, 24, 220});
         DrawRectangleRoundedLinesEx(testBox, .25f, 8, 2, testHover ? GOLD : (Color){184, 145, 76, 220});
-        DrawGameTextIn("Teste", testBox, 24, testHover ? GOLD : RAYWHITE, true);
+        DrawGameTextIn("Teste", testBox, 24, testHover ? GOLD : RAYWHITE, GAME_TEXT_TITLE);
         Rectangle chapelBox = TestChapelButtonBounds();
         bool chapelHover = CheckCollisionPointRec(GetMousePosition(), chapelBox);
         DrawRectangleRounded(chapelBox, .25f, 8, chapelHover ? (Color){44, 52, 86, 235} : (Color){24, 28, 44, 220});
         DrawRectangleRoundedLinesEx(chapelBox, .25f, 8, 2, chapelHover ? GOLD : (Color){184, 145, 76, 220});
-        DrawGameTextIn("Capela", chapelBox, 24, chapelHover ? GOLD : RAYWHITE, true);
+        DrawGameTextIn("Capela", chapelBox, 24, chapelHover ? GOLD : RAYWHITE, GAME_TEXT_TITLE);
         Rectangle invertedBox = TestInvertedChapelButtonBounds();
         bool invertedHover = CheckCollisionPointRec(GetMousePosition(), invertedBox);
         DrawRectangleRounded(invertedBox, .25f, 8, invertedHover ? (Color){44, 52, 86, 235} : (Color){24, 28, 44, 220});
         DrawRectangleRoundedLinesEx(invertedBox, .25f, 8, 2, invertedHover ? GOLD : (Color){184, 145, 76, 220});
-        DrawGameTextIn("Capela Invertida", invertedBox, 24, invertedHover ? GOLD : RAYWHITE, true);
+        DrawGameTextIn("Capela Invertida", invertedBox, 24, invertedHover ? GOLD : RAYWHITE, GAME_TEXT_TITLE);
         return;
     }
     if (m->page==1) {
         DrawSettings(m, PauseCanvas());
         return;
     }
+    if (m->page==2) {
+        static const char *names[4] = {"Arthur", "Marcos", "Silvio", "João Paulo"};
+        float sw = (float)GetScreenWidth(), sh = (float)GetScreenHeight();
+        float pw = fminf(920.0f, sw-24.0f), ph = fminf(630.0f, sh-24.0f);
+        Rectangle panel = {(sw-pw)/2, (sh-ph)/2, pw, ph};
+        DrawMenuPanel(panel);
+        float titleH = fminf(54.0f, ph*0.13f);
+        DrawGameTextIn("Créditos", (Rectangle){panel.x+12,panel.y+8,pw-24,titleH},
+                       (int)fminf(42.0f,titleH*.8f),buttonText,GAME_TEXT_TITLE);
+        int columns = pw >= 720.0f ? 4 : 2;
+        int rows = 4/columns;
+        float gap = fminf(18.0f,pw*.025f);
+        float margin = fminf(36.0f,pw*.05f);
+        float top = panel.y+titleH+20.0f;
+        float bottom = panel.y+ph-42.0f;
+        float cardW = (pw-2*margin-(columns-1)*gap)/columns;
+        float cardH = (bottom-top-(rows-1)*gap)/rows;
+        for (int i=0;i<4;i++) {
+            Rectangle card = {panel.x+margin+(i%columns)*(cardW+gap),
+                              top+(i/columns)*(cardH+gap),cardW,cardH};
+            DrawRectangleRounded(card,.08f,8,Fade(BLACK,.66f));
+            DrawRectangleRoundedLinesEx(card,.08f,8,2,Fade(GOLD,.72f));
+            float labelH = fminf(38.0f,cardH*.23f);
+            Rectangle photo = {card.x+5,card.y+5,card.width-10,card.height-labelH-8};
+            Texture2D t = m->creditPhotos[i];
+            if (t.id) {
+                float sourceAspect = (float)t.width/t.height;
+                float targetAspect = photo.width/photo.height;
+                Rectangle src = {0,0,(float)t.width,(float)t.height};
+                if (sourceAspect > targetAspect) {
+                    src.width = t.height*targetAspect;
+                    src.x = (t.width-src.width)/2;
+                } else {
+                    src.height = t.width/targetAspect;
+                    src.y = (t.height-src.height)/2;
+                }
+                DrawTexturePro(t,src,photo,(Vector2){0,0},0,WHITE);
+            }
+            DrawGameTextIn(names[i],(Rectangle){card.x+4,card.y+card.height-labelH-2,
+                           card.width-8,labelH},(int)fminf(26.0f,labelH*.8f),RAYWHITE,GAME_TEXT_BODY);
+        }
+        DrawGameTextIn("Esc: voltar",(Rectangle){panel.x+12,panel.y+ph-37,pw-24,30},
+                       20,LIGHTGRAY,GAME_TEXT_BODY);
+        return;
+    }
     Rectangle p = {GetScreenWidth()/2.0f-330, GetScreenHeight()/2.0f-140,660,280};
     DrawMenuPanel(p);
-    DrawGameTextEx(m->page==2 ? "Créditos" : "Nova Partida", (Vector2){p.x+50,p.y+34},
-                   42, buttonText, true);
-    if (m->page==2) {
-        DrawGameText("Jogo PIF",(int)p.x+50,(int)p.y+110,26,RAYWHITE);
-    } else {
-        DrawGameText("Substituir o progresso salvo?",(int)p.x+50,(int)p.y+105,25,RAYWHITE);
-        DrawGameText("Enter: confirmar",(int)p.x+50,(int)p.y+155,22,RAYWHITE);
-    }
+    DrawGameTextEx("Nova Partida", (Vector2){p.x+50,p.y+34},
+                   42, buttonText, GAME_TEXT_TITLE);
+    DrawGameText("Substituir o progresso salvo?",(int)p.x+50,(int)p.y+105,25,RAYWHITE);
+    DrawGameText("Enter: confirmar",(int)p.x+50,(int)p.y+155,22,RAYWHITE);
     DrawGameText("Esc: voltar",(int)p.x+50,(int)p.y+218,22,RAYWHITE);
 }

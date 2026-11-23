@@ -3,6 +3,7 @@
 #include "raymath.h"
 #include "clearing.h"
 #include "hud.h"
+#include "speedrun.h"
 #include "menu.h"
 #include "weapon_select.h"
 #include "bible.h"
@@ -275,10 +276,17 @@ int main(void) {
     bool choosingWeaponAfterDeath=false;
     int currentWeapon = -1;
     Encounter encounter = {.progress = {.weapon=0}};
+    SpeedrunBoard speedrunBoard;
+    SpeedrunLoad(&speedrunBoard);
+    bool speedrunRecorded=false;
     const float entryFadeDuration = 1.15f;
     float entryFadeRemaining = 0.0f;
 
     while (!WindowShouldClose()) {
+        if ((screen==2 || screen==GUARDIAN_SCREEN || screen==OPENING_SCREEN) &&
+            !devTools.open && !openingPreview && playerHealth>0 &&
+            !(encounter.progress.map==NECROMANCER_MAP && encounter.phase==ENCOUNTER_CLEAR))
+            SpeedrunTick(GetFrameTime());
         bool resolvingDeath=(screen==2 || screen==3) && playerHealth<=0;
         bool toolsBlocked=resolvingDeath || choosingWeaponAfterDeath;
         if (toolsBlocked) devTools.open=false;
@@ -328,6 +336,7 @@ int main(void) {
         if (devTools.open) musicStrength*=.15f;
         UpdateGameMusic(&menu.audio, track, musicStrength, GetFrameTime());
         if (devTools.open) {
+            if (screen==2 || screen==3 || screen==GUARDIAN_SCREEN) SpeedrunInvalidate();
             bool inPractice=encounter.practice && (screen==2 || screen==3);
             DevAction action=devToggle && devWasOpen ? DEV_CLOSE : UpdateDevTools(&devTools,inPractice);
             if (action==DEV_CLOSE) {
@@ -453,6 +462,8 @@ int main(void) {
             } else if (action == MENU_CONTINUE) {
                 RunProgress progress;
                 if (LoadClearingCheckpoint(&progress)) {
+                    SpeedrunStart(progress.runSeconds,progress.runEligible);
+                    speedrunRecorded=progress.map==NECROMANCER_MAP && progress.stage==CLEARING_COMPLETE_STAGE;
                     if (ClearingMapId(&clearing) != progress.map) {
                         Clearing next = {0};
                         if (!InitCampaignMap(&next, progress.map)) break;
@@ -487,6 +498,7 @@ int main(void) {
                 };
                 BeginEncounter(&encounter, &enemies, &clearing, progress, clearing.spawn);
                 encounter.practice = true;
+                SpeedrunStart(0,false);
                 currentWeapon = progress.weapon;
                 playerMaxHealth = progress.maxHealth;
                 playerHealth = progress.health;
@@ -516,6 +528,7 @@ int main(void) {
                 };
                 BeginEncounter(&encounter, &enemies, &clearing, progress, clearing.spawn);
                 encounter.practice = true;
+                SpeedrunStart(0,false);
                 currentWeapon = progress.weapon;
                 playerMaxHealth = progress.maxHealth;
                 playerHealth = progress.health;
@@ -544,7 +557,7 @@ int main(void) {
                 bool hoverTools=CheckCollisionPointRec(GetMousePosition(),toolsButton);
                 DrawRectangleRec(toolsButton,hoverTools?MAROON:Fade(BLACK,.65f));
                 DrawRectangleLinesEx(toolsButton,1,GOLD);
-                DrawGameTextIn("Ferramentas (F1)",toolsButton,20,RAYWHITE,false);
+                DrawGameTextIn("Ferramentas (F1)",toolsButton,20,RAYWHITE,GAME_TEXT_BODY);
             EndGameFrame();
             continue;
         }
@@ -577,6 +590,7 @@ int main(void) {
             }
             if (choice >= 0) {
                 choosingWeaponAfterDeath=false;
+                if (!fromOpening) { SpeedrunStart(0,true); speedrunRecorded=false; }
                 if (!openingSeen) {
                     openingSeen = true;
                     if (InitOpeningCutscene(&opening, menu.audio.volume[AUDIO_MUSIC]/100.0f,
@@ -628,6 +642,12 @@ int main(void) {
                 DrawWeaponSelect(&weaponSelect);
             EndGameFrame();
             continue;
+        }
+        if (clearing.necromancerArena && encounter.phase==ENCOUNTER_CLEAR &&
+            !speedrunRecorded && !encounter.practice && SpeedrunEligible()) {
+            speedrunRecorded=true;
+            if (!SpeedrunRecord(&speedrunBoard,SpeedrunTime()))
+                TraceLog(LOG_WARNING,"Nao foi possivel salvar o ranking de speedrun");
         }
         if (clearing.necromancerArena && encounter.phase==ENCOUNTER_CLEAR &&
             encounter.presentation.remaining<=0 && IsKeyPressed(KEY_ENTER)) {
@@ -700,22 +720,22 @@ int main(void) {
             BeginGameFrame();
             ClearBackground((Color){16,10,22,255});
             DrawGameTextIn("Game Over", (Rectangle){0.0f, centerY - 190.0f, sw, 96.0f},
-                           92.0f, (Color){220, 45, 55, 255}, true);
+                           92.0f, (Color){220, 45, 55, 255}, GAME_TEXT_TITLE);
             DrawGameTextIn("Fim da tentativa", (Rectangle){0.0f, centerY - 82.0f, sw, 52.0f},
-                           48.0f, (Color){255,119,103,255}, true);
+                           48.0f, (Color){255,119,103,255}, GAME_TEXT_TITLE);
             DrawGameTextIn("Sua tentativa terminou.", (Rectangle){0.0f, centerY - 18.0f, sw, 32.0f},
-                           22.0f, RAYWHITE, false);
+                           22.0f, RAYWHITE, GAME_TEXT_BODY);
             DrawRectangleRec(retry,hoverRetry?MAROON:DARKGRAY);
             DrawRectangleLinesEx(retry,2,GOLD);
             DrawGameTextIn("Reiniciar", (Rectangle){retry.x + 12.0f, retry.y + 8.0f, retry.width - 24.0f, retry.height - 16.0f},
-                           32.0f, RAYWHITE, true);
+                           32.0f, RAYWHITE, GAME_TEXT_TITLE);
             DrawRectangleRec(backToMenu,hoverMenu?MAROON:DARKGRAY);
             DrawRectangleLinesEx(backToMenu,2,GOLD);
             DrawGameTextIn("Voltar ao Menu", (Rectangle){backToMenu.x + 12.0f, backToMenu.y + 8.0f, backToMenu.width - 24.0f, backToMenu.height - 16.0f},
-                           32.0f, RAYWHITE, true);
+                           32.0f, RAYWHITE, GAME_TEXT_TITLE);
             DrawGameTextIn("Enter ou R: nova tentativa  |  Esc: voltar ao menu",
                            (Rectangle){0.0f, btnY + btnHeight + 24.0f, sw, 28.0f},
-                           18.0f, LIGHTGRAY, false);
+                           18.0f, LIGHTGRAY, GAME_TEXT_BODY);
             EndGameFrame();
             continue;
         }
@@ -1369,7 +1389,7 @@ int main(void) {
                     24, 53, 18, RAYWHITE);
             }
             DrawHud(&hud, playerHealth, playerMaxHealth,
-                    dodgeCooldown, dodgeRecovery);
+                    dodgeCooldown, dodgeRecovery, SpeedrunTime());
             DrawGameText(TextFormat("Arma: %s", WeaponName((Weapon)currentWeapon)),
                      24, 150, 19, GOLD);
             if (currentWeapon == WEAPON_KATANA)
@@ -1386,7 +1406,7 @@ int main(void) {
                 DrawRectangle(0,GetScreenHeight()-PRACTICE_FOOTER_HEIGHT,GetScreenWidth(),PRACTICE_FOOTER_HEIGHT,Fade(BLACK,.8f));
                 DrawGameTextIn(devTools.invincible ? "PRÁTICA · Invulnerável · F1 ferramentas" :
                     "PRÁTICA · F1 ferramentas",(Rectangle){8,GetScreenHeight()-PRACTICE_FOOTER_HEIGHT,GetScreenWidth()-16,PRACTICE_FOOTER_HEIGHT},
-                    20,GOLD,false);
+                    20,GOLD,GAME_TEXT_BODY);
             }
             if (entering) {
                 float t = entryFadeRemaining / entryFadeDuration;

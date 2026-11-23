@@ -633,13 +633,13 @@ static void DrawRitualText(const char *text, Rectangle area, float size, Color c
     char wrapped[384];
     int length = snprintf(wrapped,sizeof(wrapped),"%s",text);
     if (length > 0 && length < (int)sizeof(wrapped) &&
-        MeasureGameTextEx(wrapped,size,false).x > area.width && area.height >= 28) {
+        MeasureGameTextEx(wrapped,size,GAME_TEXT_BODY).x > area.width && area.height >= 28) {
         int split = -1;
         for (int i = 1; i < length-1; i++)
             if (wrapped[i]==' ' && (split<0 || abs(i-length/2)<abs(split-length/2))) split=i;
         if (split>=0) wrapped[split]='\n';
     }
-    DrawGameTextIn(wrapped,area,size,color,false);
+    DrawGameTextIn(wrapped,area,size,color,GAME_TEXT_BODY);
 }
 
 void DrawRitualQuestion(const char *title, const char *prompt, const char *detail,
@@ -661,7 +661,7 @@ void DrawRitualQuestion(const char *title, const char *prompt, const char *detai
         }
     }
     float font = Clamp(question.width*.059f,16,34);
-    DrawGameTextIn(title,RitualArea(question,.19f,.267f,.62f,.105f),font,GOLD,true);
+    DrawGameTextIn(title,RitualArea(question,.19f,.267f,.62f,.105f),font,GOLD,GAME_TEXT_TITLE);
     DrawRitualText(prompt,RitualArea(question,.17f,.39f,.66f,.18f),font,RAYWHITE);
     if (detail && detail[0])
         DrawRitualText(detail,RitualArea(question,.17f,.57f,.66f,.09f),font*.72f,GOLD);
@@ -1169,12 +1169,12 @@ static void DrawRewardEffects(char *text, Rectangle area, float size) {
         char *wrap = NULL;
         for (char *space = strchr(text, ' '); space; space = strchr(space + 1, ' ')) {
             *space = '\0';
-            bool fits = MeasureGameTextEx(text, size, false).x <= area.width;
+            bool fits = MeasureGameTextEx(text, size, GAME_TEXT_BODY).x <= area.width;
             *space = ' ';
             if (!fits) break;
             wrap = space;
         }
-        if (wrap && MeasureGameTextEx(text, size, false).x > area.width) {
+        if (wrap && MeasureGameTextEx(text, size, GAME_TEXT_BODY).x > area.width) {
             if (end) *end = '\n';
             *wrap = '\0';
             text = wrap + 1;
@@ -1187,7 +1187,7 @@ static void DrawRewardEffects(char *text, Rectangle area, float size) {
     area.y += (area.height - count * step) * .5f;
     area.height = step;
     for (int i = 0; i < count; i++) {
-        DrawGameTextIn(lines[i], area, fminf(step, size), (Color){255, 239, 222, 255}, false);
+        DrawGameTextIn(lines[i], area, fminf(step, size), (Color){255, 239, 222, 255}, GAME_TEXT_BODY);
         area.y += step;
     }
 }
@@ -1217,7 +1217,7 @@ static void DrawRewardCard(Rectangle box, int slot, const Encounter *e, bool hov
     } else {
         DrawRectangleRounded(RewardSection(box, .02f, .10f, .96f, .86f), .07f, 8, fallback[r]);
         DrawRectangleLinesEx(RewardSection(box, .02f, .10f, .96f, .86f), hovered ? 3 : 1, titleInk);
-        DrawGameTextIn(RarityLabel(r), RewardSection(box, .18f, .12f, .64f, .16f), 19, titleInk, false);
+        DrawGameTextIn(RarityLabel(r), RewardSection(box, .18f, .12f, .64f, .16f), 19, titleInk, GAME_TEXT_BODY);
     }
 
     char label[256];
@@ -1225,7 +1225,7 @@ static void DrawRewardCard(Rectangle box, int slot, const Encounter *e, bool hov
     char *details = strchr(label, '\n');
     if (details) *details++ = '\0';
     DrawGameTextIn(TextFormat("%d. %s", slot + 1, label), title,
-                   fminf(26, box.width * .102f), titleInk, false);
+                   fminf(26, box.width * .102f), titleInk, GAME_TEXT_BODY);
     DrawRewardEffects(details, effects, fminf(21, box.width * .076f));
 }
 
@@ -1237,7 +1237,7 @@ static void DrawRerollButton(Rectangle btn, bool disabled, bool hovered) {
     } else {
         DrawRectangleRec(btn, disabled ? DARKGRAY : MAROON);
         DrawRectangleLinesEx(btn, 2, tint);
-        DrawGameTextIn("Sortear", btn, 18, tint, false);
+        DrawGameTextIn("Sortear", btn, 18, tint, GAME_TEXT_BODY);
     }
 }
 
@@ -1253,7 +1253,7 @@ static void DrawRewardScreen(const Encounter *e) {
         DrawTexturePro(rewardUiAssets.banner, (Rectangle){47, 7, 2080, 653},
                        banner, (Vector2){0}, 0, WHITE);
     } else {
-        DrawGameTextIn("Escolha seu bônus", banner, 42, GOLD, true);
+        DrawGameTextIn("Escolha seu bônus", banner, 42, GOLD, GAME_TEXT_TITLE);
     }
     bool canReroll = !IsEpicRewardStage(e);
     Vector2 mouse = GetMousePosition();
@@ -1268,7 +1268,7 @@ static void DrawRewardScreen(const Encounter *e) {
     if (canReroll && e->rerolled) {
         Rectangle button = RerollButtonRect(0, e->rewardCount);
         DrawGameTextIn("Sorteio já usado", (Rectangle){0, button.y + button.height + 3, GetScreenWidth(), 22},
-                       16, (Color){226, 197, 169, 255}, false);
+                       16, (Color){226, 197, 169, 255}, GAME_TEXT_BODY);
     }
 }
 
@@ -1461,7 +1461,7 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
             }
         };
         int tid = (e->chapelTextId >= 0 && e->chapelTextId < 14) ? e->chapelTextId : 0;
-        DrawGameTextIn(titles[tid], (Rectangle){(float)bx, (float)(by + 18), (float)bw, 34}, 28, GOLD, true);
+        DrawGameTextIn(titles[tid], (Rectangle){(float)bx, (float)(by + 18), (float)bw, 34}, 28, GOLD, GAME_TEXT_TITLE);
         for (int i = 0; i < 6; i++) {
             if (bodies[tid][i][0]) DrawGameText(bodies[tid][i], bx + 36, by + 84 + i * 32, 20, RAYWHITE);
         }
@@ -1492,7 +1492,7 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
                 (Rectangle){(sw-width)/2,(sh-hintHeight-height)/2,width,height},
                 (Vector2){0},0,WHITE);
             DrawGameTextIn("Largar a carta · Espaço / Enter / E / Clique",
-                (Rectangle){0,sh-hintHeight,sw,hintHeight},20,GOLD,false);
+                (Rectangle){0,sh-hintHeight,sw,hintHeight},20,GOLD,GAME_TEXT_BODY);
             return;
         }
         int bw = (int)fminf(720.0f, sw - 80.0f), bh = 380;
@@ -1500,7 +1500,7 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         DrawRectangle(bx, by, bw, bh, (Color){38, 28, 22, 245});
         DrawRectangleLinesEx((Rectangle){(float)bx, (float)by, (float)bw, (float)bh}, 2, GOLD);
         const char *ltitle = "Último Registro do Líder da Vila";
-        DrawGameTextIn(ltitle, (Rectangle){(float)bx, (float)(by + 18), (float)bw, 34}, 28, GOLD, true);
+        DrawGameTextIn(ltitle, (Rectangle){(float)bx, (float)(by + 18), (float)bw, 34}, 28, GOLD, GAME_TEXT_TITLE);
         static const char *lines[] = {
             "\"Quando a névoa rubra desceu sobre a Chã de Alegria, nenhum",
             "dos nossos conseguiu resistir à febre que tomou o vale.",
@@ -1524,9 +1524,9 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
     }
     if (e->phase == ENCOUNTER_DEFEAT) {
         float width = GetScreenWidth(), center = GetScreenHeight()*.5f;
-        DrawGameTextIn("Fim da tentativa",(Rectangle){0,center-160,width,49},42,GOLD,true);
+        DrawGameTextIn("Fim da tentativa",(Rectangle){0,center-160,width,49},42,GOLD,GAME_TEXT_TITLE);
         DrawGameTextIn("Enter: repetir | Esc: voltar ao menu",
-                       (Rectangle){0,center-80,width,38},20,RAYWHITE,false);
+                       (Rectangle){0,center-80,width,38},20,RAYWHITE,GAME_TEXT_BODY);
         return;
     }
     if (e->phase != ENCOUNTER_SEAL) return;
