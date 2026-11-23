@@ -1,5 +1,6 @@
 #include "game_text.h"
 #include "hud.h"
+#include "speedrun.h"
 #include <math.h>
 
 #define HUD_WIDTH 2082.0f
@@ -45,16 +46,16 @@ void DrawBossHealthHud(const char *name, const char *phase, int health, int maxH
     Rectangle title = {x, y-30, width, 29};
     Rectangle shadow = title;
     shadow.y += 2;
-    DrawGameTextIn(name, shadow, 25, BLACK, true);
-    DrawGameTextIn(name, title, 25, (Color){255, 221, 183, 255}, true);
+    DrawGameTextIn(name, shadow, 25, BLACK, GAME_TEXT_TITLE);
+    DrawGameTextIn(name, title, 25, (Color){255, 221, 183, 255}, GAME_TEXT_TITLE);
 
     const char *status = phase && *phase ? TextFormat("%d/%d  |  %s", health, maxHealth, phase)
                                          : TextFormat("%d/%d", health, maxHealth);
     Rectangle label = {x+12, y+2, width-24, 26};
     shadow = label;
     shadow.y += 1;
-    DrawGameTextIn(status, shadow, 19, BLACK, false);
-    DrawGameTextIn(status, label, 19, RAYWHITE, false);
+    DrawGameTextIn(status, shadow, 19, BLACK, GAME_TEXT_BODY);
+    DrawGameTextIn(status, label, 19, RAYWHITE, GAME_TEXT_BODY);
 }
 
 bool InitHud(Hud *hud) {
@@ -103,15 +104,12 @@ static void DrawCenteredLabel(const char *label, float centerX, float top,
     int width = MeasureGameText(label, fontSize);
     int x = (int) (centerX - width / 2.0f);
     int y = (int) top;
-    DrawGameText(label, x - 1, y, fontSize, BLACK);
-    DrawGameText(label, x + 1, y, fontSize, BLACK);
-    DrawGameText(label, x, y - 1, fontSize, BLACK);
     DrawGameText(label, x, y + 1, fontSize, BLACK);
     DrawGameText(label, x, y, fontSize, RAYWHITE);
 }
 
 void DrawHud(const Hud *hud, int health, int maxHealth,
-             float dodgeCooldown, float dodgeRecovery) {
+             float dodgeCooldown, float dodgeRecovery, double runSeconds) {
     float width = fminf(650.0f, GetScreenWidth() * 0.38f);
     float scale = width / HUD_WIDTH;
     float x = GetScreenWidth() - width - 16.0f;
@@ -126,7 +124,7 @@ void DrawHud(const Hud *hud, int health, int maxHealth,
         (Rectangle) { x, y, width, HUD_HEIGHT * scale },
         (Vector2) { 0, 0 }, 0.0f, WHITE);
 
-    int fontSize = (int) fmaxf(16.0f, 62.0f * scale);
+    int fontSize = (int) fmaxf(12.0f, 62.0f * scale);
     if (healthRatio <= 0.0f) {
         DrawCenteredLabel("DERROTA", x + 930.0f * scale,
                           y + 228.0f * scale - 1.0f, fontSize);
@@ -140,9 +138,13 @@ void DrawHud(const Hud *hud, int health, int maxHealth,
     DrawCenteredLabel(TextFormat("%d/%d", health, maxHealth),
                       x + 930.0f * scale, y + 228.0f * scale - 1.0f, fontSize);
     const char *dodgeLabel = dodgeCooldown > 0.0f
-        ? TextFormat("%.1fs", dodgeCooldown) : "ESQUIVA PRONTA";
+        ? TextFormat("%.1fs", dodgeCooldown) : "Esquiva pronta";
     DrawCenteredLabel(dodgeLabel, x + 945.0f * scale,
                       y + 373.0f * scale - 1.0f, fontSize);
+    char timeLabel[40];
+    SpeedrunFormat(timeLabel,sizeof(timeLabel),runSeconds);
+    DrawCenteredLabel(timeLabel,x + 945.0f*scale,
+                      y + HUD_HEIGHT*scale + 3.0f, fmaxf(16.0f,fontSize));
 }
 
 void UnloadHud(Hud *hud) {

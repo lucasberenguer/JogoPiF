@@ -181,14 +181,14 @@ static void DrawPanel(Texture2D art, Rectangle canvas, Rectangle box,
 static void DrawCaption(Rectangle canvas, const char *text, Vector2 location, float opacity) {
     float scale = canvas.width/INTRO_WIDTH;
     float size = 32.0f*scale;
-    Vector2 label = MeasureGameTextEx(text, size, false);
+    Vector2 label = MeasureGameTextEx(text, size, GAME_TEXT_CUTSCENE);
     Rectangle box = Place(canvas, (Rectangle){location.x,location.y,label.x/scale+48,60});
     DrawRectangleRec((Rectangle){box.x+4*scale,box.y+5*scale,box.width,box.height}, Fade(BLACK,.8f*opacity));
     DrawRectangleRec(box, Fade((Color){51,30,25,255},opacity));
     Rectangle paper = {box.x+3*scale,box.y+3*scale,box.width-6*scale,box.height-6*scale};
     DrawRectangleGradientV((int)paper.x,(int)paper.y,(int)paper.width,(int)paper.height,
                            Fade((Color){242,221,180,255},opacity), Fade((Color){205,171,129,255},opacity));
-    DrawGameTextIn(text, box, size, Fade((Color){38,21,18,255},opacity), false);
+    DrawGameTextIn(text, box, size, Fade((Color){38,21,18,255},opacity), GAME_TEXT_CUTSCENE);
 }
 
 void DrawOpeningCutscene(const OpeningCutscene *scene) {
@@ -260,9 +260,10 @@ void DrawOpeningCutscene(const OpeningCutscene *scene) {
     if (scene->beat < INTRO_BEAT_COUNT) {
         const char *hint = "Espaço / Enter  Avançar    |    Esc  Pular";
         int size = (int)fmaxf(14.0f,19.0f*scale);
-        Vector2 at = {canvas.x+canvas.width-31*scale-MeasureGameText(hint,size),canvas.y+681*scale};
-        DrawRectangle((int)at.x-8,(int)at.y-4,MeasureGameText(hint,size)+16,size+8,Fade(BLACK,.8f));
-        DrawGameText(hint,(int)at.x,(int)at.y,size,(Color){223,207,190,255});
+        int width = (int)ceilf(MeasureGameTextEx(hint,size,GAME_TEXT_CUTSCENE).x);
+        Vector2 at = {canvas.x+canvas.width-31*scale-width,canvas.y+681*scale};
+        DrawRectangle((int)at.x-8,(int)at.y-4,width+16,size+8,Fade(BLACK,.8f));
+        DrawGameTextEx(hint,(Vector2){(int)at.x,(int)at.y},size,(Color){223,207,190,255},GAME_TEXT_CUTSCENE);
     }
     EndScissorMode();
     if (scene->beat == INTRO_BEAT_COUNT)

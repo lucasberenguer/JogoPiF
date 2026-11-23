@@ -157,7 +157,21 @@ void CemeteryUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
         boss->guardianMeleeCooldown = phaseTwo ? 1.25f : COVEIRO_MELEE_COOLDOWN;
         boss->attackDirection = directions[boss->facing];
     } else if (distance <= 560 && boss->attackCooldown <= 0) {
-        boss->bossAttack = (boss->bossAttack + 1) % COVEIRO_ATTACK_COUNT;
+        bool clearPath = MapHasClearPath(map,boss->position,player);
+        int lastSkill = boss->bossAttack;
+        int skill;
+        if (boss->coveiroPhaseOpening)
+            skill = COVEIRO_CHARGE;
+        else if (distance > 285 && clearPath)
+            skill = COVEIRO_CHARGE;
+        else if (!clearPath)
+            skill = COVEIRO_ROOTS;
+        else if (distance > 175)
+            skill = lastSkill == COVEIRO_ROOTS ? COVEIRO_SHOVEL : COVEIRO_ROOTS;
+        else
+            skill = lastSkill == COVEIRO_SHOVEL ? COVEIRO_ROOTS : COVEIRO_SHOVEL;
+        boss->bossAttack = skill;
+        boss->coveiroPhaseOpening = false;
         boss->state = ENEMY_ATTACK;
         boss->stateTime = 0;
         boss->attackConnected = false;

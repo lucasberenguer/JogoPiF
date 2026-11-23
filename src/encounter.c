@@ -7,16 +7,19 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define COMMON_DAMAGE_BONUS 0.15f
-#define COMMON_HEALTH_BONUS 20
-#define COMMON_SPEED_BONUS 15.0f
+#define COMMON_DAMAGE_BONUS 0.20f
+#define COMMON_HEALTH_BONUS 25
+#define COMMON_SPEED_BONUS 18.0f
+#define RARE_DUAL_DAMAGE_BONUS 0.10f
+#define RARE_DUAL_HEALTH_BONUS 12
+#define RARE_DUAL_SPEED_BONUS 9.0f
 #define EPIC_STATUS_DAMAGE_BONUS 0.25f
 #define EPIC_STATUS_SPEED_BONUS 51.0f
 #define EPIC_STATUS_HEALTH_BONUS 50
 #define EPIC_FULL_HEAL_MAX_HP_BONUS 50
-#define RARITY_WEIGHT_COMMON 70
-#define RARITY_WEIGHT_RARE 25
-#define RARITY_WEIGHT_EPIC 5
+#define RARITY_WEIGHT_COMMON 60
+#define RARITY_WEIGHT_RARE 30
+#define RARITY_WEIGHT_EPIC 10
 #define MAX_CAMPAIGN_MAPS 9
 #define UI_CARD_FRAME_COMMON_PATH "assets/ui/card_frame_common.png"
 #define UI_CARD_FRAME_RARE_PATH "assets/ui/card_frame_rare.png"
@@ -528,6 +531,7 @@ static int AvailableKindsForRarity(const Encounter *e, int rarity, const bool us
             if (!used[commonKinds[i]]) outKinds[count++] = commonKinds[i];
     } else if (rarity == RARITY_RARE) {
         if (!used[REWARD_SWAP]) outKinds[count++] = REWARD_SWAP;
+        if (!used[REWARD_RARE_DUAL]) outKinds[count++] = REWARD_RARE_DUAL;
     } else if (rarity == RARITY_EPIC) {
         if (CurrentRunWeaponLevel(e) < MAX_WEAPON_LEVEL && !used[REWARD_WEAPON_UPGRADE])
             outKinds[count++] = REWARD_WEAPON_UPGRADE;
@@ -540,8 +544,9 @@ static int AvailableKindsForRarity(const Encounter *e, int rarity, const bool us
 
 static Reward MakeReward(const Encounter *e, int rarity, int kind) {
     Reward r = {.kind = kind, .rarity = rarity, .weapon = e->progress.weapon};
-    if (kind == REWARD_SWAP) {
-        r.weapon = (e->progress.weapon + GetRandomValue(1, 2)) % 3;
+    if (kind == REWARD_SWAP || kind == REWARD_RARE_DUAL) {
+        if (kind == REWARD_SWAP)
+            r.weapon = (e->progress.weapon + GetRandomValue(1, 2)) % 3;
         int first = GetRandomValue(0, 2);
         int second = (first + GetRandomValue(1, 2)) % 3;
         r.bonus[0] = first;
@@ -633,13 +638,13 @@ static void DrawRitualText(const char *text, Rectangle area, float size, Color c
     char wrapped[384];
     int length = snprintf(wrapped,sizeof(wrapped),"%s",text);
     if (length > 0 && length < (int)sizeof(wrapped) &&
-        MeasureGameTextEx(wrapped,size,false).x > area.width && area.height >= 28) {
+        MeasureGameTextEx(wrapped,size,GAME_TEXT_BODY).x > area.width && area.height >= 28) {
         int split = -1;
         for (int i = 1; i < length-1; i++)
             if (wrapped[i]==' ' && (split<0 || abs(i-length/2)<abs(split-length/2))) split=i;
         if (split>=0) wrapped[split]='\n';
     }
-    DrawGameTextIn(wrapped,area,size,color,false);
+    DrawGameTextIn(wrapped,area,size,color,GAME_TEXT_BODY);
 }
 
 void DrawRitualQuestion(const char *title, const char *prompt, const char *detail,
@@ -661,7 +666,7 @@ void DrawRitualQuestion(const char *title, const char *prompt, const char *detai
         }
     }
     float font = Clamp(question.width*.059f,16,34);
-    DrawGameTextIn(title,RitualArea(question,.19f,.267f,.62f,.105f),font,GOLD,true);
+    DrawGameTextIn(title,RitualArea(question,.19f,.267f,.62f,.105f),font,GOLD,GAME_TEXT_TITLE);
     DrawRitualText(prompt,RitualArea(question,.17f,.39f,.66f,.18f),font,RAYWHITE);
     if (detail && detail[0])
         DrawRitualText(detail,RitualArea(question,.17f,.57f,.66f,.09f),font*.72f,GOLD);
@@ -730,6 +735,14 @@ static void ApplyCommonBuffKind(Encounter *e, int kind, int *health) {
     }
 }
 
+static void ApplySmallBuffKind(Encounter *e, int kind, int *health) {
+    if (kind == REWARD_DAMAGE) e->progress.damage += RARE_DUAL_DAMAGE_BONUS;
+    else if (kind == REWARD_HEALTH) {
+        e->progress.maxHealth += RARE_DUAL_HEALTH_BONUS;
+        *health += RARE_DUAL_HEALTH_BONUS;
+    } else if (kind == REWARD_SPEED) e->progress.speed += RARE_DUAL_SPEED_BONUS;
+}
+
 static void ApplyReward(Encounter *e, Reward reward, int *health) {
     e->notice[0]=0;
     switch (reward.kind) {
@@ -746,6 +759,10 @@ static void ApplyReward(Encounter *e, Reward reward, int *health) {
             ApplyCommonBuffKind(e, reward.bonus[1], health);
             break;
         }
+        case REWARD_RARE_DUAL:
+            ApplySmallBuffKind(e, reward.bonus[0], health);
+            ApplySmallBuffKind(e, reward.bonus[1], health);
+            break;
         case REWARD_WEAPON_UPGRADE: {
             int currentLevel = CurrentRunWeaponLevel(e);
             if (currentLevel < MAX_WEAPON_LEVEL)
@@ -1091,9 +1108,15 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
 }
 
 static const char *CommonBuffShortText(int kind) {
-    if (kind == REWARD_DAMAGE) return "Dano +15%";
-    if (kind == REWARD_HEALTH) return "Vida máx. +20 (cura 20)";
-    return "Velocidade +15";
+    if (kind == REWARD_DAMAGE) return "Dano +20%";
+    if (kind == REWARD_HEALTH) return "Vida máx. +25 (cura 25)";
+    return "Velocidade +18";
+}
+
+static const char *SmallBuffShortText(int kind) {
+    if (kind == REWARD_DAMAGE) return "Dano +10%";
+    if (kind == REWARD_HEALTH) return "Vida máx. +12 (cura 12)";
+    return "Velocidade +9";
 }
 
 static const char *RarityLabel(int rarity) {
@@ -1104,14 +1127,18 @@ static const char *RarityLabel(int rarity) {
 
 static const char *RewardText(const Encounter *e, Reward reward) {
     switch (reward.kind) {
-        case REWARD_DAMAGE: return "Dano\n+15% de dano base";
-        case REWARD_HEALTH: return "Vida máxima\n+20 de vida e cura 20";
-        case REWARD_SPEED: return "Velocidade\n+15 de velocidade";
+        case REWARD_DAMAGE: return "Dano\n+20% de dano base";
+        case REWARD_HEALTH: return "Vida máxima\n+25 de vida e cura 25";
+        case REWARD_SPEED: return "Velocidade\n+18 de velocidade";
         case REWARD_SWAP:
             return TextFormat("Trocar por %s\n- %s\n- %s",
                               WeaponTitle(reward.weapon),
                               CommonBuffShortText(reward.bonus[0]),
                               CommonBuffShortText(reward.bonus[1]));
+        case REWARD_RARE_DUAL:
+            return TextFormat("Dois atributos\n- %s\n- %s",
+                              SmallBuffShortText(reward.bonus[0]),
+                              SmallBuffShortText(reward.bonus[1]));
         case REWARD_WEAPON_UPGRADE: {
             int nextLevel = CurrentRunWeaponLevel(e) + 1;
             const char *perk = "Dano +20%";
@@ -1169,12 +1196,12 @@ static void DrawRewardEffects(char *text, Rectangle area, float size) {
         char *wrap = NULL;
         for (char *space = strchr(text, ' '); space; space = strchr(space + 1, ' ')) {
             *space = '\0';
-            bool fits = MeasureGameTextEx(text, size, false).x <= area.width;
+            bool fits = MeasureGameTextEx(text, size, GAME_TEXT_BODY).x <= area.width;
             *space = ' ';
             if (!fits) break;
             wrap = space;
         }
-        if (wrap && MeasureGameTextEx(text, size, false).x > area.width) {
+        if (wrap && MeasureGameTextEx(text, size, GAME_TEXT_BODY).x > area.width) {
             if (end) *end = '\n';
             *wrap = '\0';
             text = wrap + 1;
@@ -1187,7 +1214,7 @@ static void DrawRewardEffects(char *text, Rectangle area, float size) {
     area.y += (area.height - count * step) * .5f;
     area.height = step;
     for (int i = 0; i < count; i++) {
-        DrawGameTextIn(lines[i], area, fminf(step, size), (Color){255, 239, 222, 255}, false);
+        DrawGameTextIn(lines[i], area, fminf(step, size), (Color){255, 239, 222, 255}, GAME_TEXT_BODY);
         area.y += step;
     }
 }
@@ -1217,7 +1244,7 @@ static void DrawRewardCard(Rectangle box, int slot, const Encounter *e, bool hov
     } else {
         DrawRectangleRounded(RewardSection(box, .02f, .10f, .96f, .86f), .07f, 8, fallback[r]);
         DrawRectangleLinesEx(RewardSection(box, .02f, .10f, .96f, .86f), hovered ? 3 : 1, titleInk);
-        DrawGameTextIn(RarityLabel(r), RewardSection(box, .18f, .12f, .64f, .16f), 19, titleInk, false);
+        DrawGameTextIn(RarityLabel(r), RewardSection(box, .18f, .12f, .64f, .16f), 19, titleInk, GAME_TEXT_BODY);
     }
 
     char label[256];
@@ -1225,7 +1252,7 @@ static void DrawRewardCard(Rectangle box, int slot, const Encounter *e, bool hov
     char *details = strchr(label, '\n');
     if (details) *details++ = '\0';
     DrawGameTextIn(TextFormat("%d. %s", slot + 1, label), title,
-                   fminf(26, box.width * .102f), titleInk, false);
+                   fminf(26, box.width * .102f), titleInk, GAME_TEXT_BODY);
     DrawRewardEffects(details, effects, fminf(21, box.width * .076f));
 }
 
@@ -1237,7 +1264,7 @@ static void DrawRerollButton(Rectangle btn, bool disabled, bool hovered) {
     } else {
         DrawRectangleRec(btn, disabled ? DARKGRAY : MAROON);
         DrawRectangleLinesEx(btn, 2, tint);
-        DrawGameTextIn("Sortear", btn, 18, tint, false);
+        DrawGameTextIn("Sortear", btn, 18, tint, GAME_TEXT_BODY);
     }
 }
 
@@ -1253,7 +1280,7 @@ static void DrawRewardScreen(const Encounter *e) {
         DrawTexturePro(rewardUiAssets.banner, (Rectangle){47, 7, 2080, 653},
                        banner, (Vector2){0}, 0, WHITE);
     } else {
-        DrawGameTextIn("Escolha seu bônus", banner, 42, GOLD, true);
+        DrawGameTextIn("Escolha seu bônus", banner, 42, GOLD, GAME_TEXT_TITLE);
     }
     bool canReroll = !IsEpicRewardStage(e);
     Vector2 mouse = GetMousePosition();
@@ -1268,7 +1295,7 @@ static void DrawRewardScreen(const Encounter *e) {
     if (canReroll && e->rerolled) {
         Rectangle button = RerollButtonRect(0, e->rewardCount);
         DrawGameTextIn("Sorteio já usado", (Rectangle){0, button.y + button.height + 3, GetScreenWidth(), 22},
-                       16, (Color){226, 197, 169, 255}, false);
+                       16, (Color){226, 197, 169, 255}, GAME_TEXT_BODY);
     }
 }
 
@@ -1461,7 +1488,7 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
             }
         };
         int tid = (e->chapelTextId >= 0 && e->chapelTextId < 14) ? e->chapelTextId : 0;
-        DrawGameTextIn(titles[tid], (Rectangle){(float)bx, (float)(by + 18), (float)bw, 34}, 28, GOLD, true);
+        DrawGameTextIn(titles[tid], (Rectangle){(float)bx, (float)(by + 18), (float)bw, 34}, 28, GOLD, GAME_TEXT_TITLE);
         for (int i = 0; i < 6; i++) {
             if (bodies[tid][i][0]) DrawGameText(bodies[tid][i], bx + 36, by + 84 + i * 32, 20, RAYWHITE);
         }
@@ -1492,7 +1519,7 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
                 (Rectangle){(sw-width)/2,(sh-hintHeight-height)/2,width,height},
                 (Vector2){0},0,WHITE);
             DrawGameTextIn("Largar a carta · Espaço / Enter / E / Clique",
-                (Rectangle){0,sh-hintHeight,sw,hintHeight},20,GOLD,false);
+                (Rectangle){0,sh-hintHeight,sw,hintHeight},20,GOLD,GAME_TEXT_BODY);
             return;
         }
         int bw = (int)fminf(720.0f, sw - 80.0f), bh = 380;
@@ -1500,7 +1527,7 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         DrawRectangle(bx, by, bw, bh, (Color){38, 28, 22, 245});
         DrawRectangleLinesEx((Rectangle){(float)bx, (float)by, (float)bw, (float)bh}, 2, GOLD);
         const char *ltitle = "Último Registro do Líder da Vila";
-        DrawGameTextIn(ltitle, (Rectangle){(float)bx, (float)(by + 18), (float)bw, 34}, 28, GOLD, true);
+        DrawGameTextIn(ltitle, (Rectangle){(float)bx, (float)(by + 18), (float)bw, 34}, 28, GOLD, GAME_TEXT_TITLE);
         static const char *lines[] = {
             "\"Quando a névoa rubra desceu sobre a Chã de Alegria, nenhum",
             "dos nossos conseguiu resistir à febre que tomou o vale.",
@@ -1524,9 +1551,9 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
     }
     if (e->phase == ENCOUNTER_DEFEAT) {
         float width = GetScreenWidth(), center = GetScreenHeight()*.5f;
-        DrawGameTextIn("Fim da tentativa",(Rectangle){0,center-160,width,49},42,GOLD,true);
+        DrawGameTextIn("Fim da tentativa",(Rectangle){0,center-160,width,49},42,GOLD,GAME_TEXT_TITLE);
         DrawGameTextIn("Enter: repetir | Esc: voltar ao menu",
-                       (Rectangle){0,center-80,width,38},20,RAYWHITE,false);
+                       (Rectangle){0,center-80,width,38},20,RAYWHITE,GAME_TEXT_BODY);
         return;
     }
     if (e->phase != ENCOUNTER_SEAL) return;

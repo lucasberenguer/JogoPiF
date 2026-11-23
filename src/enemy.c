@@ -9,8 +9,8 @@
 #define ENEMY_ATTACK_RANGE 64.0f
 #define ENEMY_ATTACK_DAMAGE 12
 /* Base das ondas da Clareira e referência para o Cemitério. */
-#define CLEARING_FIRST_WAVE_ENEMIES 10
-#define CLEARING_WAVE_ENEMY_STEP 4
+#define CLEARING_FIRST_WAVE_ENEMIES 14
+#define CLEARING_WAVE_ENEMY_STEP 6
 #define CLEARING_ENEMY_HEALTH_SCALE 1.10f
 #define CLEARING_ENEMY_DAMAGE_SCALE 1.15f
 #define ENEMY_HURT_RADIUS 20.0f
@@ -680,7 +680,7 @@ static Vector2 SpawnPosition(const Clearing *clearing, Vector2 player) {
 }
 
 static float WaveSpawnDelay(int wave, int index) {
-    return index * (.30f - (wave - 1) * .025f);
+    return index * (.22f - (wave - 1) * .02f);
 }
 
 static void StartBonelandWave(EnemyGroup *group, const Clearing *map, int wave,
@@ -688,7 +688,7 @@ static void StartBonelandWave(EnemyGroup *group, const Clearing *map, int wave,
     static const struct {
         int total, cultists, ghoulHealth, cultistHealth;
     } waves[] = {
-        {20, 5, 49, 36}, {26, 7, 53, 39}, {30, 9, 56, 41}
+        {26, 7, 49, 36}, {34, 10, 53, 39}
     };
     int index = (int)Clamp((float)wave, 1, sizeof(waves) / sizeof(waves[0])) - 1;
     int total = waves[index].total;
@@ -774,7 +774,7 @@ void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
         return;
     }
     bool clearingWave = ClearingMapId(clearing) == CLEARING_MAP;
-    static const int cemeteryCounts[CEMETERY_WAVES] = {12,18,20};
+    static const int cemeteryCounts[CEMETERY_WAVES] = {18,24};
     int total = clearing->cemetery ? cemeteryCounts[(int)Clamp(wave,1,CEMETERY_WAVES)-1] :
         clearingWave ? CLEARING_FIRST_WAVE_ENEMIES + (wave - 1) * CLEARING_WAVE_ENEMY_STEP :
         7 + (wave - 1) * 4;
@@ -920,6 +920,63 @@ void MoveEnemy(const Clearing *clearing, Enemy *enemy, Vector2 delta) {
     MoveMapActor(clearing, &enemy->position, delta);
 }
 
+/* Escolhe um passo que avança até o objetivo sem ocupar o espaço dos aliados. */
+static bool MoveEnemyTactically(const EnemyGroup *group, const Clearing *map,
+                                Enemy *enemy, Vector2 goal, float distance) {
+    if (distance <= 0) return false;
+    Vector2 origin = enemy->position;
+    Vector2 toward = Vector2Subtract(goal, origin);
+    float length = Vector2Length(toward);
+    if (length < .001f) return false;
+    toward = Vector2Scale(toward, 1.0f/length);
+    int index = (int)(enemy-group->list);
+    float spacing = enemy->type == ENEMY_COMMON_RANGED ? 58.0f : 34.0f;
+    Vector2 best = {0};
+    float bestScore = -1e9f;
+    static const float angles[] = {0, 30, -30, 60, -60, 90, -90, 120, -120, 180};
+    for (int k=0; k<(int)(sizeof(angles)/sizeof(angles[0])); k++) {
+        float angle = angles[k] * (index%2 ? 1.0f : -1.0f) * DEG2RAD;
+        Vector2 step = Vector2Scale(Vector2Rotate(toward, angle), distance);
+        Vector2 next = Vector2Add(origin, step);
+        if (IsMapActorBlocked(map,next)) continue;
+        float score = Vector2DotProduct(step,toward) * 1.3f;
+        for (int j=0; j<ENEMY_COUNT; j++) {
+            const Enemy *other = &group->list[j];
+            if (j==index || other->state==ENEMY_GONE || other->state==ENEMY_FALLEN ||
+                other->state==ENEMY_DIE || other->state==ENEMY_SPAWNING) continue;
+            float gap = Vector2Distance(next,other->position);
+            if (gap < spacing) score -= (spacing-gap)*2.2f;
+        }
+        if (score > bestScore) { bestScore=score; best=step; }
+    }
+    if (bestScore < -1e8f) return false;
+    MoveEnemy(map,enemy,best);
+    return Vector2DistanceSqr(origin,enemy->position) > .01f;
+}
+
+static bool MoveRangedTactically(const EnemyGroup *group, const Clearing *map,
+                                 Enemy *enemy, Vector2 player, float maxDistance, float dt) {
+    Vector2 away = Vector2Subtract(enemy->position,player);
+    float distance = Vector2Length(away);
+    if (distance < .001f) away=(Vector2){1,0},distance=1;
+    away=Vector2Scale(away,1/distance);
+    float preferred = fminf(235.0f,maxDistance-35.0f);
+    bool clear = MapHasClearPath(map,enemy->position,player);
+    Vector2 goal;
+    if (distance < RANGED_MIN_DISTANCE+18.0f) {
+        goal=Vector2Add(enemy->position,Vector2Scale(away,100));
+    } else if (distance > preferred+25.0f) {
+        goal=player;
+    } else if (!clear) {
+        Vector2 side={-away.y,away.x};
+        if ((enemy-group->list)%2) side=Vector2Negate(side);
+        goal=Vector2Add(enemy->position,Vector2Scale(side,90));
+    } else {
+        return false;
+    }
+    return MoveEnemyTactically(group,map,enemy,goal,enemy->speed*dt);
+}
+
 void KnockbackEnemy(Enemy *enemy, const Clearing *clearing,
                     Vector2 source, float distance) {
     if (!EnemyCanBeHit(enemy)) return;
@@ -984,7 +1041,7 @@ static void PlaceGuardianRoot(EnemyGroup *group, Vector2 position, GuardianAttac
 
 static void StartGuardianCast(EnemyGroup *group, const Clearing *clearing,
                               Enemy *enemy, Vector2 player) {
-    enemy->attackCooldown = GuardianEnraged(enemy) ? 1.95f : 3.0f;
+    enemy->attackCooldown = GuardianEnraged(enemy) ? 1.55f : 2.25f;
     enemy->bossAttack = (enemy->bossAttack + 1) % GUARDIAN_ATTACK_COUNT;
     if (enemy->bossAttack == GUARDIAN_ROOTS) {
         Vector2 flank = Vector2Scale(Vector2Rotate(enemy->attackDirection, PI / 2), 120);
@@ -1108,14 +1165,33 @@ static void UpdateBoneLord(EnemyGroup *group, const Clearing *map, Enemy *boss,
     if (boss->state != ENEMY_ATTACK) {
         if (*health <= 0) return;
         boss->facing = FacingToward(toPlayer);
-        if (boss->attackCooldown <= 0 && MapHasClearPath(map, boss->position, player)) {
-            for (int i = 1; i <= BONE_ATTACK_COUNT; i++) {
-                int attack = (boss->bossAttack + i) % BONE_ATTACK_COUNT;
-                if (distance > boneAttacks[attack].range) {
-                    /* After the dash, pursue the player until the blast is in range. */
-                    if (attack == BONE_BLAST && i == 1) break;
-                    continue;
-                }
+        if (boss->attackCooldown <= 0) {
+            bool clearPath = MapHasClearPath(map,boss->position,player);
+            int previous = boss->bossAttack;
+            int attack = -1;
+            /* A investida prepara a explosão, mas a perseguição mantém a janela de reação. */
+            if (previous == BONE_DASH) {
+                if (distance <= boneAttacks[BONE_BLAST].range && clearPath) attack = BONE_BLAST;
+            } else if (!clearPath) {
+                if (distance <= boneAttacks[BONE_RAIN].range) attack = BONE_RAIN;
+            } else if (distance <= 120) {
+                attack = previous == BONE_CLAW ? BONE_BLAST : BONE_CLAW;
+            } else if (distance <= 220) {
+                if (previous == BONE_BLAST) {
+                    Vector2 direction = Vector2Normalize(toPlayer);
+                    attack = Vector2DistanceSqr(BoneDashFlank(map,boss->position,direction,player),
+                                                boss->position) > 1 ? BONE_DASH : BONE_RAIN;
+                } else attack = BONE_BLAST;
+            } else if (distance <= 440) {
+                Vector2 direction = Vector2Normalize(toPlayer);
+                bool flank = Vector2DistanceSqr(BoneDashFlank(map,boss->position,direction,player),
+                                                boss->position) > 1;
+                attack = previous != BONE_DASH && flank ? BONE_DASH :
+                    previous == BONE_RAIN ? BONE_RANGED : BONE_RAIN;
+            } else if (distance <= 550) {
+                attack = previous == BONE_RANGED ? BONE_RAIN : BONE_RANGED;
+            }
+            if (attack >= 0 && distance <= boneAttacks[attack].range) {
                 boss->bossAttack = attack;
                 boss->attackDirection = distance > .001f ? Vector2Normalize(toPlayer) : (Vector2){0, 1};
                 boss->attackTarget = attack == BONE_DASH ?
@@ -1180,7 +1256,8 @@ static void UpdateBoneLord(EnemyGroup *group, const Clearing *map, Enemy *boss,
     if (t >= boneAttacks[attack].duration) {
         boss->state = ENEMY_IDLE;
         boss->stateTime = 0;
-        boss->attackCooldown = GuardianEnraged(boss) ? .24f : .42f;
+        boss->attackCooldown = attack == BONE_DASH ? (GuardianEnraged(boss) ? .52f : .68f) :
+            GuardianEnraged(boss) ? .24f : .42f;
     }
 }
 
@@ -1374,29 +1451,41 @@ static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
         if (*health <= 0) return;
         boss->facing = FacingToward(direction);
         if (boss->attackCooldown <= 0 && MapHasClearPath(map,boss->position,player)) {
-            static const int pattern[] = {IGRIS_ECLIPSE, IGRIS_SPEARS, IGRIS_VORTEX, IGRIS_ERUPTION, IGRIS_MELEE};
-            int choices = boss->igrisFinalForm ? 1 : IGRIS_SKILL_COUNT;
-            for (int offset = 0; offset < choices; offset++) {
-                int index = (boss->attackBurst+offset)%IGRIS_SKILL_COUNT;
-                int skill = boss->igrisFinalForm ? IGRIS_FINAL_CLAW : pattern[index];
-                if (boss->igrisFinalForm) {
-                    if (boss->attackBurst == 3 && distance <= 420 && PlanIgrisEchoes(map,boss,player,direction))
-                        skill = IGRIS_ECLIPSE_ECHOES;
-                    else if (boss->attackBurst == 2 && distance <= IGRIS_GRAB_REACH)
-                        skill = IGRIS_ABYSS_GRAB;
-                    else if ((boss->attackBurst == 1 || distance > 178) &&
-                        distance <= 340 && PlanIgrisZ(map,boss,boss->facing,distance))
-                        skill = IGRIS_Z_RIP;
-                    else if (distance > 178 && distance <= IGRIS_GRAB_REACH)
-                        skill = IGRIS_ABYSS_GRAB;
-                }
+            int skill = -1;
+            if (boss->igrisFinalForm) {
+                skill = IGRIS_FINAL_CLAW;
+                if (boss->attackBurst == 3 && distance <= 420 && PlanIgrisEchoes(map,boss,player,direction))
+                    skill = IGRIS_ECLIPSE_ECHOES;
+                else if (boss->attackBurst == 2 && distance <= IGRIS_GRAB_REACH)
+                    skill = IGRIS_ABYSS_GRAB;
+                else if ((boss->attackBurst == 1 || distance > 178) &&
+                    distance <= 340 && PlanIgrisZ(map,boss,boss->facing,distance))
+                    skill = IGRIS_Z_RIP;
+                else if (distance > 178 && distance <= IGRIS_GRAB_REACH)
+                    skill = IGRIS_ABYSS_GRAB;
                 float reach = skill == IGRIS_ECLIPSE_ECHOES ? 420 : skill == IGRIS_ABYSS_GRAB ? IGRIS_GRAB_REACH :
-                    skill == IGRIS_Z_RIP ? 340 : skill == IGRIS_ERUPTION ? 420 : igrisSkills[skill].reach;
-                if (distance > reach) continue;
-                boss->attackBurst = boss->igrisFinalForm ?
-                    (boss->attackBurst == 3 ? 0 : skill == IGRIS_ABYSS_GRAB ? 3 :
-                     skill == IGRIS_Z_RIP || boss->attackBurst == 1 ? 2 : 1) :
-                    (index+1)%IGRIS_SKILL_COUNT;
+                    skill == IGRIS_Z_RIP ? 340 : igrisSkills[skill].reach;
+                if (distance > reach) skill = -1;
+                else boss->attackBurst = boss->attackBurst == 3 ? 0 :
+                    skill == IGRIS_ABYSS_GRAB ? 3 :
+                    skill == IGRIS_Z_RIP || boss->attackBurst == 1 ? 2 : 1;
+            } else {
+                float bestScore = -1e9f;
+                for (int candidate=0; candidate<IGRIS_SKILL_COUNT; candidate++) {
+                    float reach = candidate == IGRIS_ERUPTION ? 420 : igrisSkills[candidate].reach;
+                    if (distance > reach) continue;
+                    float score = candidate == IGRIS_MELEE ? 60-distance*.25f :
+                        candidate == IGRIS_VORTEX ? 20+(distance>115?15:0) :
+                        candidate == IGRIS_ECLIPSE ? 25+(distance>150?20:0) :
+                        candidate == IGRIS_ERUPTION ? 18+(distance>180?12:0)+(distance>225?10:0) :
+                        15+(distance>270?25:0)+(distance>320?5:0);
+                    if (candidate == boss->bossAttack) score -= 20;
+                    if (boss->attackBurst == 0 && candidate == IGRIS_ECLIPSE) score += 15;
+                    if (score > bestScore) {skill=candidate;bestScore=score;}
+                }
+                if (skill >= 0) boss->attackBurst++;
+            }
+            if (skill >= 0) {
                 boss->bossAttack = skill;
                 boss->attackDirection = direction;
                 boss->attackTarget = player;
@@ -1486,6 +1575,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 /* The Coveiro opens with a charge and the Guardian with a curse. */
                 enemy->bossAttack = enemy->templarRole == TEMPLAR_MARSHAL ? IGRIS_MELEE :
                     group->boneland ? BONE_CLAW : group->cemetery ? COVEIRO_SHOVEL : GUARDIAN_ROOT_WAVE;
+                enemy->coveiroPhaseOpening = group->cemetery;
                 enemy->attackCooldown = .20f;
                 enemy->guardianMeleeCooldown = .90f;
             }
@@ -1502,6 +1592,9 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         enemy->attackCooldown = fmaxf(0.0f, enemy->attackCooldown-dt);
         if (enemy->type == ENEMY_BOSS)
             enemy->guardianMeleeCooldown = fmaxf(0.0f, enemy->guardianMeleeCooldown - dt);
+        if (enemy->type == ENEMY_BOSS && !group->cemetery && !group->boneland &&
+            !group->village && enemy->templarRole == TEMPLAR_NONE)
+            enemy->guardianDodgeCooldown = fmaxf(0.0f,enemy->guardianDodgeCooldown-dt);
         enemy->bibleHitCooldown = fmaxf(0.0f, enemy->bibleHitCooldown-dt);
         if (enemy->state == ENEMY_DIE) {
             if (enemy->type == ENEMY_BOSS) ClearEnemyAttacks(group);
@@ -1645,9 +1738,33 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         if (distance > 0.001f) enemy->facing = FacingToward(toPlayer);
         if (enemy->type == ENEMY_BOSS || enemy->type == ENEMY_SPECIAL) {
             float range = enemy->type == ENEMY_BOSS ? 560 : 280;
-            bool melee = enemy->type == ENEMY_BOSS && distance <= GUARDIAN_MELEE_RANGE &&
+            bool guardian = enemy->type == ENEMY_BOSS;
+            bool melee = guardian && distance <= 105.0f &&
                          enemy->guardianMeleeCooldown <= 0;
-            if (melee || (distance <= range && enemy->attackCooldown <= 0)) {
+            if (guardian && (melee || enemy->attackCooldown <= 0))
+                enemy->guardianDodgeTime = 0;
+            if (guardian && enemy->guardianDodgeTime > 0) {
+                enemy->guardianDodgeTime = fmaxf(0,enemy->guardianDodgeTime-dt);
+                enemy->state = ENEMY_WALK;
+                enemy->walkTime += dt;
+                MoveEnemy(clearing,enemy,Vector2Scale(enemy->guardianDodgeDirection,
+                          enemy->speed*2.2f*dt));
+            } else if (guardian && !melee && enemy->guardianDodgeCooldown <= 0 &&
+                       enemy->attackCooldown > .35f && distance > 95 && distance < 215) {
+                Vector2 side = Vector2Normalize((Vector2){-toPlayer.y,toPlayer.x});
+                if (enemy->attackBurst++%2) side=Vector2Negate(side);
+                Vector2 destination=Vector2Add(enemy->position,Vector2Scale(side,48));
+                if (IsMapActorBlocked(clearing,destination)) {
+                    side=Vector2Negate(side);
+                    destination=Vector2Add(enemy->position,Vector2Scale(side,48));
+                }
+                enemy->guardianDodgeCooldown = GuardianEnraged(enemy) ? 3.4f : 4.4f;
+                if (!IsMapActorBlocked(clearing,destination)) {
+                    enemy->guardianDodgeDirection=side;
+                    enemy->guardianDodgeTime=.22f;
+                    enemy->state=ENEMY_WALK;
+                }
+            } else if (melee || (distance <= range && enemy->attackCooldown <= 0)) {
                 enemy->state = ENEMY_ATTACK;
                 enemy->stateTime = 0;
                 enemy->attackConnected = false;
@@ -1663,29 +1780,32 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                     enemy->attackCooldown = enemy->templarRole == TEMPLAR_EXECUTIONER ? 1.78f :
                         2.75f / fminf(enemy->power, 1.36f);
                 }
-            } else if (distance > (enemy->type == ENEMY_BOSS ? 110 : 100)) {
+            } else if (guardian && distance < 135.0f && !melee) {
+                enemy->state = ENEMY_WALK;
+                enemy->walkTime += dt;
+                Vector2 away=Vector2Negate(Vector2Normalize(toPlayer));
+                MoveEnemyTactically(group,clearing,enemy,
+                    Vector2Add(enemy->position,Vector2Scale(away,100)),enemy->speed*dt);
+            } else if (distance > (guardian ? 230 : 100)) {
                 enemy->state = ENEMY_WALK;
                 enemy->walkTime += dt;
                 float speed = enemy->speed * (GuardianEnraged(enemy) ? 1.5f : 1.0f);
-                MoveEnemy(clearing, enemy, Vector2Scale(Vector2Normalize(toPlayer), speed*dt));
+                MoveEnemyTactically(group,clearing,enemy,player,speed*dt);
             } else enemy->state = ENEMY_IDLE;
         } else if (enemy->type == ENEMY_COMMON_RANGED) {
-            bool canSeePlayer = (!group->boneland && enemy->templarRole != TEMPLAR_CROSSBOW) ||
-                                MapHasClearPath(clearing, enemy->position, player);
+            bool canSeePlayer = MapHasClearPath(clearing, enemy->position, player);
             float maxDistance = group->boneland ? 350.0f : RANGED_MAX_DISTANCE;
-            if (distance <= maxDistance && enemy->attackCooldown <= 0.0f && canSeePlayer) {
+            if (distance >= RANGED_MIN_DISTANCE && distance <= maxDistance &&
+                enemy->attackCooldown <= 0.0f && canSeePlayer) {
                 enemy->state = ENEMY_ATTACK;
                 enemy->stateTime = 0.0f;
                 enemy->attackConnected = false;
                 enemy->attackDirection = Vector2Normalize(toPlayer);
                 enemy->attackCooldown = enemy->templarRole == TEMPLAR_CROSSBOW ? 1.59f :
                     group->boneland ? 2.15f : 1.5f / fminf(enemy->power, 1.36f);
-            } else if (distance < RANGED_MIN_DISTANCE || distance > maxDistance || !canSeePlayer) {
+            } else if (MoveRangedTactically(group,clearing,enemy,player,maxDistance,dt)) {
                 enemy->state = ENEMY_WALK;
                 enemy->walkTime += dt;
-                Vector2 step = Vector2Scale(Vector2Normalize(toPlayer), enemy->speed * dt);
-                MoveEnemy(clearing, enemy, canSeePlayer && distance < RANGED_MIN_DISTANCE ?
-                          Vector2Negate(step) : step);
             } else {
                 enemy->state = ENEMY_IDLE;
             }
@@ -1700,7 +1820,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         } else if (distance > ENEMY_ATTACK_RANGE*0.85f) {
             enemy->state = ENEMY_WALK;
             enemy->walkTime += dt;
-            MoveEnemy(clearing, enemy, Vector2Scale(Vector2Normalize(toPlayer), enemy->speed*dt));
+            MoveEnemyTactically(group,clearing,enemy,player,enemy->speed*dt);
         } else {
             enemy->state = ENEMY_IDLE;
         }
@@ -2235,9 +2355,11 @@ static void DrawIgris(const EnemyGroup *group, const Enemy *enemy) {
     }
     bool flip = (art <= IGRIS_MELEE_ART && facing == 3) ||
                 (art == IGRIS_SPEARS_ART && facing == 2);
-    float anchorX = art <= IGRIS_MELEE_ART ? (facing == 2 ? .50f : facing == 3 ? .50f : .61f) : .50f;
+    float anchorX = .50f;
     float ground = enemy->igrisFinalForm ? .84f : art == IGRIS_SPEARS_ART && facing == 0 ? .84f : .94f;
     if (enemy->igrisFinalForm && art == IGRIS_FINAL_WALK && facing == 0) ground = .92f;
+    float drawHeight = enemy->igrisFinalForm ? (art == IGRIS_FINAL_MELEE ? 243.0f : 238.0f) :
+                       (art == IGRIS_MELEE_ART ? 213.75f : 190.0f);
     bool fallen = enemy->state == ENEMY_FALLEN;
     float fall = fallen ? 1 : enemy->state == ENEMY_DIE ? Clamp(enemy->stateTime/1.2f,0,1) : 0;
     if (fallen) DrawBossGroundSeal(group->sealMarker,feet);
@@ -2248,7 +2370,7 @@ static void DrawIgris(const EnemyGroup *group, const Enemy *enemy) {
     }
     if (art == IGRIS_ECLIPSE_ART) DrawIgrisEclipsePose(group->igrisArt[art],frame,IgrisRow(art,facing),feet,tint);
     else DrawIgrisCell(group->igrisArt[art],columns,4,frame,IgrisRow(art,facing),feet,
-                       enemy->igrisFinalForm ? 238 : 190,anchorX,ground,flip,fall*72,tint);
+                       drawHeight,anchorX,ground,flip,fall*72,tint);
     if (fallen) DrawGameText("E: selar",(int)feet.x-30,(int)feet.y+12,18,GOLD);
 }
 

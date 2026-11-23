@@ -22,6 +22,7 @@ set(SOURCES
     src/dev_tools.c
     src/clearing.c
     src/hud.c
+    src/speedrun.c
     src/menu.c
     src/menu_video.c
     src/cutscene.c
@@ -50,6 +51,10 @@ if(BUILD_TESTING)
     add_executable(logica_test tests/logica_test.c src/logica.c)
     target_include_directories(logica_test PRIVATE src)
     add_test(NAME logica COMMAND logica_test)
+    add_executable(speedrun_test tests/speedrun_test.c src/speedrun.c)
+    target_include_directories(speedrun_test PRIVATE src)
+    target_link_libraries(speedrun_test PRIVATE raylib)
+    add_test(NAME speedrun COMMAND speedrun_test)
     add_executable(enemy_audit_test tests/enemy_audit_test.c src/enemy.c src/necromancer.c src/cemetery_enemy.c src/village_enemy.c src/clearing.c src/game_text.c)
     target_include_directories(enemy_audit_test PRIVATE src)
     target_link_libraries(enemy_audit_test PRIVATE raylib)
@@ -64,6 +69,7 @@ if(BUILD_TESTING)
     add_test(NAME player_collision COMMAND player_collision_test)
     add_executable(encounter_test tests/encounter_test.c src/encounter.c src/logica.c src/presentation.c src/enemy.c src/necromancer.c src/cemetery_enemy.c src/village_enemy.c src/clearing.c src/menu.c src/menu_video.c src/game_audio.c src/game_text.c src/dev_tools.c src/bible.c src/gun.c src/video_settings.c)
     target_sources(encounter_test PRIVATE src/hud.c)
+    target_sources(encounter_test PRIVATE src/speedrun.c)
     target_include_directories(encounter_test PRIVATE src)
     target_link_libraries(encounter_test PRIVATE raylib)
     if(WIN32)

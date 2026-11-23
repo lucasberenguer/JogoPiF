@@ -16,7 +16,7 @@ typedef struct Hud {
 
 bool InitHud(Hud *hud);
 void DrawHud(const Hud *hud, int health, int maxHealth,
-             float dodgeCooldown, float dodgeRecovery);
+             float dodgeCooldown, float dodgeRecovery, double runSeconds);
 void UnloadHud(Hud *hud);
 void DrawBossHealthHud(const char *name, const char *phase, int health, int maxHealth,
                        Color fill, const float *phaseMarkers, int markerCount, int bottomOffset);

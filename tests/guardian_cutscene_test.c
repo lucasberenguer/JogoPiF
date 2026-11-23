@@ -96,7 +96,7 @@ static void CheckSceneProgress(GuardianCutscene *scene) {
                 int count=LayoutGuardianNarration(shot->narration,scale,width-240*scale,lines,&size);
                 assert(count>0 && count<=2 && size>=20);
                 for (int i=0; i<count; i++) {
-                    assert(MeasureGameTextEx(lines[i],size,false).x<=width-240*scale);
+                    assert(MeasureGameTextEx(lines[i],size,GAME_TEXT_CUTSCENE).x<=width-240*scale);
                     if (i) strcat(rebuilt," ");
                     strcat(rebuilt,lines[i]);
                 }

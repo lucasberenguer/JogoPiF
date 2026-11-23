@@ -6,9 +6,9 @@
 #define CLEARING_MAP 0
 #define CEMETERY_MAP 1
 #define VILLAGE_MAP 2
-#define CLEARING_WAVES 3 /* Clareira do Selo; o chefe vem depois da última onda. */
-#define CEMETERY_WAVES 3 /* Cemitério das Raízes. */
-#define BONELAND_WAVES 3
+#define CLEARING_WAVES 2 /* Clareira do Selo; o chefe vem depois da última onda. */
+#define CEMETERY_WAVES 2 /* Cemitério das Raízes. */
+#define BONELAND_WAVES 2
 #define CHAPEL_MAP 3
 #define INVERTED_CHAPEL_MAP 5
 #define BONELAND_MAP 6
@@ -54,6 +54,8 @@ typedef struct RunProgress {
     bool angelSceneCompleted;
     int angelBlessingUses;
     int finalSealFailures;
+    double runSeconds;
+    bool runEligible;
     VillageAftermath villageAftermath;
     bool igrisAftermathPending;
     GuardianAftermathState guardianAftermath;

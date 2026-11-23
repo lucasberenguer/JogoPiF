@@ -61,16 +61,16 @@ void DrawStagePresentation(const StagePresentation *p,Texture2D sprite,int colum
         DrawLineEx((Vector2){w/2-half,center+89},(Vector2){w/2+half,center+89},2,Fade(GOLD,alpha));
         const char *label=p->areaEntry?(p->areaSubtitle?"":"Entrando em"):"Nova área desbloqueada";
         float labelSize = 24;
-        DrawGameTextEx(label,(Vector2){(w-MeasureGameTextEx(label,labelSize,true).x)/2,center-61},
-                       labelSize,Fade(GOLD,alpha),true);
+        DrawGameTextEx(label,(Vector2){(w-MeasureGameTextEx(label,labelSize,GAME_TEXT_TITLE).x)/2,center-61},
+                       labelSize,Fade(GOLD,alpha),GAME_TEXT_TITLE);
         DrawGameTextIn(p->mapName,(Rectangle){w*.07f+(1-reveal)*65,center-(p->areaSubtitle?39:30),w*.86f,58},
-                       52,Fade(RAYWHITE,alpha),true);
+                       52,Fade(RAYWHITE,alpha),GAME_TEXT_TITLE);
         const char *hint=p->areaEntry?(p->areaSubtitle?p->areaSubtitle:""):"O caminho adiante foi revelado";
         float hintSize=24;
-        float hintWidth=MeasureGameTextEx(hint,hintSize,true).x;
+        float hintWidth=MeasureGameTextEx(hint,hintSize,GAME_TEXT_TITLE).x;
         if (hintWidth>w*.86f) hintSize*=w*.86f/hintWidth;
-        DrawGameTextEx(hint,(Vector2){(w-MeasureGameTextEx(hint,hintSize,true).x)/2,
-            center+(p->areaSubtitle?26:48)},hintSize,Fade(p->areaSubtitle?GOLD:LIGHTGRAY,alpha),true);
+        DrawGameTextEx(hint,(Vector2){(w-MeasureGameTextEx(hint,hintSize,GAME_TEXT_TITLE).x)/2,
+            center+(p->areaSubtitle?26:48)},hintSize,Fade(p->areaSubtitle?GOLD:LIGHTGRAY,alpha),GAME_TEXT_TITLE);
         return;
     }
     const Color headline = {255, 232, 190, 255};
@@ -83,9 +83,9 @@ void DrawStagePresentation(const StagePresentation *p,Texture2D sprite,int colum
         DrawLine(0,(int)y,(int)w,(int)y,Fade(GOLD,alpha));
         DrawLine(0,(int)y+118,(int)w,(int)y+118,Fade(GOLD,alpha));
         const char *title=p->announcement?p->announcement:waveTitle;
-        DrawGameTextIn(title,(Rectangle){w*.06f+slide,y+8,w*.88f,68},58,Fade(headline,alpha),true);
+        DrawGameTextIn(title,(Rectangle){w*.06f+slide,y+8,w*.88f,68},58,Fade(headline,alpha),GAME_TEXT_TITLE);
         const char *subtitle = p->announcement && p->waveTotal > 0 && p->wave > 0 ? waveTitle : p->mapName;
-        DrawGameTextIn(subtitle,(Rectangle){w*.06f,y+77,w*.88f,30},26,Fade(RAYWHITE,alpha),true);
+        DrawGameTextIn(subtitle,(Rectangle){w*.06f,y+77,w*.88f,30},26,Fade(RAYWHITE,alpha),GAME_TEXT_TITLE);
     } else {
         DrawRectangle(0,0,(int)w,(int)(h*.10f),Fade(BLACK,alpha));
         DrawRectangle(0,(int)(h*.90f),(int)w,(int)(h*.10f+1),Fade(BLACK,alpha));
@@ -111,10 +111,10 @@ void DrawStagePresentation(const StagePresentation *p,Texture2D sprite,int colum
         float textX=w*.13f-offset;
         if (!p->separateBossWave && p->wave>0)
             DrawGameTextEx(TextFormat("%s - Chefe",waveTitle),(Vector2){textX,h*.37f},
-                           27,Fade(headline,alpha),true);
-        float bossSize=fminf(56, w*.42f/MeasureGameTextEx(p->bossName,1,true).x);
+                           27,Fade(headline,alpha),GAME_TEXT_TITLE);
+        float bossSize=fminf(56, w*.42f/MeasureGameTextEx(p->bossName,1,GAME_TEXT_TITLE).x);
         DrawGameTextEx(p->bossName,(Vector2){textX,h*(p->separateBossWave?.43f:.44f)},
-                       bossSize,Fade(RAYWHITE,alpha),true);
-        DrawGameTextEx(p->mapName,(Vector2){textX,h*.56f},24,Fade(LIGHTGRAY,alpha),true);
+                       bossSize,Fade(RAYWHITE,alpha),GAME_TEXT_TITLE);
+        DrawGameTextEx(p->mapName,(Vector2){textX,h*.56f},24,Fade(LIGHTGRAY,alpha),GAME_TEXT_TITLE);
     }
 }
