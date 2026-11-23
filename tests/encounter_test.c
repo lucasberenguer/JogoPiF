@@ -1340,7 +1340,6 @@ int main(void) {
 
     Clearing palace = {0};
     assert(InitCampaignMap(&palace, NECROMANCER_MAP));
-    assert(enemies.necromancerPortrait.id);
     assert(MapHasClearPath(&palace, palace.spawn, palace.pedestal));
     assert(!IsMapActorBlocked(&palace, (Vector2){836,260}));
     assert(IsMapActorBlocked(&palace, (Vector2){836,180}));
@@ -1353,6 +1352,7 @@ int main(void) {
     finalProgress.angelBlessingUses=1;
     int finalHealth=100;
     BeginEncounter(&final,&enemies,&palace,finalProgress,palace.spawn);
+    assert(enemies.necromancerPortrait.id);
     Enemy *necromancer=&enemies.list[0];
     assert(necromancer->necromancerForm==1 && !EnemyCanBeHit(necromancer));
     assert(final.presentation.areaEntry && final.presentation.wave==0);

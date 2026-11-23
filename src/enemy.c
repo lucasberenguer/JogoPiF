@@ -298,62 +298,72 @@ static const struct {
     [MARSHAL_SHOCKWAVE] = {.84f, 1.46f, 1.69f, 295, -1, 33},
 };
 
-bool InitEnemies(EnemyGroup *group) {
-    *group = (EnemyGroup){0};
-    if (!LoadNecromancerSprites(group)) { UnloadNecromancerSprites(group); return false; }
+static void UnloadTexIfLoaded(Texture2D *texture) {
+    if (texture->id) {
+        UnloadTexture(*texture);
+        *texture = (Texture2D){0};
+    }
+}
+
+static void UnloadEnemyMapAssets(EnemyGroup *group) {
+    UnloadNecromancerSprites(group);
+    for (int i = 0; i < 3; i++) {
+        UnloadTexIfLoaded(&group->cemeteryZombie[i]);
+        UnloadTexIfLoaded(&group->cemeteryLantern[i]);
+        UnloadTexIfLoaded(&group->cemeterySpecial[i]);
+        UnloadTexIfLoaded(&group->boss[i]);
+        UnloadTexIfLoaded(&group->effects[i]);
+        UnloadTexIfLoaded(&group->clearingMelee[i]);
+        UnloadTexIfLoaded(&group->clearingArcher[i]);
+        UnloadTexIfLoaded(&group->clearingSpecial[i]);
+    }
+    UnloadTexIfLoaded(&group->coveiroIdle);
+    UnloadTexIfLoaded(&group->coveiroEmerge);
+    UnloadTexIfLoaded(&group->coveiroFall);
+    UnloadTexIfLoaded(&group->coveiroWalk);
+    UnloadTexIfLoaded(&group->coveiroMelee);
+    UnloadTexIfLoaded(&group->cemeterySpell);
+    UnloadTexIfLoaded(&group->sprites);
+    UnloadTexIfLoaded(&group->backSprites);
+    UnloadTexIfLoaded(&group->frontSprites);
+    for (int role = TEMPLAR_SHIELD; role <= TEMPLAR_MARSHAL; role++) {
+        UnloadTexIfLoaded(&group->templarWalk[role]);
+        UnloadTexIfLoaded(&group->templarAttack[role]);
+    }
+    UnloadTexIfLoaded(&group->bonelandGhoul);
+    UnloadTexIfLoaded(&group->bonelandCultist);
+    for (int i = 0; i < BONE_SHEET_COUNT; i++)
+        UnloadTexIfLoaded(&group->boneLordSheets[i]);
+    UnloadTexIfLoaded(&group->bossSprites);
+    UnloadTexIfLoaded(&group->guardianSpawn);
+    UnloadTexIfLoaded(&group->guardianDefeat);
+    UnloadTexIfLoaded(&group->bossWalk);
+    UnloadTexIfLoaded(&group->bossPortrait);
+    UnloadTexIfLoaded(&group->cemeteryPortrait);
+    UnloadTexIfLoaded(&group->boneLordPortrait);
+    UnloadTexIfLoaded(&group->templarEffects);
+    UnloadTexIfLoaded(&group->marshalSlam);
+    UnloadTexIfLoaded(&group->marshalCharge);
+    UnloadTexIfLoaded(&group->templarDust);
+    UnloadTexIfLoaded(&group->marshalPortrait);
+    UnloadTexIfLoaded(&group->bossAttack);
+    UnloadTexIfLoaded(&group->roots);
+    UnloadTexIfLoaded(&group->rootWave);
+    UnloadTexIfLoaded(&group->curse);
+    UnloadTexIfLoaded(&group->guardianMelee);
+    UnloadTexIfLoaded(&group->villageBossWalk);
+    UnloadTexIfLoaded(&group->villageBossAttack);
+    UnloadTexIfLoaded(&group->villageBossCharge);
+    for (int i = 0; i < VILLAGE_ZOMBIE_ATLAS_COUNT; i++)
+        UnloadTexIfLoaded(&group->villageZombie[i]);
+    UnloadTexIfLoaded(&group->villageLetter);
+    group->loadedMap = -1;
+}
+
+static bool LoadClearingEnemyAssets(EnemyGroup *group) {
     group->sprites = LoadTexture("assets/inimigo_encapuzado.png");
     group->backSprites = LoadTexture("assets/inimigo_encapuzado_costas.png");
     group->frontSprites = LoadTexture("assets/inimigo_encapuzado_frente.png");
-    const char *zombieSheets[]={
-        "assets/zumbi_cemiterio_idle.png", "assets/zumbi_cemiterio_walk.png",
-        "assets/zumbi_cemiterio_attack.png"
-    };
-    const char *lanternSheets[]={
-        "assets/zumbi_lanterna_idle.png", "assets/zumbi_lanterna_walk.png",
-        "assets/zumbi_lanterna_attack.png"
-    };
-    const char *specialSheets[]={
-        "assets/cemiterio_especial_idle.png", "assets/cemiterio_especial_walk.png",
-        "assets/cemiterio_especial_attack.png"
-    };
-    for (int i=0;i<3;i++) {
-        group->cemeteryZombie[i]=LoadTexture(zombieSheets[i]);
-        if (group->cemeteryZombie[i].id) SetTextureFilter(group->cemeteryZombie[i],TEXTURE_FILTER_POINT);
-        group->cemeteryLantern[i]=LoadTexture(lanternSheets[i]);
-        if (group->cemeteryLantern[i].id) SetTextureFilter(group->cemeteryLantern[i],TEXTURE_FILTER_POINT);
-        group->cemeterySpecial[i]=LoadTexture(specialSheets[i]);
-        if (group->cemeterySpecial[i].id) SetTextureFilter(group->cemeterySpecial[i],TEXTURE_FILTER_POINT);
-    }
-    group->coveiroIdle=LoadTexture("assets/coveiro_novo_idle.png");
-    group->coveiroWalk=LoadTexture("assets/coveiro_novo_run.png");
-    group->coveiroEmerge=LoadTexture("assets/coveiro_novo_emerge.png");
-    group->coveiroFall=LoadTexture("assets/coveiro_novo_fall.png");
-    group->coveiroMelee=LoadTexture("assets/coveiro_novo_melee.png");
-    group->cemeterySpell=LoadTexture("assets/zumbi_lanterna_projetil.png");
-    group->boss[0] = LoadTexture("assets/coveiro_novo_pull.png");
-    group->boss[1] = LoadTexture("assets/coveiro_novo_spin.png");
-    group->boss[2] = LoadTexture("assets/coveiro_novo_charge.png");
-    group->effects[0]=LoadTexture("assets/coveiro_novo_pull_effect.png");
-    group->effects[1]=LoadTexture("assets/coveiro_pa_vento_v4.png");
-    group->effects[2]=LoadTexture("assets/coveiro_efeito_investida.png");
-    if (!group->cemeteryZombie[0].id || !group->cemeteryZombie[1].id || !group->cemeteryZombie[2].id ||
-        !group->cemeteryLantern[0].id || !group->cemeteryLantern[1].id || !group->cemeteryLantern[2].id ||
-        !group->cemeterySpecial[0].id || !group->cemeterySpecial[1].id || !group->cemeterySpecial[2].id ||
-        !group->coveiroIdle.id || !group->coveiroEmerge.id || !group->coveiroFall.id ||
-        !group->coveiroWalk.id || !group->coveiroMelee.id || !group->cemeterySpell.id || !group->boss[0].id ||
-        !group->boss[1].id || !group->boss[2].id || !group->effects[0].id ||
-        !group->effects[1].id || !group->effects[2].id) {
-        UnloadEnemies(group);
-        return false;
-    }
-    SetTextureFilter(group->coveiroIdle,TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->coveiroEmerge,TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->coveiroFall,TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->coveiroWalk,TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->coveiroMelee,TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->cemeterySpell,TEXTURE_FILTER_POINT);
-    for (int i=0;i<3;i++) SetTextureFilter(group->boss[i], TEXTURE_FILTER_POINT);
-    for (int i=0;i<3;i++) SetTextureFilter(group->effects[i], TEXTURE_FILTER_POINT);
     group->clearingMelee[0] = LoadTexture("assets/clareira_melee_idle.png");
     group->clearingMelee[1] = LoadTexture("assets/clareira_melee_andar.png");
     Shader matte = LoadShader(NULL, "assets/shaders/clareira_melee.fs");
@@ -363,11 +373,130 @@ bool InitEnemies(EnemyGroup *group) {
     group->clearingArcher[2] = LoadClearingSpriteWithMatte("assets/clareira_arqueiro_ataque.png", matte);
     int darkRedMatte = 1;
     if (matte.id) SetShaderValue(matte, GetShaderLocation(matte, "darkRedMatte"),
-                                &darkRedMatte, SHADER_UNIFORM_INT);
+                                 &darkRedMatte, SHADER_UNIFORM_INT);
     group->clearingSpecial[0] = LoadClearingSpriteWithMatte("assets/clareira_especial_idle.png", matte);
     group->clearingSpecial[1] = LoadClearingSpriteWithMatte("assets/clareira_especial_andar.png", matte);
     group->clearingSpecial[2] = LoadTexture("assets/clareira_especial_ataque.png");
     if (matte.id) UnloadShader(matte);
+    group->bossSprites = LoadTexture("assets/boss_clareira.png");
+    group->guardianSpawn = LoadTexture("assets/boss_clareira_spawn.png");
+    group->guardianDefeat = LoadTexture("assets/boss_clareira_derrota.png");
+    group->bossWalk = LoadTexture("assets/boss_clareira_andar.png");
+    group->bossPortrait = LoadTexture("assets/guardiao_intro_pixel_v2.png");
+    group->bossAttack = LoadTexture("assets/boss_clareira_especial_1.png");
+    group->roots = LoadTexture("assets/boss_clareira_raizes_area.png");
+    group->rootWave = LoadTexture("assets/boss_clareira_onda.png");
+    group->curse = LoadTexture("assets/boss_clareira_maldicao.png");
+    group->guardianMelee = LoadTexture("assets/boss_clareira_corpo_a_corpo.png");
+    if (!group->sprites.id || !group->backSprites.id || !group->frontSprites.id ||
+        !group->clearingMelee[0].id || !group->clearingMelee[1].id || !group->clearingMelee[2].id ||
+        !group->clearingArcher[0].id || !group->clearingArcher[1].id || !group->clearingArcher[2].id ||
+        !group->clearingSpecial[0].id || !group->clearingSpecial[1].id || !group->clearingSpecial[2].id ||
+        !group->bossSprites.id || !group->guardianSpawn.id || !group->guardianDefeat.id ||
+        !group->bossWalk.id || !group->bossPortrait.id || !group->bossAttack.id ||
+        !group->roots.id || !group->rootWave.id || !group->curse.id || !group->guardianMelee.id)
+        return false;
+    SetTextureFilter(group->sprites, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->backSprites, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->frontSprites, TEXTURE_FILTER_POINT);
+    for (int i = 0; i < 3; i++) {
+        SetTextureFilter(group->clearingMelee[i], TEXTURE_FILTER_POINT);
+        SetTextureFilter(group->clearingArcher[i], TEXTURE_FILTER_POINT);
+        SetTextureFilter(group->clearingSpecial[i], TEXTURE_FILTER_POINT);
+    }
+    SetTextureFilter(group->bossSprites, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->guardianSpawn, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->guardianDefeat, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->bossWalk, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->bossPortrait, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->bossAttack, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->roots, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->rootWave, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->curse, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->guardianMelee, TEXTURE_FILTER_POINT);
+    return true;
+}
+
+static bool LoadCemeteryEnemyAssets(EnemyGroup *group) {
+    const char *zombieSheets[] = {
+        "assets/zumbi_cemiterio_idle.png", "assets/zumbi_cemiterio_walk.png",
+        "assets/zumbi_cemiterio_attack.png"
+    };
+    const char *lanternSheets[] = {
+        "assets/zumbi_lanterna_idle.png", "assets/zumbi_lanterna_walk.png",
+        "assets/zumbi_lanterna_attack.png"
+    };
+    const char *specialSheets[] = {
+        "assets/cemiterio_especial_idle.png", "assets/cemiterio_especial_walk.png",
+        "assets/cemiterio_especial_attack.png"
+    };
+    for (int i = 0; i < 3; i++) {
+        group->cemeteryZombie[i] = LoadTexture(zombieSheets[i]);
+        if (group->cemeteryZombie[i].id) SetTextureFilter(group->cemeteryZombie[i], TEXTURE_FILTER_POINT);
+        group->cemeteryLantern[i] = LoadTexture(lanternSheets[i]);
+        if (group->cemeteryLantern[i].id) SetTextureFilter(group->cemeteryLantern[i], TEXTURE_FILTER_POINT);
+        group->cemeterySpecial[i] = LoadTexture(specialSheets[i]);
+        if (group->cemeterySpecial[i].id) SetTextureFilter(group->cemeterySpecial[i], TEXTURE_FILTER_POINT);
+    }
+    group->coveiroIdle = LoadTexture("assets/coveiro_novo_idle.png");
+    group->coveiroWalk = LoadTexture("assets/coveiro_novo_run.png");
+    group->coveiroEmerge = LoadTexture("assets/coveiro_novo_emerge.png");
+    group->coveiroFall = LoadTexture("assets/coveiro_novo_fall.png");
+    group->coveiroMelee = LoadTexture("assets/coveiro_novo_melee.png");
+    group->cemeterySpell = LoadTexture("assets/zumbi_lanterna_projetil.png");
+    group->boss[0] = LoadTexture("assets/coveiro_novo_pull.png");
+    group->boss[1] = LoadTexture("assets/coveiro_novo_spin.png");
+    group->boss[2] = LoadTexture("assets/coveiro_novo_charge.png");
+    group->effects[0] = LoadTexture("assets/coveiro_novo_pull_effect.png");
+    group->effects[1] = LoadTexture("assets/coveiro_pa_vento_v4.png");
+    group->effects[2] = LoadTexture("assets/coveiro_efeito_investida.png");
+    group->cemeteryPortrait = LoadTexture("assets/coveiro_intro_pixel.png");
+    if (!group->cemeteryZombie[0].id || !group->cemeteryZombie[1].id || !group->cemeteryZombie[2].id ||
+        !group->cemeteryLantern[0].id || !group->cemeteryLantern[1].id || !group->cemeteryLantern[2].id ||
+        !group->cemeterySpecial[0].id || !group->cemeterySpecial[1].id || !group->cemeterySpecial[2].id ||
+        !group->coveiroIdle.id || !group->coveiroEmerge.id || !group->coveiroFall.id ||
+        !group->coveiroWalk.id || !group->coveiroMelee.id || !group->cemeterySpell.id || !group->boss[0].id ||
+        !group->boss[1].id || !group->boss[2].id || !group->effects[0].id ||
+        !group->effects[1].id || !group->effects[2].id || !group->cemeteryPortrait.id)
+        return false;
+    SetTextureFilter(group->coveiroIdle, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->coveiroEmerge, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->coveiroFall, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->coveiroWalk, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->coveiroMelee, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->cemeterySpell, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->cemeteryPortrait, TEXTURE_FILTER_POINT);
+    for (int i = 0; i < 3; i++) SetTextureFilter(group->boss[i], TEXTURE_FILTER_POINT);
+    for (int i = 0; i < 3; i++) SetTextureFilter(group->effects[i], TEXTURE_FILTER_POINT);
+    return true;
+}
+
+static bool LoadVillageEnemyAssets(EnemyGroup *group) {
+    group->villageBossWalk = LoadTexture("assets/lider_vila_walk.png");
+    group->villageBossAttack = LoadTexture("assets/lider_vila_ataque.png");
+    group->villageBossCharge = LoadTexture("assets/lider_vila_investida.png");
+    const char *villageZombieSheets[VILLAGE_ZOMBIE_ATLAS_COUNT] = {
+        [VILLAGE_ZOMBIE_IDLE] = "assets/zumbi_vila_idle.png",
+        [VILLAGE_ZOMBIE_EMERGE] = "assets/zumbi_vila_emerge.png",
+        [VILLAGE_ZOMBIE_WALK] = "assets/zumbi_vila_walk.png",
+        [VILLAGE_ZOMBIE_ATTACK] = "assets/zumbi_vila_attack.png"
+    };
+    for (int i = 0; i < VILLAGE_ZOMBIE_ATLAS_COUNT; i++) {
+        group->villageZombie[i] = LoadTexture(villageZombieSheets[i]);
+        if (!group->villageZombie[i].id) return false;
+        SetTextureFilter(group->villageZombie[i], TEXTURE_FILTER_POINT);
+    }
+    if (!group->villageBossWalk.id || !group->villageBossAttack.id || !group->villageBossCharge.id)
+        return false;
+    SetTextureFilter(group->villageBossWalk, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->villageBossAttack, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->villageBossCharge, TEXTURE_FILTER_POINT);
+    group->villageLetter = LoadTexture("assets/cutscenes/village_aftermath/images/carta.png");
+    if (group->villageLetter.id) SetTextureFilter(group->villageLetter, TEXTURE_FILTER_BILINEAR);
+    return true;
+}
+
+static bool LoadBonelandEnemyAssets(EnemyGroup *group) {
     group->bonelandGhoul = LoadBonelandSprite("assets/terra_dos_ossos_carnical.png");
     group->bonelandCultist = LoadBonelandSprite("assets/terra_dos_ossos_cultista.png");
     const char *boneSheets[BONE_SHEET_COUNT] = {
@@ -379,9 +508,19 @@ bool InitEnemies(EnemyGroup *group) {
     };
     for (int i = 0; i < BONE_SHEET_COUNT; i++) {
         group->boneLordSheets[i] = LoadTexture(boneSheets[i]);
-        if (!group->boneLordSheets[i].id) { UnloadEnemies(group); return false; }
+        if (!group->boneLordSheets[i].id) return false;
         SetTextureFilter(group->boneLordSheets[i], TEXTURE_FILTER_POINT);
     }
+    group->boneLordPortrait = LoadTexture("assets/terra_dos_ossos_chefe_retrato.png");
+    if (!group->bonelandGhoul.id || !group->bonelandCultist.id || !group->boneLordPortrait.id)
+        return false;
+    SetTextureFilter(group->bonelandGhoul, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->bonelandCultist, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->boneLordPortrait, TEXTURE_FILTER_POINT);
+    return true;
+}
+
+static bool LoadTemplarEnemyAssets(EnemyGroup *group) {
     static const char *const templarFiles[] = {
         [TEMPLAR_SHIELD] = "assets/templario_escudo.png",
         [TEMPLAR_EXECUTIONER] = "assets/templario_carrasco.png",
@@ -399,160 +538,70 @@ bool InitEnemies(EnemyGroup *group) {
     for (int role = TEMPLAR_SHIELD; role <= TEMPLAR_MARSHAL; role++) {
         group->templarWalk[role] = LoadTexture(templarFiles[role]);
         group->templarAttack[role] = LoadTexture(attackFiles[role]);
-        if (!group->templarWalk[role].id || !group->templarAttack[role].id) {
-            UnloadEnemies(group);
-            return false;
-        }
+        if (!group->templarWalk[role].id || !group->templarAttack[role].id) return false;
         SetTextureFilter(group->templarWalk[role], TEXTURE_FILTER_POINT);
         SetTextureFilter(group->templarAttack[role], TEXTURE_FILTER_POINT);
     }
-    group->sealMarker = LoadTexture("assets/inimigo_selo.png");
-    group->bossSprites = LoadTexture("assets/boss_clareira.png");
-    group->guardianSpawn = LoadTexture("assets/boss_clareira_spawn.png");
-    group->guardianDefeat = LoadTexture("assets/boss_clareira_derrota.png");
-    group->bossWalk = LoadTexture("assets/boss_clareira_andar.png");
-    group->bossPortrait = LoadTexture("assets/guardiao_intro_pixel_v2.png");
-    group->cemeteryPortrait = LoadTexture("assets/coveiro_intro_pixel.png");
-    group->boneLordPortrait = LoadTexture("assets/terra_dos_ossos_chefe_retrato.png");
     group->marshalSlam = LoadTexture("assets/templario_marechal_ruptura_v2.png");
     group->marshalCharge = LoadTexture("assets/templario_marechal_investida_v2.png");
     group->templarDust = LoadTexture("assets/templario_poeira.png");
-    if (!group->marshalSlam.id || !group->marshalCharge.id || !group->templarDust.id) {
-        UnloadEnemies(group);
+    group->marshalPortrait = LoadTexture("assets/templario_marechal_retrato.png");
+    if (!group->marshalSlam.id || !group->marshalCharge.id ||
+        !group->templarDust.id || !group->marshalPortrait.id)
         return false;
-    }
     SetTextureFilter(group->marshalSlam, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->marshalCharge, TEXTURE_FILTER_POINT);
     SetTextureFilter(group->templarDust, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->marshalPortrait, TEXTURE_FILTER_POINT);
     if (FileExists("assets/templario_efeitos.png")) {
         group->templarEffects = LoadTexture("assets/templario_efeitos.png");
         if (group->templarEffects.id) SetTextureFilter(group->templarEffects, TEXTURE_FILTER_POINT);
     }
-    group->marshalPortrait = LoadTexture("assets/templario_marechal_retrato.png");
-    group->bossAttack = LoadTexture("assets/boss_clareira_especial_1.png");
-    group->roots = LoadTexture("assets/boss_clareira_raizes_area.png");
-    group->rootWave = LoadTexture("assets/boss_clareira_onda.png");
-    group->curse = LoadTexture("assets/boss_clareira_maldicao.png");
-    group->guardianMelee = LoadTexture("assets/boss_clareira_corpo_a_corpo.png");
-    group->villageBossWalk = LoadTexture("assets/lider_vila_walk.png");
-    group->villageBossAttack = LoadTexture("assets/lider_vila_ataque.png");
-    group->villageBossCharge = LoadTexture("assets/lider_vila_investida.png");
-    const char *villageZombieSheets[VILLAGE_ZOMBIE_ATLAS_COUNT] = {
-        [VILLAGE_ZOMBIE_IDLE] = "assets/zumbi_vila_idle.png",
-        [VILLAGE_ZOMBIE_EMERGE] = "assets/zumbi_vila_emerge.png",
-        [VILLAGE_ZOMBIE_WALK] = "assets/zumbi_vila_walk.png",
-        [VILLAGE_ZOMBIE_ATTACK] = "assets/zumbi_vila_attack.png"
-    };
-    for (int i = 0; i < VILLAGE_ZOMBIE_ATLAS_COUNT; i++) {
-        group->villageZombie[i] = LoadTexture(villageZombieSheets[i]);
-        if (!group->villageZombie[i].id) {
-            UnloadEnemies(group);
-            return false;
-        }
-        SetTextureFilter(group->villageZombie[i], TEXTURE_FILTER_POINT);
+    return true;
+}
+
+bool EnsureEnemyMapAssets(EnemyGroup *group, int mapId) {
+    if (!group) return false;
+    if (group->loadedMap == mapId) return true;
+    UnloadEnemyMapAssets(group);
+    bool ok = true;
+    switch (mapId) {
+        case 0: ok = LoadClearingEnemyAssets(group); break;
+        case 1: ok = LoadCemeteryEnemyAssets(group); break;
+        case 2: ok = LoadVillageEnemyAssets(group); break;
+        case 3:
+        case 4:
+        case 5: ok = true; break;
+        case 6: ok = LoadBonelandEnemyAssets(group); break;
+        case 7: ok = LoadTemplarEnemyAssets(group); break;
+        case 8: ok = LoadNecromancerSprites(group); break;
+        default: ok = true; break;
     }
-    if (!group->sprites.id || !group->backSprites.id || !group->frontSprites.id ||
-        !group->bossSprites.id || !group->bossWalk.id || !group->bossAttack.id ||
-        !group->guardianSpawn.id || !group->guardianDefeat.id ||
-        !group->clearingMelee[0].id || !group->clearingMelee[1].id || !group->clearingMelee[2].id ||
-        !group->clearingArcher[0].id || !group->clearingArcher[1].id || !group->clearingArcher[2].id ||
-        !group->clearingSpecial[0].id || !group->clearingSpecial[1].id || !group->clearingSpecial[2].id ||
-        !group->bonelandGhoul.id || !group->bonelandCultist.id ||
-        !group->sealMarker.id ||
-        !group->roots.id || !group->rootWave.id || !group->curse.id || !group->guardianMelee.id ||
-        !group->bossPortrait.id || !group->cemeteryPortrait.id || !group->boneLordPortrait.id || !group->marshalPortrait.id ||
-        !group->villageBossWalk.id || !group->villageBossAttack.id ||
-        !group->villageBossCharge.id) {
+    if (!ok) {
+        UnloadEnemyMapAssets(group);
+        return false;
+    }
+    group->loadedMap = mapId;
+    return true;
+}
+
+bool InitEnemies(EnemyGroup *group) {
+    *group = (EnemyGroup){0};
+    group->loadedMap = -1;
+    group->sealMarker = LoadTexture("assets/inimigo_selo.png");
+    if (!group->sealMarker.id) {
         UnloadEnemies(group);
         return false;
     }
-    SetTextureFilter(group->sprites, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->backSprites, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->frontSprites, TEXTURE_FILTER_POINT);
-    for (int i=0; i<3; i++) {
-        SetTextureFilter(group->clearingMelee[i], TEXTURE_FILTER_POINT);
-        SetTextureFilter(group->clearingArcher[i], TEXTURE_FILTER_POINT);
-        SetTextureFilter(group->clearingSpecial[i], TEXTURE_FILTER_POINT);
-    }
     SetTextureFilter(group->sealMarker, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->bonelandGhoul, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->bonelandCultist, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->bossSprites, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->guardianSpawn, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->guardianDefeat, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->bossWalk, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->bossPortrait, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->cemeteryPortrait, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->boneLordPortrait, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->marshalPortrait, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->bossAttack, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->roots, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->rootWave, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->curse, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->guardianMelee, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->villageBossWalk, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->villageBossAttack, TEXTURE_FILTER_POINT);
-    SetTextureFilter(group->villageBossCharge, TEXTURE_FILTER_POINT);
-    group->villageLetter=LoadTexture("assets/cutscenes/village_aftermath/images/carta.png");
-    if (group->villageLetter.id) SetTextureFilter(group->villageLetter,TEXTURE_FILTER_BILINEAR);
     return true;
 }
 
 void UnloadEnemies(EnemyGroup *group) {
-    UnloadNecromancerSprites(group);
-    for (int i=0;i<3;i++) if (group->cemeteryZombie[i].id) UnloadTexture(group->cemeteryZombie[i]);
-    for (int i=0;i<3;i++) if (group->cemeteryLantern[i].id) UnloadTexture(group->cemeteryLantern[i]);
-    for (int i=0;i<3;i++) if (group->cemeterySpecial[i].id) UnloadTexture(group->cemeterySpecial[i]);
-    if (group->coveiroIdle.id) UnloadTexture(group->coveiroIdle);
-    if (group->coveiroEmerge.id) UnloadTexture(group->coveiroEmerge);
-    if (group->coveiroFall.id) UnloadTexture(group->coveiroFall);
-    if (group->coveiroWalk.id) UnloadTexture(group->coveiroWalk);
-    if (group->coveiroMelee.id) UnloadTexture(group->coveiroMelee);
-    if (group->cemeterySpell.id) UnloadTexture(group->cemeterySpell);
-    for (int i=0;i<3;i++) if (group->boss[i].id) UnloadTexture(group->boss[i]);
-    for (int i=0;i<3;i++) if (group->effects[i].id) UnloadTexture(group->effects[i]);
-
-    if (group->sprites.id) UnloadTexture(group->sprites);
-    if (group->backSprites.id) UnloadTexture(group->backSprites);
-    if (group->frontSprites.id) UnloadTexture(group->frontSprites);
-    for (int i=0; i<3; i++) {
-        if (group->clearingMelee[i].id) UnloadTexture(group->clearingMelee[i]);
-        if (group->clearingArcher[i].id) UnloadTexture(group->clearingArcher[i]);
-        if (group->clearingSpecial[i].id) UnloadTexture(group->clearingSpecial[i]);
-    }
-    if (group->sealMarker.id) UnloadTexture(group->sealMarker);
-    for (int role = TEMPLAR_SHIELD; role <= TEMPLAR_MARSHAL; role++) {
-        if (group->templarWalk[role].id) UnloadTexture(group->templarWalk[role]);
-        if (group->templarAttack[role].id) UnloadTexture(group->templarAttack[role]);
-    }
-    if (group->bonelandGhoul.id) UnloadTexture(group->bonelandGhoul);
-    if (group->bonelandCultist.id) UnloadTexture(group->bonelandCultist);
-    for (int i = 0; i < BONE_SHEET_COUNT; i++)
-        if (group->boneLordSheets[i].id) UnloadTexture(group->boneLordSheets[i]);
-    if (group->bossSprites.id) UnloadTexture(group->bossSprites);
-    if (group->guardianSpawn.id) UnloadTexture(group->guardianSpawn);
-    if (group->guardianDefeat.id) UnloadTexture(group->guardianDefeat);
-    if (group->bossWalk.id) UnloadTexture(group->bossWalk);
-    if (group->bossPortrait.id) UnloadTexture(group->bossPortrait);
-    if (group->cemeteryPortrait.id) UnloadTexture(group->cemeteryPortrait);
-    if (group->boneLordPortrait.id) UnloadTexture(group->boneLordPortrait);
-    if (group->templarEffects.id) UnloadTexture(group->templarEffects);
-    if (group->marshalSlam.id) UnloadTexture(group->marshalSlam);
-    if (group->marshalCharge.id) UnloadTexture(group->marshalCharge);
-    if (group->templarDust.id) UnloadTexture(group->templarDust);
-    if (group->marshalPortrait.id) UnloadTexture(group->marshalPortrait);
-    if (group->bossAttack.id) UnloadTexture(group->bossAttack);
-    if (group->roots.id) UnloadTexture(group->roots);
-    if (group->rootWave.id) UnloadTexture(group->rootWave);
-    if (group->curse.id) UnloadTexture(group->curse);
-    if (group->guardianMelee.id) UnloadTexture(group->guardianMelee);
-    if (group->villageBossWalk.id) UnloadTexture(group->villageBossWalk);
-    if (group->villageBossAttack.id) UnloadTexture(group->villageBossAttack);
-    if (group->villageBossCharge.id) UnloadTexture(group->villageBossCharge);
-    for (int i = 0; i < VILLAGE_ZOMBIE_ATLAS_COUNT; i++)
-        if (group->villageZombie[i].id) UnloadTexture(group->villageZombie[i]);
-    if (group->villageLetter.id) UnloadTexture(group->villageLetter);
+    UnloadEnemyMapAssets(group);
+    UnloadTexIfLoaded(&group->sealMarker);
     *group = (EnemyGroup){0};
+    group->loadedMap = -1;
 }
 
 void ResetEnemies(EnemyGroup *group, const Clearing *clearing) {
@@ -668,6 +717,7 @@ static void StartTemplarWave(EnemyGroup *group, int wave) {
 
 void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
                     Vector2 player, float playerPower) {
+    if (IsWindowReady()) EnsureEnemyMapAssets(group, ClearingMapId(clearing));
     group->boneland=clearing->boneland;
     group->cemetery=clearing->cemetery;
     group->village=clearing->village;
@@ -718,6 +768,7 @@ void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
 }
 
 void StartArenaBoss(EnemyGroup *group, const Clearing *clearing, Vector2 player, float power) {
+    if (IsWindowReady()) EnsureEnemyMapAssets(group, ClearingMapId(clearing));
     group->boneland=clearing->boneland;
     group->cemetery=clearing->cemetery;
     group->village=clearing->village;

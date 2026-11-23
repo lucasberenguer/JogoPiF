@@ -123,9 +123,11 @@ typedef struct EnemyGroup {
     Texture2D coveiroIdle,coveiroWalk,coveiroMelee,coveiroEmerge,coveiroFall,boss[3],effects[3];
     EnemyImpact impacts[16], templarBlood;
     CemeteryProjectile cemeteryProjectiles[CEMETERY_PROJECTILE_COUNT];
+    int loadedMap;
 } EnemyGroup;
 
 bool InitEnemies(EnemyGroup *group);
+bool EnsureEnemyMapAssets(EnemyGroup *group, int mapId);
 void UnloadEnemies(EnemyGroup *group);
 void ResetEnemies(EnemyGroup *group, const Clearing *clearing);
 void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,

@@ -225,6 +225,7 @@ static void StartStage(Encounter *e, EnemyGroup *enemies, const Clearing *cleari
 void BeginEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing,
                     RunProgress progress, Vector2 player) {
     progress.map = ClearingMapId(clearing);
+    if (IsWindowReady()) EnsureEnemyMapAssets(enemies, progress.map);
     if (progress.map > 0) progress.guardianAftermath = GUARDIAN_PASSAGE_COMPLETE;
     if ((clearing->village || clearing->chapel || clearing->basement || clearing->invertedChapel) && progress.stage < CLEARING_BOSS_STAGE)
         progress.stage = CLEARING_BOSS_STAGE;
