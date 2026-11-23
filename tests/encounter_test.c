@@ -34,21 +34,57 @@ static void Capture(const char *name, Encounter *encounter, EnemyGroup *enemies,
 }
 
 static void CheckVillageZombies(Encounter *encounter, EnemyGroup *enemies, Clearing *map) {
-    StartVillageHorde(enemies, map, map->spawn, 1);
-    assert(EnemiesRemaining(enemies) == 31 && enemies->villageSpawnRemaining == 12);
-    for (int i = 0; i < 19; i++) {
+    StartVillageHorde(enemies, map, map->spawn);
+    assert(EnemiesRemaining(enemies) == 64 && enemies->villageSpawnRemaining == 34);
+    for (int i = 0; i < VILLAGE_HORDE_INITIAL; i++) {
         const Enemy *zombie = &enemies->list[i];
         assert(zombie->type == ENEMY_COMMON_MELEE && zombie->state == ENEMY_SPAWNING);
-        assert(!EnemyCanBeHit(zombie));
+        bool brute=i==10 || i==21;
+        assert(zombie->villageBrute==brute && !EnemyCanBeHit(zombie));
+        assert(zombie->health==(brute?300:90) && zombie->maxHealth==zombie->health);
     }
     int health = 100;
     UpdateEnemies(enemies, map, map->spawn, .66f, false, &health, 100);
-    assert(enemies->villageSpawnRemaining == 11 && health == 100);
-    assert(enemies->list[19].state == ENEMY_SPAWNING && !EnemyCanBeHit(&enemies->list[19]));
+    assert(enemies->villageSpawnRemaining == 33 && health == 100);
+    assert(enemies->list[VILLAGE_HORDE_INITIAL].state == ENEMY_SPAWNING &&
+           !EnemyCanBeHit(&enemies->list[VILLAGE_HORDE_INITIAL]));
     UpdateEnemies(enemies, map, map->spawn, .32f, false, &health, 100);
     assert(enemies->list[0].state == ENEMY_SPAWNING);
     UpdateEnemies(enemies, map, map->spawn, .03f, false, &health, 100);
     assert(enemies->list[0].state == ENEMY_IDLE && EnemyCanBeHit(&enemies->list[0]));
+
+    for (int i=0;i<7;i++) VillageUpdateHorde(enemies,map,map->spawn,.66f);
+    assert(enemies->villageSpawnRemaining==28);
+    for (int i=0;i<36;i++) {
+        bool brute=i==10 || i==21 || i==32;
+        assert(enemies->list[i].villageBrute==brute);
+        assert(enemies->list[i].health==(brute?300:90));
+    }
+    VillageUpdateHorde(enemies,map,map->spawn,.66f);
+    assert(enemies->villageSpawnRemaining==28);
+    enemies->list[35].state=ENEMY_GONE;
+    VillageUpdateHorde(enemies,map,map->spawn,.66f);
+    assert(enemies->villageSpawnRemaining==27 && enemies->list[35].health==90);
+
+    for (int number=38;number<=64;number++) {
+        enemies->list[35].state=ENEMY_GONE;
+        VillageUpdateHorde(enemies,map,map->spawn,.66f);
+        assert(enemies->villageSpawnRemaining==64-number);
+        assert(enemies->list[35].villageBrute==(number==44 || number==55));
+    }
+    Enemy *brute=&enemies->list[10];
+    assert(brute->villageBrute && brute->health==300 && brute->maxHealth==300);
+    brute->state=ENEMY_ATTACK;
+    brute->stateTime=.63f;
+    VillageUpdateBruteAttack(enemies,map,brute,brute->position,false,&health);
+    assert(health==100);
+    brute->stateTime=.65f;
+    VillageUpdateBruteAttack(enemies,map,brute,brute->position,false,&health);
+    assert(health==68);
+    enemies->playerHitCooldown=0;
+    VillageUpdateBruteAttack(enemies,map,brute,brute->position,false,&health);
+    assert(health==68);
+    health=100;
 
     Vector2 ground = enemies->list[0].position;
     for (int i = 0; i < ENEMY_COUNT; i++) enemies->list[i] = (Enemy){.state=ENEMY_GONE};
@@ -1452,15 +1488,24 @@ int main(void) {
     enemies.list[0].health=0;
     enemies.list[0].state=ENEMY_DIE;
     UpdateEncounter(&encounter,&enemies,&clearing,clearing.spawn,&health);
-    assert(encounter.phase==ENCOUNTER_VILLAGE_CINEMATIC && EncounterPaused(&encounter));
+    assert(encounter.phase==ENCOUNTER_VILLAGE_LETTER_READY && !EncounterPaused(&encounter));
     RunProgress villageSaved;
     assert(LoadClearingCheckpoint(&villageSaved) && villageSaved.villageAftermath==VILLAGE_SCENE_PENDING);
     BeginEncounter(&encounter,&enemies,&clearing,villageSaved,clearing.spawn);
-    assert(encounter.phase==ENCOUNTER_VILLAGE_CINEMATIC);
+    assert(encounter.phase==ENCOUNTER_VILLAGE_LETTER_READY);
+    assert(!PutAwayVillageLetter(&encounter,&enemies,&clearing,clearing.spawn));
+    assert(!ReadVillageLetter(&encounter,&enemies,(Vector2){-200,-200}));
+    assert(ReadVillageLetter(&encounter,&enemies,enemies.list[0].position));
+    assert(encounter.phase==ENCOUNTER_VILLAGE_CINEMATIC && EncounterPaused(&encounter));
+    assert(!PutAwayVillageLetter(&encounter,&enemies,&clearing,clearing.spawn));
     CompleteVillageCinematic(&encounter);
     assert(LoadClearingCheckpoint(&villageSaved) && villageSaved.villageAftermath==VILLAGE_SCENE_SEEN);
     BeginEncounter(&encounter,&enemies,&clearing,villageSaved,clearing.spawn);
     assert(encounter.phase==ENCOUNTER_LETTER && enemies.list[0].health==0);
+    assert(!encounter.villageHordeStarted && enemies.villageSpawnRemaining==0);
+    assert(PutAwayVillageLetter(&encounter,&enemies,&clearing,clearing.spawn));
+    assert(encounter.villageHordeStarted && EnemiesRemaining(&enemies)==64);
+    assert(!PutAwayVillageLetter(&encounter,&enemies,&clearing,clearing.spawn));
     CheckVillageZombies(&encounter,&enemies,&clearing);
     UnloadClearing(&clearing);
     assert(InitChapel(&clearing));
@@ -1506,6 +1551,27 @@ int main(void) {
     BeginEncounter(&encounter,&enemies,&clearing,blessed,clearing.spawn);
     CompleteAngelCinematic(&encounter,100);
     assert(encounter.chapelAltarDone && encounter.progress.angelBlessingUses==0);
+
+    DevTools villageTools={.map=VILLAGE_MAP,.wave=1,.weapon=2,.weaponLevel=2};
+    Vector2 villagePracticePlayer;
+    int villagePracticeHealth;
+    assert(StartDevEncounter(&villageTools,DEV_STAGE,&encounter,&enemies,&clearing,
+                             &villagePracticePlayer,&villagePracticeHealth));
+    assert(clearing.village && encounter.practice && encounter.progress.map==VILLAGE_MAP);
+    assert(encounter.progress.stage==CLEARING_BOSS_STAGE && enemies.list[0].type==ENEMY_BOSS);
+    assert(encounter.progress.weaponLevel[2]==2 && villagePracticeHealth==100);
+    Enemy *leader=&enemies.list[0];
+    assert(leader->maxHealth==20 && leader->health==20);
+    leader->state=ENEMY_IDLE;
+    DamageEnemyFrom(leader,0,villagePracticePlayer);
+    assert(leader->health==20);
+    DamageEnemyFrom(leader,1,villagePracticePlayer);
+    assert(leader->health==0 && leader->state==ENEMY_DIE);
+    assert(StartDevEncounter(&villageTools,DEV_BOSS_TWO,&encounter,&enemies,&clearing,
+                             &villagePracticePlayer,&villagePracticeHealth));
+    assert(enemies.list[0].guardianPhase==GUARDIAN_PHASE_TWO);
+    assert(!StartDevEncounter(&villageTools,DEV_SEAL,&encounter,&enemies,&clearing,
+                              &villagePracticePlayer,&villagePracticeHealth));
 
     DevTools chapelTools={.map=CHAPEL_MAP,.wave=1,.weapon=2};
     Vector2 chapelPlayer;

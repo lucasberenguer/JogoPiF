@@ -434,6 +434,14 @@ bool InitEnemies(EnemyGroup *group) {
     group->rootWave = LoadTexture("assets/boss_clareira_onda.png");
     group->curse = LoadTexture("assets/boss_clareira_maldicao.png");
     group->guardianMelee = LoadTexture("assets/boss_clareira_corpo_a_corpo.png");
+    group->villageBruteWalk = LoadTexture("assets/zumbi_vila_forte_marcha_v2.png");
+    group->villageBruteAttack = LoadTexture("assets/zumbi_vila_forte_pancada_v2.png");
+    if (!group->villageBruteWalk.id || !group->villageBruteAttack.id) {
+        UnloadEnemies(group);
+        return false;
+    }
+    SetTextureFilter(group->villageBruteWalk, TEXTURE_FILTER_POINT);
+    SetTextureFilter(group->villageBruteAttack, TEXTURE_FILTER_POINT);
     group->villageBossWalk = LoadTexture("assets/lider_vila_walk.png");
     group->villageBossAttack = LoadTexture("assets/lider_vila_ataque.png");
     group->villageBossCharge = LoadTexture("assets/lider_vila_investida.png");
@@ -546,6 +554,8 @@ void UnloadEnemies(EnemyGroup *group) {
     if (group->rootWave.id) UnloadTexture(group->rootWave);
     if (group->curse.id) UnloadTexture(group->curse);
     if (group->guardianMelee.id) UnloadTexture(group->guardianMelee);
+    if (group->villageBruteWalk.id) UnloadTexture(group->villageBruteWalk);
+    if (group->villageBruteAttack.id) UnloadTexture(group->villageBruteAttack);
     if (group->villageBossWalk.id) UnloadTexture(group->villageBossWalk);
     if (group->villageBossAttack.id) UnloadTexture(group->villageBossAttack);
     if (group->villageBossCharge.id) UnloadTexture(group->villageBossCharge);
@@ -734,12 +744,13 @@ void StartArenaBoss(EnemyGroup *group, const Clearing *clearing, Vector2 player,
     Enemy *boss = &group->list[0];
     if (clearing->necromancerArena) { StartNecromancer(group,power); return; }
     int baseHealth = clearing->templarField ? 3000 : clearing->boneland ? 2800
-        : clearing->village ? 500 : (clearing->cemetery ? CEMETERY_BOSS_BASE_HEALTH : ARENA_BOSS_BASE_HEALTH);
+        : clearing->village ? 20 : (clearing->cemetery ? CEMETERY_BOSS_BASE_HEALTH : ARENA_BOSS_BASE_HEALTH);
     Vector2 bossPos = clearing->templarField ? (Vector2){835, 290} : clearing->village
         ? (Vector2){clearing->background.width * 0.62f, clearing->background.height * 0.54f}
         : SpawnPosition(clearing, player);
     *boss = (Enemy){.type = ENEMY_BOSS, .state = ENEMY_SPAWNING,
-        .position = bossPos, .maxHealth = (int)(baseHealth*fmaxf(1, power)),
+        .position = bossPos, .villageLeader = clearing->village,
+        .maxHealth = clearing->village ? baseHealth : (int)(baseHealth*fmaxf(1, power)),
         .speed = clearing->village || clearing->templarField ? 185 : (clearing->cemetery ? 160 : 100),
         .power = power, .attackCooldown = 1.25f, .lastKatanaSwing = -1,
         .bossAttack = (clearing->cemetery ? COVEIRO_ATTACK_COUNT : GUARDIAN_ATTACK_COUNT) - 1};
@@ -761,7 +772,9 @@ int EnemiesRemaining(const EnemyGroup *group) {
     return count + (group->village ? group->villageSpawnRemaining : 0);
 }
 
-float EnemyHurtRadius(const Enemy *enemy) { return enemy->type == ENEMY_BOSS ? 48.0f : ENEMY_HURT_RADIUS; }
+float EnemyHurtRadius(const Enemy *enemy) {
+    return enemy->type == ENEMY_BOSS ? 48.0f : enemy->villageBrute ? 26.0f : ENEMY_HURT_RADIUS;
+}
 
 bool EnemyCanBeHit(const Enemy *enemy) {
     if (enemy->guardianPhase == GUARDIAN_PHASE_TRANSITION) return false;
@@ -770,7 +783,7 @@ bool EnemyCanBeHit(const Enemy *enemy) {
 }
 
 Vector2 EnemyCenter(const Enemy *enemy) {
-    return (Vector2){enemy->position.x, enemy->position.y-(enemy->type == ENEMY_BOSS ? 75.0f : 36.0f)};
+    return (Vector2){enemy->position.x, enemy->position.y-(enemy->type == ENEMY_BOSS ? 75.0f : enemy->villageBrute ? 48.0f : 36.0f)};
 }
 
 void DamageEnemy(Enemy *enemy, int damage) {
@@ -791,8 +804,8 @@ void DamageEnemyFrom(Enemy *enemy, int damage, Vector2 source) {
             return;
         }
     }
-    enemy->health -= damage;
-    if (enemy->type == ENEMY_BOSS && enemy->guardianPhase == GUARDIAN_PHASE_ONE &&
+    enemy->health -= enemy->villageLeader ? enemy->health : damage;
+    if (enemy->type == ENEMY_BOSS && !enemy->villageLeader && enemy->guardianPhase == GUARDIAN_PHASE_ONE &&
         enemy->health <= enemy->maxHealth / 2) {
         enemy->health = enemy->maxHealth / 2;
         enemy->guardianPhase = GUARDIAN_PHASE_TRANSITION;
@@ -1309,6 +1322,10 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 if (enemy->stateTime >= SPECIAL_ATTACK_END) { enemy->state = ENEMY_IDLE; enemy->stateTime = 0; }
                 continue;
             }
+            if (enemy->villageBrute) {
+                VillageUpdateBruteAttack(group,clearing,enemy,player,playerDodging,playerHealth);
+                continue;
+            }
             bool ranged = enemy->type == ENEMY_COMMON_RANGED;
             bool mage = group->cemetery && ranged;
             bool cultist = group->boneland && ranged;
@@ -1409,7 +1426,8 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             enemy->stateTime = 0.0f;
             enemy->attackConnected = false;
             enemy->attackDirection = Vector2Normalize(toPlayer);
-            enemy->attackCooldown = enemy->templarRole == TEMPLAR_SHIELD ? .83f :
+            enemy->attackCooldown = enemy->villageBrute ? 1.85f :
+                enemy->templarRole == TEMPLAR_SHIELD ? .83f :
                 1.25f / fminf(enemy->power, 1.36f);
         } else if (distance > ENEMY_ATTACK_RANGE*0.85f) {
             enemy->state = ENEMY_WALK;

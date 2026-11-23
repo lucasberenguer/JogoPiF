@@ -5,6 +5,7 @@
 
 #define CLEARING_MAP 0
 #define CEMETERY_MAP 1
+#define VILLAGE_MAP 2
 #define CLEARING_WAVES 3 /* Clareira do Selo; o chefe vem depois da última onda. */
 #define CEMETERY_WAVES 4 /* Cemitério das Raízes. */
 #define BONELAND_WAVES 3

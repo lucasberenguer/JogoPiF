@@ -16,7 +16,7 @@ typedef struct EncounterSealDifficultyRow {
 } EncounterSealDifficultyRow;
 
 typedef enum EncounterPhase { ENCOUNTER_FIGHT, ENCOUNTER_REWARD, ENCOUNTER_SEAL,
-                             ENCOUNTER_VILLAGE_CINEMATIC, ENCOUNTER_LETTER, ENCOUNTER_ANGEL_CINEMATIC, ENCOUNTER_CHAPEL_TEXT, ENCOUNTER_BASEMENT_PILLAR,
+                             ENCOUNTER_VILLAGE_LETTER_READY, ENCOUNTER_VILLAGE_CINEMATIC, ENCOUNTER_LETTER, ENCOUNTER_ANGEL_CINEMATIC, ENCOUNTER_CHAPEL_TEXT, ENCOUNTER_BASEMENT_PILLAR,
                              ENCOUNTER_CLEAR, ENCOUNTER_DEFEAT } EncounterPhase;
 typedef enum RewardRarity { RARITY_COMMON, RARITY_RARE, RARITY_EPIC, RARITY_COUNT } RewardRarity;
 typedef enum RewardKind {
@@ -65,6 +65,8 @@ bool EncounterPaused(const Encounter *encounter);
 bool OpenAngelRevival(const Encounter *e, unsigned seed, LogicMCQuestion *question);
 bool AnswerAngelRevival(Encounter *e, const LogicMCQuestion *question, int choice, int *health);
 void CompleteAngelCinematic(Encounter *e, int health);
+bool ReadVillageLetter(Encounter *e, const EnemyGroup *enemies, Vector2 player);
+bool PutAwayVillageLetter(Encounter *e, EnemyGroup *enemies, const Clearing *map, Vector2 player);
 void CompleteVillageCinematic(Encounter *encounter);
 void CompleteGuardianIntro(Encounter *encounter, bool cinematicPlayed);
 bool GuardianLiberationPending(const Encounter *encounter);

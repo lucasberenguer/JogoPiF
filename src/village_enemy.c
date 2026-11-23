@@ -4,7 +4,11 @@
 #include <stddef.h>
 
 enum { VILLAGE_AXE_SLASH, VILLAGE_CHARGE, VILLAGE_SEAL_PULSE, VILLAGE_ATTACK_COUNT };
-enum { VILLAGE_ACTIVE_LIMIT = 24 };
+enum {
+    VILLAGE_ACTIVE_LIMIT = 36, VILLAGE_ZOMBIE_HEALTH = 90, VILLAGE_BRUTE_HEALTH = 300,
+    VILLAGE_BRUTE_DAMAGE = 32, VILLAGE_COMMON_PER_BRUTE = 10
+};
+static const float bruteImpact=.64f, bruteRecoveryEnd=1.23f, bruteRadius=118;
 
 static Vector2 VillageHordeSpot(const Clearing *clearing, Vector2 player) {
     float w = (float)clearing->background.width, h = (float)clearing->background.height;
@@ -24,16 +28,17 @@ static Vector2 VillageHordeSpot(const Clearing *clearing, Vector2 player) {
 }
 
 static void SpawnNecroticVillager(Enemy *enemy, const Clearing *clearing,
-                                  Vector2 player, float playerPower) {
-    float adjustment = 1.0f + fminf(0.15f, fmaxf(0.0f, playerPower - 1.0f) * 0.05f);
-    int hp = (int)ceilf(45.0f * 1.36f * adjustment);
+                                  Vector2 player, int spawnIndex) {
+    bool brute = (spawnIndex+1) % (VILLAGE_COMMON_PER_BRUTE+1) == 0;
+    int health = brute ? VILLAGE_BRUTE_HEALTH : VILLAGE_ZOMBIE_HEALTH;
     *enemy = (Enemy){
         .type = ENEMY_COMMON_MELEE,
         .state = ENEMY_SPAWNING,
         .position = VillageHordeSpot(clearing, player),
-        .health = hp,
-        .maxHealth = hp,
-        .speed = 112.0f,
+        .health = health,
+        .maxHealth = health,
+        .villageBrute = brute,
+        .speed = brute ? 82.0f : 112.0f,
         .power = 1.05f,
         .attackCooldown = 0.45f,
         .lastKatanaSwing = -1
@@ -41,20 +46,20 @@ static void SpawnNecroticVillager(Enemy *enemy, const Clearing *clearing,
 }
 
 void StartVillageHorde(EnemyGroup *group, const Clearing *clearing,
-                       Vector2 player, float power) {
+                       Vector2 player) {
     group->village = true;
     group->cemetery = false;
     ClearEnemyAttacks(group);
     group->playerHitCooldown = 0.0f;
     for (int i = 0; i < ENEMY_COUNT; i++) group->list[i] = (Enemy){.state = ENEMY_GONE};
-    for (int i = 0; i < 19 && i < ENEMY_COUNT; i++) {
-        SpawnNecroticVillager(&group->list[i], clearing, player, power);
-        group->list[i].speed = 104.0f + 4.0f * (float)(i % 5);
+    for (int i = 0; i < VILLAGE_HORDE_INITIAL; i++) {
+        SpawnNecroticVillager(&group->list[i], clearing, player, i);
+        if (!group->list[i].villageBrute)
+            group->list[i].speed = 104.0f + 4.0f * (float)(i % 5);
         group->list[i].attackCooldown = 0.35f + 0.08f * (float)(i % 6);
     }
-    group->villageSpawnRemaining = 12;
+    group->villageSpawnRemaining = VILLAGE_HORDE_REINFORCEMENTS;
     group->villageSpawnTimer = 0.65f;
-    group->villageHordePower = power;
 }
 
 void VillageUpdateHorde(EnemyGroup *group, const Clearing *clearing,
@@ -81,13 +86,32 @@ void VillageUpdateHorde(EnemyGroup *group, const Clearing *clearing,
     if (group->villageSpawnTimer > 0.0f) return;
     for (int i = 0; i < VILLAGE_ACTIVE_LIMIT; i++) {
         if (group->list[i].state == ENEMY_GONE) {
-            SpawnNecroticVillager(&group->list[i], clearing, player, group->villageHordePower);
+            int spawnIndex=VILLAGE_HORDE_INITIAL+VILLAGE_HORDE_REINFORCEMENTS-
+                group->villageSpawnRemaining;
+            SpawnNecroticVillager(&group->list[i],clearing,player,spawnIndex);
             group->villageSpawnRemaining--;
             group->villageSpawnTimer = 0.65f;
             return;
         }
     }
     group->villageSpawnTimer = 0.25f;
+}
+
+void VillageUpdateBruteAttack(EnemyGroup *group, const Clearing *map, Enemy *brute,
+                              Vector2 player, bool dodging, int *health) {
+    if (!brute->attackConnected && brute->stateTime>=bruteImpact) {
+        brute->attackConnected=true;
+        if (!dodging && group->playerHitCooldown<=0 && *health>0 &&
+            Vector2DistanceSqr(brute->position,player)<=bruteRadius*bruteRadius &&
+            MapHasClearPath(map,brute->position,player)) {
+            *health=*health>VILLAGE_BRUTE_DAMAGE ? *health-VILLAGE_BRUTE_DAMAGE : 0;
+            group->playerHitCooldown=.65f;
+        }
+    }
+    if (brute->stateTime>=bruteRecoveryEnd) {
+        brute->state=ENEMY_IDLE;
+        brute->stateTime=0;
+    }
 }
 
 static int VillageFacing(Vector2 delta, int fallback) {
@@ -306,6 +330,36 @@ void DrawHumanBoss(const EnemyGroup *group, const Enemy *enemy, bool foreground)
     DrawTexturePro(tex, src, dst, (Vector2){0}, 0.0f, tint);
 }
 
+static void DrawVillageBrute(const EnemyGroup *group,const Enemy *brute) {
+    static const int rows[]={0,3,2,1};
+    bool striking=brute->state==ENEMY_ATTACK;
+    float t=brute->stateTime;
+    Texture2D texture=striking ? group->villageBruteAttack : group->villageBruteWalk;
+    int frame=brute->state==ENEMY_WALK ? (int)(brute->walkTime*7)%6 : 0;
+    if (striking) {
+        if (t<bruteImpact) {
+            frame=(int)Clamp(t*3/bruteImpact,0,2);
+            DrawCircleV(brute->position,bruteRadius,Fade(MAROON,.15f+.25f*t/bruteImpact));
+            DrawCircleLinesV(brute->position,bruteRadius,Fade(ORANGE,.8f));
+        } else {
+            float age=(t-bruteImpact)/.32f;
+            if (age<1) {
+                float radius=bruteRadius*(.25f+.75f*age);
+                DrawRing(brute->position,radius-7,radius,0,360,36,Fade(BEIGE,.85f*(1-age)));
+            }
+            frame=3+(int)Clamp(3*(t-bruteImpact)/(bruteRecoveryEnd-bruteImpact),0,2);
+        }
+    }
+    float w=texture.width/6.0f, h=texture.height/4.0f;
+    float alpha=brute->state==ENEMY_DIE ? Clamp(1-t/.45f,0,1) :
+                brute->state==ENEMY_SPAWNING ? Clamp(t/VILLAGE_ZOMBIE_EMERGE_TIME,0,1) : 1;
+    const float height=128, width=height*w/h, feetAnchor=height*(246.0f/256.0f);
+    DrawTexturePro(texture,(Rectangle){frame*w,rows[brute->facing]*h,w,h},
+                   (Rectangle){brute->position.x,brute->position.y,width,height},
+                   (Vector2){width*.5f,feetAnchor},0,Fade(brute->state==ENEMY_HURT ? PINK : WHITE,alpha));
+    DrawEnemyHealthBar(brute,brute->position.y-feetAnchor-3);
+}
+
 void VillageDrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
     for (int i = 0; i < ENEMY_COUNT; i++) {
         const Enemy *enemy = &group->list[i];
@@ -317,6 +371,11 @@ void VillageDrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground
 
         if (enemy->type == ENEMY_BOSS) {
             DrawHumanBoss(group, enemy, foreground);
+            continue;
+        }
+
+        if (enemy->villageBrute) {
+            DrawVillageBrute(group,enemy);
             continue;
         }
 

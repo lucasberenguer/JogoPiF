@@ -4,7 +4,7 @@
 #include "clearing.h"
 #include "necromancer.h"
 
-#define ENEMY_COUNT 30
+#define ENEMY_COUNT 36
 #define ENEMY_PROJECTILE_COUNT 48
 #define ENEMY_ROOT_COUNT 8
 #define CEMETERY_PROJECTILE_COUNT 32
@@ -48,6 +48,7 @@ typedef enum EnemyState {
     ENEMY_IDLE, ENEMY_WALK, ENEMY_ATTACK, ENEMY_HURT, ENEMY_DIE, ENEMY_GONE,
     ENEMY_SPAWNING, ENEMY_FALLEN
 } EnemyState;
+enum { VILLAGE_HORDE_INITIAL = 30, VILLAGE_HORDE_REINFORCEMENTS = 34 };
 enum { VILLAGE_ZOMBIE_IDLE, VILLAGE_ZOMBIE_EMERGE, VILLAGE_ZOMBIE_WALK,
        VILLAGE_ZOMBIE_ATTACK, VILLAGE_ZOMBIE_ATLAS_COUNT };
 #define VILLAGE_ZOMBIE_EMERGE_TIME 1.0f
@@ -64,6 +65,8 @@ typedef struct Enemy {
     TemplarRole templarRole;
     int necromancerForm;
     bool necromancerWraith;
+    bool villageLeader;
+    bool villageBrute;
     EnemyState state;
     int facing;
     int lastKatanaSwing;
@@ -114,9 +117,9 @@ typedef struct EnemyGroup {
     bool village;
     int villageSpawnRemaining;
     float villageSpawnTimer;
-    float villageHordePower;
     int villageBossDeathWeapon;
     Texture2D villageLetter;
+    Texture2D villageBruteWalk, villageBruteAttack;
     Texture2D villageBossWalk, villageBossAttack, villageBossCharge;
     Texture2D villageZombie[VILLAGE_ZOMBIE_ATLAS_COUNT];
     Texture2D cemeteryZombie[3], cemeteryLantern[3], cemeterySpecial[3], cemeterySpell;
@@ -170,9 +173,11 @@ void CemeteryUpdateProjectiles(EnemyGroup *, const Clearing *, Vector2, float, b
 void CemeteryDrawEnemies(const EnemyGroup *,Vector2,bool);
 void DrawEnemyProjectiles(const EnemyGroup *);
 void StartVillageHorde(EnemyGroup *group, const Clearing *clearing,
-                       Vector2 player, float power);
+                       Vector2 player);
 void VillageUpdateHorde(EnemyGroup *group, const Clearing *clearing,
                         Vector2 player, float dt);
+void VillageUpdateBruteAttack(EnemyGroup *group, const Clearing *map, Enemy *brute,
+                              Vector2 player, bool dodging, int *health);
 void VillageUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss,
                        Vector2 player, float dt, bool dodging, int *playerHealth);
 void VillageDrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground);

@@ -234,7 +234,7 @@ void BeginEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing,
     if (clearing->village && progress.stage==CLEARING_BOSS_STAGE && progress.villageAftermath!=VILLAGE_DUEL) {
         enemies->list[0].health=0;
         enemies->list[0].state=ENEMY_FALLEN;
-        e->phase=progress.villageAftermath==VILLAGE_SCENE_PENDING ? ENCOUNTER_VILLAGE_CINEMATIC : ENCOUNTER_LETTER;
+        e->phase=progress.villageAftermath==VILLAGE_SCENE_PENDING ? ENCOUNTER_VILLAGE_LETTER_READY : ENCOUNTER_LETTER;
         e->presentation=(StagePresentation){0};
     } else BeginAreaEntry(&e->presentation);
 }
@@ -285,6 +285,24 @@ void CompleteAngelCinematic(Encounter *e, int health) {
     e->phase=ENCOUNTER_FIGHT;
     snprintf(e->notice,sizeof(e->notice),"Bênção recebida. A passagem à esquerda está aberta.");
     if (!e->practice) SaveClearingCheckpoint(&e->progress);
+}
+
+bool ReadVillageLetter(Encounter *e, const EnemyGroup *enemies, Vector2 player) {
+    if (e->phase!=ENCOUNTER_VILLAGE_LETTER_READY ||
+        Vector2Distance(player,enemies->list[0].position)>115) return false;
+    e->phase=ENCOUNTER_VILLAGE_CINEMATIC;
+    return true;
+}
+
+bool PutAwayVillageLetter(Encounter *e, EnemyGroup *enemies, const Clearing *map, Vector2 player) {
+    if (e->phase!=ENCOUNTER_LETTER) return false;
+    e->villageHordeStarted=true;
+    e->phase=ENCOUNTER_FIGHT;
+    StartVillageHorde(enemies,map,player);
+    BeginStagePresentation(&e->presentation,0,"Os aldeões mortos erguem-se da terra!",NULL);
+    e->presentation.announcement="A MALDIÇÃO DESPERTA";
+    e->presentation.duration=e->presentation.remaining=2.2f;
+    return true;
 }
 
 void CompleteVillageCinematic(Encounter *e) {
@@ -931,7 +949,7 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
             enemies->list[0].state=ENEMY_FALLEN;
             e->progress.villageAftermath=VILLAGE_SCENE_PENDING;
             e->progress.health=*health;
-            e->phase=ENCOUNTER_VILLAGE_CINEMATIC;
+            e->phase=ENCOUNTER_VILLAGE_LETTER_READY;
             if (!e->practice) SaveClearingCheckpoint(&e->progress);
             return false;
         }
@@ -962,17 +980,13 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
         } else if (IsKeyPressed(KEY_E) && !(e->progress.map == 2 && !e->villageHordeStarted)) {
             OpenEncounterSeal(e,enemies,player);
         }
+    } else if (e->phase==ENCOUNTER_VILLAGE_LETTER_READY) {
+        if (IsKeyPressed(KEY_E))
+            ReadVillageLetter(e,enemies,player);
     } else if (e->phase==ENCOUNTER_LETTER) {
         if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_E) ||
-            IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-            e->villageHordeStarted = true;
-            e->phase = ENCOUNTER_FIGHT;
-            StartVillageHorde(enemies, clearing, player, e->progress.damage);
-            BeginStagePresentation(&e->presentation, 0, "Os aldeoes mortos erguem-se da terra!", NULL);
-            e->presentation.announcement = "A MALDICAO DESPERTA";
-            e->presentation.duration = e->presentation.remaining = 2.2f;
-            return true;
-        }
+            IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+            return PutAwayVillageLetter(e,enemies,clearing,player);
     } else if (e->phase==ENCOUNTER_REWARD) {
         if (!IsEpicRewardStage(e) && !e->rerolled &&
             IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
@@ -1243,6 +1257,7 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
     else DrawGameText(e->phase==ENCOUNTER_CLEAR ? clearLabel :
         (e->progress.map == 2 ? (e->villageHordeStarted ?
             TextFormat("Horda da Vila - Restantes: %d", EnemiesRemaining(enemies)) :
+            e->phase==ENCOUNTER_VILLAGE_LETTER_READY ? "Aproxime-se da carta · E ou clique para ler" :
             "Duelo - Líder da Vila")
             : TextFormat("Onda %d/%d - %s", CampaignWaveCount(e->progress.map)+1,
                          CampaignWaveCount(e->progress.map)+1, bossLabel)),24,statusY,20,GOLD);
@@ -1399,7 +1414,7 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
             DrawTexturePro(letter,(Rectangle){0,0,letter.width,letter.height},
                 (Rectangle){(sw-width)/2,(sh-hintHeight-height)/2,width,height},
                 (Vector2){0},0,WHITE);
-            DrawGameTextIn("Espaço / Enter / E / Clique para continuar",
+            DrawGameTextIn("Largar a carta · Espaço / Enter / E / Clique",
                 (Rectangle){0,sh-hintHeight,sw,hintHeight},20,GOLD,false);
             return;
         }

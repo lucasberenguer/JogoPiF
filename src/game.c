@@ -314,7 +314,7 @@ int main(void) {
         } else if ((screen == 2 || screen == 3) && playerHealth > 0 &&
                  encounter.progress.stage <= CLEARING_BOSS_STAGE) {
             track = (encounter.guardianIntroPending || encounter.phase==ENCOUNTER_VILLAGE_CINEMATIC ||
-                encounter.phase==ENCOUNTER_LETTER) ? TRACK_SILENT :
+                encounter.phase==ENCOUNTER_LETTER || encounter.phase==ENCOUNTER_VILLAGE_LETTER_READY) ? TRACK_SILENT :
                 encounter.progress.stage == CLEARING_BOSS_STAGE ? TRACK_MINIBOSS : TRACK_COMBAT;
             if (encounter.progress.map == TEMPLAR_FIELD_MAP &&
                 encounter.progress.stage == CLEARING_BOSS_STAGE &&
@@ -734,6 +734,12 @@ int main(void) {
         }
         if (entryFadeRemaining<=0 && !encounter.guardianIntroPending)
             UpdateStagePresentation(&encounter.presentation,fminf(GetFrameTime(),.05f));
+        if (entryFadeRemaining<=0 && encounter.phase==ENCOUNTER_VILLAGE_LETTER_READY &&
+            IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            Vector2 cursor=GetScreenToWorld2D(GetMousePosition(),FitClearing(&clearing));
+            if (CheckCollisionPointCircle(cursor,enemies.list[0].position,31))
+                ReadVillageLetter(&encounter,&enemies,player);
+        }
         bool encounterChanged=entryFadeRemaining<=0 &&
             UpdateEncounter(&encounter,&enemies,&clearing,player,&playerHealth);
         if (encounterChanged) {
@@ -1123,7 +1129,7 @@ int main(void) {
             int remainingVillagers=enemies.villageSpawnRemaining;
             bool villageHorde=clearing.village && encounter.villageHordeStarted;
             bool initialEmergence=villageHorde && enemies.list[0].state==ENEMY_SPAWNING &&
-                enemies.list[0].stateTime==0 && remainingVillagers==12;
+                enemies.list[0].stateTime==0 && remainingVillagers==VILLAGE_HORDE_REINFORCEMENTS;
             enemies.practiceInvincible = encounter.practice && devTools.invincible;
             UpdateEnemies(&enemies, &clearing, player, deltaTime,
                           dodging || enemies.practiceInvincible,
@@ -1188,6 +1194,14 @@ int main(void) {
                 }
                 if (currentWeapon == WEAPON_BIBLE) DrawBiblePools(&bible);
                 DrawEnemies(&enemies, player, false);
+                if (encounter.phase==ENCOUNTER_VILLAGE_LETTER_READY) {
+                    Vector2 letter=enemies.list[0].position;
+                    DrawCircleLinesV(letter,31,Fade(GOLD,.76f));
+                    DrawRectangle((int)letter.x-10,(int)letter.y-6,20,12,(Color){222,193,139,255});
+                    DrawRectangleLines((int)letter.x-10,(int)letter.y-6,20,12,BROWN);
+                    DrawLine((int)letter.x-9,(int)letter.y-5,(int)letter.x,(int)letter.y+1,BROWN);
+                    DrawLine((int)letter.x+9,(int)letter.y-5,(int)letter.x,(int)letter.y+1,BROWN);
+                }
                 if (currentWeapon == WEAPON_BIBLE) DrawBible(&bible, player, false);
                 if (currentWeapon == WEAPON_BIBLE) DrawBibleActivation(&bible, player);
                 if (dodging) {
