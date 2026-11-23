@@ -7,16 +7,19 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define COMMON_DAMAGE_BONUS 0.15f
-#define COMMON_HEALTH_BONUS 20
-#define COMMON_SPEED_BONUS 15.0f
+#define COMMON_DAMAGE_BONUS 0.20f
+#define COMMON_HEALTH_BONUS 25
+#define COMMON_SPEED_BONUS 18.0f
+#define RARE_DUAL_DAMAGE_BONUS 0.10f
+#define RARE_DUAL_HEALTH_BONUS 12
+#define RARE_DUAL_SPEED_BONUS 9.0f
 #define EPIC_STATUS_DAMAGE_BONUS 0.25f
 #define EPIC_STATUS_SPEED_BONUS 51.0f
 #define EPIC_STATUS_HEALTH_BONUS 50
 #define EPIC_FULL_HEAL_MAX_HP_BONUS 50
-#define RARITY_WEIGHT_COMMON 70
-#define RARITY_WEIGHT_RARE 25
-#define RARITY_WEIGHT_EPIC 5
+#define RARITY_WEIGHT_COMMON 60
+#define RARITY_WEIGHT_RARE 30
+#define RARITY_WEIGHT_EPIC 10
 #define MAX_CAMPAIGN_MAPS 9
 #define UI_CARD_FRAME_COMMON_PATH "assets/ui/card_frame_common.png"
 #define UI_CARD_FRAME_RARE_PATH "assets/ui/card_frame_rare.png"
@@ -528,6 +531,7 @@ static int AvailableKindsForRarity(const Encounter *e, int rarity, const bool us
             if (!used[commonKinds[i]]) outKinds[count++] = commonKinds[i];
     } else if (rarity == RARITY_RARE) {
         if (!used[REWARD_SWAP]) outKinds[count++] = REWARD_SWAP;
+        if (!used[REWARD_RARE_DUAL]) outKinds[count++] = REWARD_RARE_DUAL;
     } else if (rarity == RARITY_EPIC) {
         if (CurrentRunWeaponLevel(e) < MAX_WEAPON_LEVEL && !used[REWARD_WEAPON_UPGRADE])
             outKinds[count++] = REWARD_WEAPON_UPGRADE;
@@ -540,8 +544,9 @@ static int AvailableKindsForRarity(const Encounter *e, int rarity, const bool us
 
 static Reward MakeReward(const Encounter *e, int rarity, int kind) {
     Reward r = {.kind = kind, .rarity = rarity, .weapon = e->progress.weapon};
-    if (kind == REWARD_SWAP) {
-        r.weapon = (e->progress.weapon + GetRandomValue(1, 2)) % 3;
+    if (kind == REWARD_SWAP || kind == REWARD_RARE_DUAL) {
+        if (kind == REWARD_SWAP)
+            r.weapon = (e->progress.weapon + GetRandomValue(1, 2)) % 3;
         int first = GetRandomValue(0, 2);
         int second = (first + GetRandomValue(1, 2)) % 3;
         r.bonus[0] = first;
@@ -730,6 +735,14 @@ static void ApplyCommonBuffKind(Encounter *e, int kind, int *health) {
     }
 }
 
+static void ApplySmallBuffKind(Encounter *e, int kind, int *health) {
+    if (kind == REWARD_DAMAGE) e->progress.damage += RARE_DUAL_DAMAGE_BONUS;
+    else if (kind == REWARD_HEALTH) {
+        e->progress.maxHealth += RARE_DUAL_HEALTH_BONUS;
+        *health += RARE_DUAL_HEALTH_BONUS;
+    } else if (kind == REWARD_SPEED) e->progress.speed += RARE_DUAL_SPEED_BONUS;
+}
+
 static void ApplyReward(Encounter *e, Reward reward, int *health) {
     e->notice[0]=0;
     switch (reward.kind) {
@@ -746,6 +759,10 @@ static void ApplyReward(Encounter *e, Reward reward, int *health) {
             ApplyCommonBuffKind(e, reward.bonus[1], health);
             break;
         }
+        case REWARD_RARE_DUAL:
+            ApplySmallBuffKind(e, reward.bonus[0], health);
+            ApplySmallBuffKind(e, reward.bonus[1], health);
+            break;
         case REWARD_WEAPON_UPGRADE: {
             int currentLevel = CurrentRunWeaponLevel(e);
             if (currentLevel < MAX_WEAPON_LEVEL)
@@ -1091,9 +1108,15 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
 }
 
 static const char *CommonBuffShortText(int kind) {
-    if (kind == REWARD_DAMAGE) return "Dano +15%";
-    if (kind == REWARD_HEALTH) return "Vida máx. +20 (cura 20)";
-    return "Velocidade +15";
+    if (kind == REWARD_DAMAGE) return "Dano +20%";
+    if (kind == REWARD_HEALTH) return "Vida máx. +25 (cura 25)";
+    return "Velocidade +18";
+}
+
+static const char *SmallBuffShortText(int kind) {
+    if (kind == REWARD_DAMAGE) return "Dano +10%";
+    if (kind == REWARD_HEALTH) return "Vida máx. +12 (cura 12)";
+    return "Velocidade +9";
 }
 
 static const char *RarityLabel(int rarity) {
@@ -1104,14 +1127,18 @@ static const char *RarityLabel(int rarity) {
 
 static const char *RewardText(const Encounter *e, Reward reward) {
     switch (reward.kind) {
-        case REWARD_DAMAGE: return "Dano\n+15% de dano base";
-        case REWARD_HEALTH: return "Vida máxima\n+20 de vida e cura 20";
-        case REWARD_SPEED: return "Velocidade\n+15 de velocidade";
+        case REWARD_DAMAGE: return "Dano\n+20% de dano base";
+        case REWARD_HEALTH: return "Vida máxima\n+25 de vida e cura 25";
+        case REWARD_SPEED: return "Velocidade\n+18 de velocidade";
         case REWARD_SWAP:
             return TextFormat("Trocar por %s\n- %s\n- %s",
                               WeaponTitle(reward.weapon),
                               CommonBuffShortText(reward.bonus[0]),
                               CommonBuffShortText(reward.bonus[1]));
+        case REWARD_RARE_DUAL:
+            return TextFormat("Dois atributos\n- %s\n- %s",
+                              SmallBuffShortText(reward.bonus[0]),
+                              SmallBuffShortText(reward.bonus[1]));
         case REWARD_WEAPON_UPGRADE: {
             int nextLevel = CurrentRunWeaponLevel(e) + 1;
             const char *perk = "Dano +20%";

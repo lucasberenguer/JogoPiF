@@ -9,8 +9,8 @@
 #define ENEMY_ATTACK_RANGE 64.0f
 #define ENEMY_ATTACK_DAMAGE 12
 /* Base das ondas da Clareira e referência para o Cemitério. */
-#define CLEARING_FIRST_WAVE_ENEMIES 10
-#define CLEARING_WAVE_ENEMY_STEP 4
+#define CLEARING_FIRST_WAVE_ENEMIES 14
+#define CLEARING_WAVE_ENEMY_STEP 6
 #define CLEARING_ENEMY_HEALTH_SCALE 1.10f
 #define CLEARING_ENEMY_DAMAGE_SCALE 1.15f
 #define ENEMY_HURT_RADIUS 20.0f
@@ -680,7 +680,7 @@ static Vector2 SpawnPosition(const Clearing *clearing, Vector2 player) {
 }
 
 static float WaveSpawnDelay(int wave, int index) {
-    return index * (.30f - (wave - 1) * .025f);
+    return index * (.22f - (wave - 1) * .02f);
 }
 
 static void StartBonelandWave(EnemyGroup *group, const Clearing *map, int wave,
@@ -688,7 +688,7 @@ static void StartBonelandWave(EnemyGroup *group, const Clearing *map, int wave,
     static const struct {
         int total, cultists, ghoulHealth, cultistHealth;
     } waves[] = {
-        {20, 5, 49, 36}, {26, 7, 53, 39}, {30, 9, 56, 41}
+        {26, 7, 49, 36}, {34, 10, 53, 39}
     };
     int index = (int)Clamp((float)wave, 1, sizeof(waves) / sizeof(waves[0])) - 1;
     int total = waves[index].total;
@@ -774,7 +774,7 @@ void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
         return;
     }
     bool clearingWave = ClearingMapId(clearing) == CLEARING_MAP;
-    static const int cemeteryCounts[CEMETERY_WAVES] = {12,18,20};
+    static const int cemeteryCounts[CEMETERY_WAVES] = {18,24};
     int total = clearing->cemetery ? cemeteryCounts[(int)Clamp(wave,1,CEMETERY_WAVES)-1] :
         clearingWave ? CLEARING_FIRST_WAVE_ENEMIES + (wave - 1) * CLEARING_WAVE_ENEMY_STEP :
         7 + (wave - 1) * 4;
@@ -1165,14 +1165,33 @@ static void UpdateBoneLord(EnemyGroup *group, const Clearing *map, Enemy *boss,
     if (boss->state != ENEMY_ATTACK) {
         if (*health <= 0) return;
         boss->facing = FacingToward(toPlayer);
-        if (boss->attackCooldown <= 0 && MapHasClearPath(map, boss->position, player)) {
-            for (int i = 1; i <= BONE_ATTACK_COUNT; i++) {
-                int attack = (boss->bossAttack + i) % BONE_ATTACK_COUNT;
-                if (distance > boneAttacks[attack].range) {
-                    /* After the dash, pursue the player until the blast is in range. */
-                    if (attack == BONE_BLAST && i == 1) break;
-                    continue;
-                }
+        if (boss->attackCooldown <= 0) {
+            bool clearPath = MapHasClearPath(map,boss->position,player);
+            int previous = boss->bossAttack;
+            int attack = -1;
+            /* A investida prepara a explosão, mas a perseguição mantém a janela de reação. */
+            if (previous == BONE_DASH) {
+                if (distance <= boneAttacks[BONE_BLAST].range && clearPath) attack = BONE_BLAST;
+            } else if (!clearPath) {
+                if (distance <= boneAttacks[BONE_RAIN].range) attack = BONE_RAIN;
+            } else if (distance <= 120) {
+                attack = previous == BONE_CLAW ? BONE_BLAST : BONE_CLAW;
+            } else if (distance <= 220) {
+                if (previous == BONE_BLAST) {
+                    Vector2 direction = Vector2Normalize(toPlayer);
+                    attack = Vector2DistanceSqr(BoneDashFlank(map,boss->position,direction,player),
+                                                boss->position) > 1 ? BONE_DASH : BONE_RAIN;
+                } else attack = BONE_BLAST;
+            } else if (distance <= 440) {
+                Vector2 direction = Vector2Normalize(toPlayer);
+                bool flank = Vector2DistanceSqr(BoneDashFlank(map,boss->position,direction,player),
+                                                boss->position) > 1;
+                attack = previous != BONE_DASH && flank ? BONE_DASH :
+                    previous == BONE_RAIN ? BONE_RANGED : BONE_RAIN;
+            } else if (distance <= 550) {
+                attack = previous == BONE_RANGED ? BONE_RAIN : BONE_RANGED;
+            }
+            if (attack >= 0 && distance <= boneAttacks[attack].range) {
                 boss->bossAttack = attack;
                 boss->attackDirection = distance > .001f ? Vector2Normalize(toPlayer) : (Vector2){0, 1};
                 boss->attackTarget = attack == BONE_DASH ?
@@ -1237,7 +1256,8 @@ static void UpdateBoneLord(EnemyGroup *group, const Clearing *map, Enemy *boss,
     if (t >= boneAttacks[attack].duration) {
         boss->state = ENEMY_IDLE;
         boss->stateTime = 0;
-        boss->attackCooldown = GuardianEnraged(boss) ? .24f : .42f;
+        boss->attackCooldown = attack == BONE_DASH ? (GuardianEnraged(boss) ? .52f : .68f) :
+            GuardianEnraged(boss) ? .24f : .42f;
     }
 }
 
@@ -1431,29 +1451,41 @@ static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
         if (*health <= 0) return;
         boss->facing = FacingToward(direction);
         if (boss->attackCooldown <= 0 && MapHasClearPath(map,boss->position,player)) {
-            static const int pattern[] = {IGRIS_ECLIPSE, IGRIS_SPEARS, IGRIS_VORTEX, IGRIS_ERUPTION, IGRIS_MELEE};
-            int choices = boss->igrisFinalForm ? 1 : IGRIS_SKILL_COUNT;
-            for (int offset = 0; offset < choices; offset++) {
-                int index = (boss->attackBurst+offset)%IGRIS_SKILL_COUNT;
-                int skill = boss->igrisFinalForm ? IGRIS_FINAL_CLAW : pattern[index];
-                if (boss->igrisFinalForm) {
-                    if (boss->attackBurst == 3 && distance <= 420 && PlanIgrisEchoes(map,boss,player,direction))
-                        skill = IGRIS_ECLIPSE_ECHOES;
-                    else if (boss->attackBurst == 2 && distance <= IGRIS_GRAB_REACH)
-                        skill = IGRIS_ABYSS_GRAB;
-                    else if ((boss->attackBurst == 1 || distance > 178) &&
-                        distance <= 340 && PlanIgrisZ(map,boss,boss->facing,distance))
-                        skill = IGRIS_Z_RIP;
-                    else if (distance > 178 && distance <= IGRIS_GRAB_REACH)
-                        skill = IGRIS_ABYSS_GRAB;
-                }
+            int skill = -1;
+            if (boss->igrisFinalForm) {
+                skill = IGRIS_FINAL_CLAW;
+                if (boss->attackBurst == 3 && distance <= 420 && PlanIgrisEchoes(map,boss,player,direction))
+                    skill = IGRIS_ECLIPSE_ECHOES;
+                else if (boss->attackBurst == 2 && distance <= IGRIS_GRAB_REACH)
+                    skill = IGRIS_ABYSS_GRAB;
+                else if ((boss->attackBurst == 1 || distance > 178) &&
+                    distance <= 340 && PlanIgrisZ(map,boss,boss->facing,distance))
+                    skill = IGRIS_Z_RIP;
+                else if (distance > 178 && distance <= IGRIS_GRAB_REACH)
+                    skill = IGRIS_ABYSS_GRAB;
                 float reach = skill == IGRIS_ECLIPSE_ECHOES ? 420 : skill == IGRIS_ABYSS_GRAB ? IGRIS_GRAB_REACH :
-                    skill == IGRIS_Z_RIP ? 340 : skill == IGRIS_ERUPTION ? 420 : igrisSkills[skill].reach;
-                if (distance > reach) continue;
-                boss->attackBurst = boss->igrisFinalForm ?
-                    (boss->attackBurst == 3 ? 0 : skill == IGRIS_ABYSS_GRAB ? 3 :
-                     skill == IGRIS_Z_RIP || boss->attackBurst == 1 ? 2 : 1) :
-                    (index+1)%IGRIS_SKILL_COUNT;
+                    skill == IGRIS_Z_RIP ? 340 : igrisSkills[skill].reach;
+                if (distance > reach) skill = -1;
+                else boss->attackBurst = boss->attackBurst == 3 ? 0 :
+                    skill == IGRIS_ABYSS_GRAB ? 3 :
+                    skill == IGRIS_Z_RIP || boss->attackBurst == 1 ? 2 : 1;
+            } else {
+                float bestScore = -1e9f;
+                for (int candidate=0; candidate<IGRIS_SKILL_COUNT; candidate++) {
+                    float reach = candidate == IGRIS_ERUPTION ? 420 : igrisSkills[candidate].reach;
+                    if (distance > reach) continue;
+                    float score = candidate == IGRIS_MELEE ? 60-distance*.25f :
+                        candidate == IGRIS_VORTEX ? 20+(distance>115?15:0) :
+                        candidate == IGRIS_ECLIPSE ? 25+(distance>150?20:0) :
+                        candidate == IGRIS_ERUPTION ? 18+(distance>180?12:0)+(distance>225?10:0) :
+                        15+(distance>270?25:0)+(distance>320?5:0);
+                    if (candidate == boss->bossAttack) score -= 20;
+                    if (boss->attackBurst == 0 && candidate == IGRIS_ECLIPSE) score += 15;
+                    if (score > bestScore) {skill=candidate;bestScore=score;}
+                }
+                if (skill >= 0) boss->attackBurst++;
+            }
+            if (skill >= 0) {
                 boss->bossAttack = skill;
                 boss->attackDirection = direction;
                 boss->attackTarget = player;

@@ -297,7 +297,7 @@ static void CheckLegacyCheckpoints(void) {
     Encounter rTest = {.progress = NewRunProgress(1), .practice = true};
     int rHealth = 100;
     int rarityCounts[RARITY_COUNT] = {0};
-    /* 1. Sorteio normal e teste estatístico dos pesos (1000 telas = 3000 vagas, pesos 70/25/5) */
+    /* 1. Sorteio normal e teste estatístico dos pesos (1000 telas = 3000 vagas, pesos 60/30/10) */
     int firstSlotRarity[RARITY_COUNT] = {0};
     for (int trial = 0; trial < 1000; trial++) {
         rTest.progress.stage = 1;
@@ -318,8 +318,9 @@ static void CheckLegacyCheckpoints(void) {
             if (rw.rarity == RARITY_COMMON) {
                 assert(rw.kind == REWARD_DAMAGE || rw.kind == REWARD_HEALTH || rw.kind == REWARD_SPEED);
             } else if (rw.rarity == RARITY_RARE) {
-                assert(rw.kind == REWARD_SWAP);
-                assert(rw.weapon != rTest.progress.weapon && rw.weapon >= 0 && rw.weapon < 3);
+                assert(rw.kind == REWARD_SWAP || rw.kind == REWARD_RARE_DUAL);
+                if (rw.kind == REWARD_SWAP)
+                    assert(rw.weapon != rTest.progress.weapon && rw.weapon >= 0 && rw.weapon < 3);
                 assert(rw.bonus[0] >= REWARD_DAMAGE && rw.bonus[0] <= REWARD_SPEED);
                 assert(rw.bonus[1] >= REWARD_DAMAGE && rw.bonus[1] <= REWARD_SPEED);
                 assert(rw.bonus[0] != rw.bonus[1]);
@@ -331,15 +332,13 @@ static void CheckLegacyCheckpoints(void) {
             }
         }
     }
-    /* Na 1ª vaga de cada tela (1000 amostras independentes sem esgotamento do raro),
-       espera-se ~700 comuns (70%), ~250 raros (25%), ~50 épicos (5%).
-       E no total de 3000 vagas (onde o raro tem teto de 1 por tela), comum domina > raro > épico. */
-    assert(firstSlotRarity[RARITY_COMMON] >= 620 && firstSlotRarity[RARITY_COMMON] <= 780);
-    assert(firstSlotRarity[RARITY_RARE] >= 180 && firstSlotRarity[RARITY_RARE] <= 320);
-    assert(firstSlotRarity[RARITY_EPIC] >= 20 && firstSlotRarity[RARITY_EPIC] <= 90);
+    /* A primeira vaga preserva os pesos; a tela evita duplicar tipos. */
+    assert(firstSlotRarity[RARITY_COMMON] >= 530 && firstSlotRarity[RARITY_COMMON] <= 670);
+    assert(firstSlotRarity[RARITY_RARE] >= 230 && firstSlotRarity[RARITY_RARE] <= 370);
+    assert(firstSlotRarity[RARITY_EPIC] >= 60 && firstSlotRarity[RARITY_EPIC] <= 140);
     assert(rarityCounts[RARITY_COMMON] > rarityCounts[RARITY_RARE] &&
            rarityCounts[RARITY_RARE] > rarityCounts[RARITY_EPIC] &&
-           rarityCounts[RARITY_EPIC] >= 60);
+           rarityCounts[RARITY_EPIC] >= 150);
 
     /* Fase 3b: Testes de reroll por cartão e da tela épica (onda 4, 3 cartões épicos distintos, sem reroll) */
     for (int trial = 0; trial < 200; trial++) {
@@ -413,7 +412,7 @@ static void CheckLegacyCheckpoints(void) {
     }
 
     /* 3. Aplicação de todos os tipos de cartão */
-    /* Comum: Dano +0.15 */
+    /* Comum: Dano +0.20 */
     rTest.progress = NewRunProgress(0);
     rTest.practice = true;
     rHealth = 80;
@@ -422,21 +421,21 @@ static void CheckLegacyCheckpoints(void) {
     rTest.rewardCount = 1;
     rTest.rewards[0] = (Reward){.kind = REWARD_DAMAGE, .rarity = RARITY_COMMON};
     assert(ChooseEncounterReward(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth, 0));
-    assert(fabsf(rTest.progress.damage - 1.15f) < 0.0001f);
-    /* Comum: Vida máxima +20 e cura 20 */
+    assert(fabsf(rTest.progress.damage - 1.20f) < 0.0001f);
+    /* Comum: Vida máxima +25 e cura 25 */
     rTest.progress.stage = 1;
     rTest.phase = ENCOUNTER_REWARD;
     rTest.rewardCount = 1;
     rTest.rewards[0] = (Reward){.kind = REWARD_HEALTH, .rarity = RARITY_COMMON};
     assert(ChooseEncounterReward(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth, 0));
-    assert(rTest.progress.maxHealth == 120 && rHealth == 100);
-    /* Comum: Velocidade +15 */
+    assert(rTest.progress.maxHealth == 125 && rHealth == 105);
+    /* Comum: Velocidade +18 */
     rTest.progress.stage = 1;
     rTest.phase = ENCOUNTER_REWARD;
     rTest.rewardCount = 1;
     rTest.rewards[0] = (Reward){.kind = REWARD_SPEED, .rarity = RARITY_COMMON};
     assert(ChooseEncounterReward(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth, 0));
-    assert(fabsf(rTest.progress.speed - 219.0f) < 0.0001f);
+    assert(fabsf(rTest.progress.speed - 222.0f) < 0.0001f);
     /* Raro: troca de arma mantendo o nível e concedendo 2 buffs comuns distintos */
     SetRunWeaponLevel(&rTest.progress, 3);
     rTest.progress.stage = 1;
@@ -446,7 +445,16 @@ static void CheckLegacyCheckpoints(void) {
                                 .bonus = {REWARD_DAMAGE, REWARD_SPEED}};
     assert(ChooseEncounterReward(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth, 0));
     assert(rTest.progress.weapon == 2 && rTest.progress.initialWeapon == 0 && rTest.progress.weaponLevel[2] == 3);
-    assert(fabsf(rTest.progress.damage - 1.30f) < 0.0001f && fabsf(rTest.progress.speed - 234.0f) < 0.0001f);
+    assert(fabsf(rTest.progress.damage - 1.40f) < 0.0001f && fabsf(rTest.progress.speed - 240.0f) < 0.0001f);
+    /* Raro sem troca: dois atributos menores, preservando a arma. */
+    rTest.progress.stage = 1;
+    rTest.phase = ENCOUNTER_REWARD;
+    rTest.rewardCount = 1;
+    rTest.rewards[0] = (Reward){.kind = REWARD_RARE_DUAL, .rarity = RARITY_RARE,
+                                .bonus = {REWARD_DAMAGE, REWARD_HEALTH}};
+    assert(ChooseEncounterReward(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth, 0));
+    assert(rTest.progress.weapon == 2 && rTest.progress.maxHealth == 137 && rHealth == 117);
+    assert(fabsf(rTest.progress.damage - 1.50f) < 0.0001f);
     assert(rTest.notice[0] == 0); /* Bônus surpresa antigo removido */
     /* Persistência de initialWeapon no save e reset completo ao morrer/repetir (NewRunProgress(initialWeapon)) */
     rTest.practice = false;
@@ -483,8 +491,8 @@ static void CheckLegacyCheckpoints(void) {
     rTest.rewardCount = 1;
     rTest.rewards[0] = (Reward){.kind = REWARD_EPIC_STATUS, .rarity = RARITY_EPIC, .amount = 50};
     assert(ChooseEncounterReward(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth, 0));
-    assert(rTest.progress.maxHealth == 170 && rHealth == 100);
-    assert(fabsf(rTest.progress.damage - 1.55f) < 0.0001f && fabsf(rTest.progress.speed - 285.0f) < 0.0001f);
+    assert(rTest.progress.maxHealth == 187 && rHealth == 100);
+    assert(fabsf(rTest.progress.damage - 1.75f) < 0.0001f && fabsf(rTest.progress.speed - 291.0f) < 0.0001f);
     /* Épico (d): vida plena (+50 de vida máxima e cura toda a vida) */
     rHealth = 35;
     rTest.progress.stage = 1;
@@ -492,7 +500,7 @@ static void CheckLegacyCheckpoints(void) {
     rTest.rewardCount = 1;
     rTest.rewards[0] = (Reward){.kind = REWARD_EPIC_FULL_HEAL, .rarity = RARITY_EPIC};
     assert(ChooseEncounterReward(&rTest, &dummyEnemies, &rewardMap, pPos, &rHealth, 0));
-    assert(rTest.progress.maxHealth == 220 && rHealth == 220);
+    assert(rTest.progress.maxHealth == 237 && rHealth == 237);
 
     /* Fase 4: Renderização visual das 3 raridades (comum, raro com 2 buffs, épico de +50% antes->depois) e reroll ativo/desativado */
     rTest = (Encounter){.progress = NewRunProgress(2), .phase = ENCOUNTER_REWARD, .rewardCount = 3, .sealEnemy = -1};
@@ -591,7 +599,7 @@ static void CheckLegacyCheckpoints(void) {
 
 static void CheckDevTools(Encounter *e, EnemyGroup *enemies, Clearing *map) {
     RunProgress campaign=NewRunProgress(1);
-    campaign.stage=3;
+    campaign.stage=2;
     campaign.health=75;
     assert(SaveClearingCheckpoint(&campaign));
     DevTools tools={.wave=1,.weapon=2,.weaponLevel=3,.selected=7};
@@ -604,7 +612,7 @@ static void CheckDevTools(Encounter *e, EnemyGroup *enemies, Clearing *map) {
             assert(StartDevEncounter(&tools,DEV_STAGE,e,enemies,map,&player,&health));
             assert(e->practice && e->progress.map==area && e->progress.stage==wave);
             assert(e->progress.weapon==2 && e->progress.weaponLevel[2]==3);
-            assert(health==100 && EnemiesRemaining(enemies)==(area==CLEARING_MAP ? 10+(wave-1)*4 : ((int[]){12,18,20})[wave-1]));
+            assert(health==100 && EnemiesRemaining(enemies)==(area==CLEARING_MAP ? 14+(wave-1)*6 : ((int[]){18,24})[wave-1]));
             assert(!IsMapActorBlocked(map,player));
             assert(e->presentation.areaEntry && EncounterPaused(e));
             UpdateStagePresentation(&e->presentation,e->presentation.remaining);
@@ -657,7 +665,7 @@ static void CheckDevTools(Encounter *e, EnemyGroup *enemies, Clearing *map) {
     }
     RunProgress unchanged={0};
     assert(LoadClearingCheckpoint(&unchanged));
-    assert(unchanged.stage==3 && unchanged.weapon==1 && unchanged.health==75 &&
+    assert(unchanged.stage==2 && unchanged.weapon==1 && unchanged.health==75 &&
            !unchanged.guardianIntroSeen);
     tools.weapon=99;
     assert(!StartDevEncounter(&tools,DEV_STAGE,e,enemies,map,&player,&health));
@@ -681,13 +689,13 @@ static void CheckDevTools(Encounter *e, EnemyGroup *enemies, Clearing *map) {
     tools.map = BONELAND_MAP;
     tools.wave = 1;
     assert(StartDevEncounter(&tools, DEV_STAGE, e, enemies, map, &player, &health));
-    assert(e->practice && map->boneland && enemies->boneland && EnemiesRemaining(enemies) == 20);
-    assert(e->presentation.areaEntry && e->presentation.waveTotal == 4 && EncounterPaused(e));
+    assert(e->practice && map->boneland && enemies->boneland && EnemiesRemaining(enemies) == 26);
+    assert(e->presentation.areaEntry && e->presentation.waveTotal == 3 && EncounterPaused(e));
     assert(strcmp(e->presentation.mapName, "Terra dos Ossos") == 0);
     UpdateStagePresentation(&e->presentation, .8f);
     Capture("audit/boneland_area_intro.png", e, enemies, map, player);
     UpdateStagePresentation(&e->presentation, e->presentation.remaining);
-    assert(!e->presentation.areaEntry && e->presentation.wave == 1 && e->presentation.waveTotal == 4);
+    assert(!e->presentation.areaEntry && e->presentation.wave == 1 && e->presentation.waveTotal == 3);
     UpdateStagePresentation(&e->presentation, .6f);
     Capture("audit/boneland_wave_intro.png", e, enemies, map, player);
     UpdateStagePresentation(&e->presentation, e->presentation.remaining);
@@ -709,7 +717,7 @@ static void CheckDevTools(Encounter *e, EnemyGroup *enemies, Clearing *map) {
     }
     Capture("audit/boneland_attack_poses.png", e, enemies, map, player);
     assert(StartDevEncounter(&tools, DEV_BOSS_ONE, e, enemies, map, &player, &health));
-    assert(e->presentation.areaEntry && e->presentation.wave == 4 && e->presentation.waveTotal == 4);
+    assert(e->presentation.areaEntry && e->presentation.wave == 3 && e->presentation.waveTotal == 3);
     for (int i = 0; i < BONE_SHEET_COUNT; i++) assert(enemies->boneLordSheets[i].id);
     assert(enemies->boneLordPortrait.id);
     UpdateStagePresentation(&e->presentation, e->presentation.remaining);
@@ -928,7 +936,7 @@ int main(void) {
     Capture("audit/clearing_special_directions.png",&encounter,&meleePreview,&clearing,player);
     for (int wave=1;wave<=CLEARING_WAVES;wave++) {
         assert(encounter.progress.stage==wave);
-        assert(EnemiesRemaining(&enemies)==10+(wave-1)*4);
+        assert(EnemiesRemaining(&enemies)==14+(wave-1)*6);
         assert(EncounterPaused(&encounter));
         UpdateStagePresentation(&encounter.presentation,.1f);
         assert(EncounterPaused(&encounter));
@@ -1183,7 +1191,7 @@ int main(void) {
     Capture("audit/cemetery_collision_updated.png",&encounter,&enemies,&clearing,player);
     for (int wave=1;wave<=CEMETERY_WAVES;wave++) {
         assert(encounter.progress.stage==wave);
-        assert(EnemiesRemaining(&enemies)==((int[]){12,18,20})[wave-1]);
+        assert(EnemiesRemaining(&enemies)==((int[]){18,24})[wave-1]);
         UpdateStagePresentation(&encounter.presentation,10);
         for (int i=0;i<ENEMY_COUNT;i++) {
             Enemy *enemy=&enemies.list[i];
@@ -1229,7 +1237,17 @@ int main(void) {
     assert(encounter.phase==ENCOUNTER_CLEAR);
     assert(strcmp(encounter.presentation.announcement,"CEMITERIO LIMPO")==0);
 
-    RunProgress normalSave=NewRunProgress(1);normalSave.stage=3;
+    /* Saves antigos na terceira onda não podem retomar uma onda removida. */
+    for (int mapId=0;mapId<3;mapId++) {
+        RunProgress legacy=NewRunProgress(1);
+        legacy.map=mapId==2 ? BONELAND_MAP : mapId;
+        legacy.stage=3;
+        assert(SaveClearingCheckpoint(&legacy));
+        RunProgress migrated;
+        assert(LoadClearingCheckpoint(&migrated));
+        assert(migrated.map==legacy.map && migrated.stage==CLEARING_BOSS_STAGE);
+    }
+    RunProgress normalSave=NewRunProgress(1);normalSave.stage=2;
     assert(SaveClearingCheckpoint(&normalSave));
     BeginEncounter(&encounter,&enemies,&clearing,NewRunProgress(0),player);
     encounter.practice=true;
@@ -1239,18 +1257,18 @@ int main(void) {
     assert(ChooseEncounterReward(&encounter,&enemies,&clearing,player,&health,0));
     RunProgress preserved;
     assert(LoadClearingCheckpoint(&preserved));
-    assert(preserved.weapon==1 && preserved.stage==3 && preserved.map==0);
+    assert(preserved.weapon==1 && preserved.stage==2 && preserved.map==0);
     UpdateStagePresentation(&encounter.presentation,10);
     enemies.list[0]=(Enemy){.type=ENEMY_BOSS,.state=ENEMY_FALLEN,
         .position=player,.maxHealth=100,.power=1};
     assert(OpenEncounterSeal(&encounter,&enemies,player));
     assert(AnswerEncounterSeal(&encounter,&enemies,&health,(encounter.answer+1)%3));
-    assert(LoadClearingCheckpoint(&preserved) && preserved.stage==3 && preserved.map==0);
+    assert(LoadClearingCheckpoint(&preserved) && preserved.stage==2 && preserved.map==0);
     for (int i=0;i<ENEMY_COUNT;i++) enemies.list[i]=(Enemy){.state=ENEMY_GONE};
     encounter.progress.stage=CLEARING_BOSS_STAGE;
     UpdateEncounter(&encounter,&enemies,&clearing,player,&health);
     assert(encounter.phase==ENCOUNTER_CLEAR);
-    assert(LoadClearingCheckpoint(&preserved) && preserved.stage==3 && preserved.map==0);
+    assert(LoadClearingCheckpoint(&preserved) && preserved.stage==2 && preserved.map==0);
 
     Clearing bones = {0};
     assert(InitBoneland(&bones));
@@ -1262,25 +1280,18 @@ int main(void) {
     RunProgress boneProgress = NewRunProgress(0);
     int boneHealth = boneProgress.health;
     BeginEncounter(&boneEncounter, &enemies, &bones, boneProgress, bones.spawn);
-    assert(boneEncounter.progress.map == BONELAND_MAP && EnemiesRemaining(&enemies) == 20);
+    assert(boneEncounter.progress.map == BONELAND_MAP && EnemiesRemaining(&enemies) == 26);
     boneEncounter.practice = true;
     boneEncounter.phase = ENCOUNTER_REWARD;
     boneEncounter.rewardCount = 1;
     assert(ChooseEncounterReward(&boneEncounter, &enemies, &bones, bones.spawn, &boneHealth, 0));
-    assert(boneEncounter.progress.stage == 2 && EnemiesRemaining(&enemies) == 26);
+    assert(boneEncounter.progress.stage == 2 && EnemiesRemaining(&enemies) == 34);
     boneEncounter.phase = ENCOUNTER_REWARD;
     boneEncounter.rewardCount = 1;
     assert(ChooseEncounterReward(&boneEncounter, &enemies, &bones, bones.spawn, &boneHealth, 0));
-    assert(boneEncounter.progress.stage == 3 && EnemiesRemaining(&enemies) == 30);
     RunProgress boneResume;
-    assert(SaveClearingCheckpoint(&boneEncounter.progress));
-    assert(LoadClearingCheckpoint(&boneResume));
-    assert(boneResume.map == BONELAND_MAP && boneResume.stage == 3);
-    boneEncounter.phase = ENCOUNTER_REWARD;
-    boneEncounter.rewardCount = 1;
-    assert(ChooseEncounterReward(&boneEncounter, &enemies, &bones, bones.spawn, &boneHealth, 0));
     assert(boneEncounter.progress.stage == CLEARING_BOSS_STAGE);
-    assert(boneEncounter.presentation.wave == 4);
+    assert(boneEncounter.presentation.wave == 3);
     assert(boneEncounter.guardianIntroPending && EncounterPaused(&boneEncounter));
     assert(!EncounterBossVisible(&boneEncounter, &enemies) && enemies.list[0].type == ENEMY_BOSS);
     assert(SaveClearingCheckpoint(&boneEncounter.progress));
@@ -1417,7 +1428,9 @@ int main(void) {
     marshal->attackBurst = 3;
     Vector2 target = {marshalStart.x, marshalStart.y + 125};
     UpdateEnemies(&enemies, &field, target, .01f, false, &fieldHealth, 100);
-    assert(marshal->bossAttack == IGRIS_ERUPTION);
+    assert(marshal->state == ENEMY_ATTACK);
+    marshal->bossAttack = IGRIS_ERUPTION;
+    marshal->attackTarget = target;
     int before = fieldHealth;
     marshal->stateTime = .78f;
     UpdateEnemies(&enemies, &field, target, .02f, true, &fieldHealth, 100);

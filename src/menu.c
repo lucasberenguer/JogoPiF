@@ -229,8 +229,8 @@ bool LoadClearingCheckpoint(RunProgress *p) {
         isfinite(loaded.runSeconds) && loaded.runSeconds>=0 && eligible>=0 && eligible<=1;
     loaded.runEligible=runValid && eligible==1;
     UnloadFileText(data);
-    /* A quarta onda antiga da Clareira ou do Cemitério agora é a etapa do chefe. */
-    if ((loaded.map==CLEARING_MAP || loaded.map==CEMETERY_MAP) &&
+    /* Checkpoints de ondas removidas retomam no chefe da mesma área. */
+    if ((loaded.map==CLEARING_MAP || loaded.map==CEMETERY_MAP || loaded.map==BONELAND_MAP) &&
         loaded.stage>CampaignWaveCount(loaded.map) && loaded.stage<CLEARING_BOSS_STAGE)
         loaded.stage=CLEARING_BOSS_STAGE;
     bool valid=initWeaponValid && finalSealValid && angelValid && villageValid && igrisValid &&
@@ -873,7 +873,7 @@ void DrawMenu(const Menu *m) {
     if (m->page==4) {
         SpeedrunBoard board;
         SpeedrunLoad(&board);
-        float w=fminf(560,GetScreenWidth()-32.0f);
+        float w=fminf(720,GetScreenWidth()-32.0f);
         Rectangle panel={(GetScreenWidth()-w)/2,12,w,GetScreenHeight()-24.0f};
         DrawMenuPanel(panel);
         float rowHeight=fminf(42.0f,(panel.height-112.0f)/SPEEDRUN_TOP);
@@ -882,11 +882,14 @@ void DrawMenu(const Menu *m) {
         if (!board.count) DrawGameTextIn("Nenhuma campanha concluída ainda",
             (Rectangle){panel.x+16,panel.y+80,w-32,40},24,RAYWHITE,GAME_TEXT_BODY);
         for (int i=0;i<board.count;i++) {
-            char timeText[40], row[80];
+            char timeText[40], row[96];
             SpeedrunFormat(timeText,sizeof(timeText),board.times[i]);
-            snprintf(row,sizeof(row),"%2d.  %s",i+1,timeText);
-            DrawGameTextIn(row,(Rectangle){panel.x+28,panel.y+66+i*rowHeight,w-56,rowHeight},
-                           (int)fminf(26.0f,rowHeight*.78f),i==0?GOLD:RAYWHITE,GAME_TEXT_BODY);
+            snprintf(row,sizeof(row),"%2d.  %s",i+1,board.names[i]);
+            Color color=i==0?GOLD:RAYWHITE;
+            DrawGameTextIn(row,(Rectangle){panel.x+16,panel.y+66+i*rowHeight,w*.62f-16,rowHeight},
+                           (int)fminf(24.0f,rowHeight*.78f),color,GAME_TEXT_BODY);
+            DrawGameTextIn(timeText,(Rectangle){panel.x+w*.62f,panel.y+66+i*rowHeight,w*.38f-16,rowHeight},
+                           (int)fminf(24.0f,rowHeight*.78f),color,GAME_TEXT_BODY);
         }
         DrawGameTextIn("L ou Esc: voltar",(Rectangle){panel.x+16,panel.y+panel.height-48,w-32,32},
                        20,LIGHTGRAY,GAME_TEXT_BODY);

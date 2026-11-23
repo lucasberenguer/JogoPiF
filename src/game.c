@@ -279,6 +279,10 @@ int main(void) {
     SpeedrunBoard speedrunBoard;
     SpeedrunLoad(&speedrunBoard);
     bool speedrunRecorded=false;
+    bool speedrunNamePending=false;
+    char speedrunName[SPEEDRUN_NAME_BYTES]={0};
+    int speedrunNameBytes=0, speedrunNameChars=0;
+    double completedRunTime=0;
     const float entryFadeDuration = 1.15f;
     float entryFadeRemaining = 0.0f;
 
@@ -288,7 +292,7 @@ int main(void) {
             !(encounter.progress.map==NECROMANCER_MAP && encounter.phase==ENCOUNTER_CLEAR))
             SpeedrunTick(GetFrameTime());
         bool resolvingDeath=(screen==2 || screen==3) && playerHealth<=0;
-        bool toolsBlocked=resolvingDeath || choosingWeaponAfterDeath;
+        bool toolsBlocked=resolvingDeath || choosingWeaponAfterDeath || speedrunNamePending;
         if (toolsBlocked) devTools.open=false;
         Rectangle toolsButton={16,12,194,38};
         bool toolsClicked=screen==0 && !devTools.open &&
@@ -644,10 +648,66 @@ int main(void) {
             continue;
         }
         if (clearing.necromancerArena && encounter.phase==ENCOUNTER_CLEAR &&
+            encounter.presentation.remaining<=0 &&
             !speedrunRecorded && !encounter.practice && SpeedrunEligible()) {
             speedrunRecorded=true;
-            if (!SpeedrunRecord(&speedrunBoard,SpeedrunTime()))
-                TraceLog(LOG_WARNING,"Nao foi possivel salvar o ranking de speedrun");
+            speedrunNamePending=true;
+            completedRunTime=SpeedrunTime();
+            speedrunName[0]=0;
+            speedrunNameBytes=speedrunNameChars=0;
+        }
+        if (speedrunNamePending) {
+            int codepoint;
+            while ((codepoint=GetCharPressed())!=0) {
+                if (codepoint<32 || codepoint>255 || (codepoint>=127 && codepoint<160) ||
+                    speedrunNameChars>=24) continue;
+                int utf8Size=0;
+                const char *utf8=CodepointToUTF8(codepoint,&utf8Size);
+                if (speedrunNameBytes+utf8Size>=SPEEDRUN_NAME_BYTES) continue;
+                memcpy(speedrunName+speedrunNameBytes,utf8,(size_t)utf8Size);
+                speedrunNameBytes+=utf8Size;
+                speedrunName[speedrunNameBytes]=0;
+                speedrunNameChars++;
+            }
+            if (IsKeyPressed(KEY_BACKSPACE) && speedrunNameBytes>0) {
+                do {speedrunNameBytes--;} while (speedrunNameBytes>0 &&
+                    ((unsigned char)speedrunName[speedrunNameBytes]&0xC0)==0x80);
+                speedrunName[speedrunNameBytes]=0;
+                speedrunNameChars--;
+            }
+            bool hasName=false;
+            for (int i=0;i<speedrunNameBytes;i++)
+                if (speedrunName[i]!=' ') {hasName=true;break;}
+            if (hasName && IsKeyPressed(KEY_ENTER)) {
+                if (SpeedrunRecord(&speedrunBoard,completedRunTime,speedrunName))
+                    speedrunNamePending=false;
+                else TraceLog(LOG_WARNING,"Nao foi possivel salvar o nome da run");
+            }
+            float sw=(float)GetScreenWidth(), sh=(float)GetScreenHeight();
+            Rectangle panel={sw*.1f,sh*.2f,sw*.8f,sh*.6f};
+            char timeText[40];
+            SpeedrunFormat(timeText,sizeof(timeText),completedRunTime);
+            BeginGameFrame();
+                ClearBackground((Color){16,10,22,255});
+                DrawRectangleRounded(panel,.08f,8,(Color){35,22,34,245});
+                DrawRectangleRoundedLinesEx(panel,.08f,8,2,GOLD);
+                DrawGameTextIn("Run concluída",(Rectangle){panel.x+12,panel.y+14,panel.width-24,panel.height*.19f},
+                               48,GOLD,GAME_TEXT_TITLE);
+                DrawGameTextIn(timeText,(Rectangle){panel.x+12,panel.y+panel.height*.24f,panel.width-24,panel.height*.15f},
+                               38,RAYWHITE,GAME_TEXT_BODY);
+                DrawGameTextIn("Nome de quem concluiu a run",(Rectangle){panel.x+12,panel.y+panel.height*.42f,panel.width-24,panel.height*.12f},
+                               27,RAYWHITE,GAME_TEXT_BODY);
+                Rectangle input={panel.x+panel.width*.1f,panel.y+panel.height*.56f,panel.width*.8f,panel.height*.16f};
+                DrawRectangleRec(input,Fade(BLACK,.65f));
+                DrawRectangleLinesEx(input,2,GOLD);
+                DrawGameTextIn(speedrunNameBytes?speedrunName:"Digite seu nome",
+                               (Rectangle){input.x+8,input.y+3,input.width-16,input.height-6},
+                               30,speedrunNameBytes?RAYWHITE:LIGHTGRAY,GAME_TEXT_BODY);
+                DrawGameTextIn("Enter: salvar  |  Backspace: apagar",
+                               (Rectangle){panel.x+12,panel.y+panel.height*.78f,panel.width-24,panel.height*.12f},
+                               22,LIGHTGRAY,GAME_TEXT_BODY);
+            EndGameFrame();
+            continue;
         }
         if (clearing.necromancerArena && encounter.phase==ENCOUNTER_CLEAR &&
             encounter.presentation.remaining<=0 && IsKeyPressed(KEY_ENTER)) {
