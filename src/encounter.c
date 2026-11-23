@@ -1155,8 +1155,8 @@ static const char *RewardText(const Encounter *e, Reward reward) {
                 else if (nextLevel == 4) perk = "Livros 5->6, bloqueia tiros no boost";
                 else if (nextLevel == 5) perk = "Poças de água benta (8 dano/0,45 s)";
             } else if (reward.weapon == 2) {
-                if (nextLevel == 1) perk = "Acerto reduz recarga da esquiva em 0,8 s";
-                else if (nextLevel == 2) perk = "Alcance 105->123 px, recuperação 0,45->0,40 s";
+                if (nextLevel == 1) perk = "Alcance 105->123 px, recuperação 0,45->0,40 s";
+                else if (nextLevel == 2) perk = "Acerto reduz recarga da esquiva em 0,8 s";
                 else if (nextLevel == 3) perk = "Arco 127->145 graus, recuo 42 px";
                 else if (nextLevel == 4) perk = "Onda de choque (22 dano, recarga 2,5 s)";
                 else if (nextLevel == 5) perk = "Onda tripla (+-20 graus, recarga 1,8 s)";
