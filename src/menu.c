@@ -24,22 +24,22 @@ static Rectangle MenuButtonBounds(int i, float centerX, float centerY, float w) 
 }
 
 static Rectangle ButtonBounds(int i) {
-    float w = fminf(GetScreenWidth() * 0.32f, 530.0f);
+    float w = fminf(GetScreenWidth() * 0.22f, 370.0f);
     float groupHeight = 4*w*.30f + 3*fmaxf(8.0f, w*.30f*.04f);
-    float centerY = GetScreenHeight()*.54f - groupHeight*.04f;
+    float centerY = GetScreenHeight() * 0.65f;
     return MenuButtonBounds(i, GetScreenWidth()/2.0f, centerY, w);
 }
 
 static Rectangle TestButtonBounds(void) {
-    return (Rectangle){GetScreenWidth() - 196.0f, GetScreenHeight() - 74.0f, 168.0f, 48.0f};
+    return (Rectangle){GetScreenWidth() - 174.0f, GetScreenHeight() - 62.0f, 146.0f, 40.0f};
 }
 
 static Rectangle TestChapelButtonBounds(void) {
-    return (Rectangle){GetScreenWidth() - 376.0f, GetScreenHeight() - 74.0f, 168.0f, 48.0f};
+    return (Rectangle){GetScreenWidth() - 332.0f, GetScreenHeight() - 62.0f, 146.0f, 40.0f};
 }
 
 static Rectangle TestInvertedChapelButtonBounds(void) {
-    return (Rectangle){GetScreenWidth() - 596.0f, GetScreenHeight() - 74.0f, 208.0f, 48.0f};
+    return (Rectangle){GetScreenWidth() - 536.0f, GetScreenHeight() - 62.0f, 190.0f, 40.0f};
 }
 
 static void UpdateButtonFocus(float focus[4], int selected, float dt) {
