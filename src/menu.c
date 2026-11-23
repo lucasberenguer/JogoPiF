@@ -269,6 +269,7 @@ int LoadMenuCheckpointWeapon(void) {
 bool InitMenu(Menu *m) {
     *m = (Menu){0};
     m->background = LoadTexture("assets/menu_cenario.png");
+    m->logo = LoadTexture("assets/menu_logo.png");
     m->moon = LoadTexture("assets/menu_lua.png");
     m->seal = LoadTexture("assets/menu_selo.png");
     m->necromancer = LoadTexture("assets/menu_necromante.png");
@@ -354,6 +355,7 @@ void UnloadMenu(Menu *m) {
     if (m->necromancer.id) UnloadTexture(m->necromancer);
     if (m->seal.id) UnloadTexture(m->seal);
     if (m->moon.id) UnloadTexture(m->moon);
+    if (m->logo.id) UnloadTexture(m->logo);
     if (m->background.id) UnloadTexture(m->background);
     *m = (Menu){0};
 }
@@ -896,6 +898,32 @@ void DrawMenu(const Menu *m) {
         return;
     }
     if (m->page == 0) {
+         if (m->logo.id) {
+            float maxW = GetScreenWidth() * 0.75f;
+            float maxH = GetScreenHeight() * 0.38f;
+
+            float scale = fminf(maxW / m->logo.width,
+                                maxH / m->logo.height);
+
+            float logoW = m->logo.width * scale;
+            float logoH = m->logo.height * scale;
+
+            Rectangle source = {
+                0, 0,
+                (float)m->logo.width,
+                (float)m->logo.height
+            };
+
+            Rectangle dest = {
+                (GetScreenWidth() - logoW) / 2.0f,
+                GetScreenHeight() * 0.035f,
+                logoW,
+                logoH
+            };
+
+            DrawTexturePro(m->logo, source, dest,
+                           (Vector2){0, 0}, 0.0f, WHITE);
+        }
         static const char *labels[] = {"Iniciar Jogo", "Continuar", "Configurações", "Créditos"};
         for (int i=0; i<4; i++) {
             Rectangle b = ButtonBounds(i);
