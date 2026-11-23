@@ -62,6 +62,8 @@ void BeginEncounter(Encounter *encounter, EnemyGroup *enemies, const Clearing *c
 bool UpdateEncounter(Encounter *encounter, EnemyGroup *enemies, const Clearing *clearing,
                      Vector2 player, int *health);
 bool EncounterPaused(const Encounter *encounter);
+bool OpenAngelRevival(const Encounter *e, unsigned seed, LogicMCQuestion *question);
+bool AnswerAngelRevival(Encounter *e, const LogicMCQuestion *question, int choice, int *health);
 void CompleteAngelCinematic(Encounter *e, int health);
 void CompleteVillageCinematic(Encounter *encounter);
 void CompleteGuardianIntro(Encounter *encounter, bool cinematicPlayed);

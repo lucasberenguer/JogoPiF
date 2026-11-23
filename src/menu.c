@@ -37,6 +37,10 @@ static Rectangle TestChapelButtonBounds(void) {
     return (Rectangle){GetScreenWidth() - 376.0f, GetScreenHeight() - 74.0f, 168.0f, 48.0f};
 }
 
+static Rectangle TestInvertedChapelButtonBounds(void) {
+    return (Rectangle){GetScreenWidth() - 596.0f, GetScreenHeight() - 74.0f, 208.0f, 48.0f};
+}
+
 static void UpdateButtonFocus(float focus[4], int selected, float dt) {
     float blend = 1.0f - expf(-18.0f*dt);
     for (int i = 0; i < 4; i++) focus[i] += ((i == selected ? 1.0f : 0.0f) - focus[i])*blend;
@@ -192,6 +196,7 @@ bool LoadClearingCheckpoint(RunProgress *p) {
     bool angelValid=!angel || (sscanf(angel+1,"angel_blessing=%d",&loaded.angelBlessingUses)==1 &&
         loaded.angelBlessingUses>=0 && loaded.angelBlessingUses<=3);
     loaded.angelSceneCompleted=angel!=NULL;
+    if (angelValid && loaded.angelBlessingUses>1) loaded.angelBlessingUses=1;
     const char *finalSeal=strstr(data,"\nfinal_seal_failures=");
     bool finalSealValid=!finalSeal || (sscanf(finalSeal+1,"final_seal_failures=%d",&loaded.finalSealFailures)==1 &&
         loaded.map==NECROMANCER_MAP && loaded.finalSealFailures>0 && loaded.finalSealFailures<3);
@@ -759,6 +764,10 @@ MenuAction UpdateMenu(Menu *m) {
         PlayAudioFeedback(&m->audio);
         return MENU_TEST_CHAPEL;
     }
+    if (click && CheckCollisionPointRec(mouse, TestInvertedChapelButtonBounds())) {
+        PlayAudioFeedback(&m->audio);
+        return MENU_TEST_INVERTED_CHAPEL;
+    }
     UpdateButtonFocus(m->buttonFocus, m->selected == 1 && !m->hasSave ? -1 : m->selected, dt);
     if (!click && !IsKeyPressed(KEY_ENTER) && !IsKeyPressed(KEY_SPACE)) return MENU_NONE;
     if (click && !CheckCollisionPointRec(mouse, ButtonBounds(m->selected))) return MENU_NONE;
@@ -822,7 +831,6 @@ static void DrawMenuBackground(const Menu *m) {
 void DrawMenu(const Menu *m) {
     DrawMenuBackground(m);
     DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,0.25f));
-    DrawGameText("F1 · Ferramentas",18,16,18,(Color){255,226,181,255});
     if (m->page == 0) {
         static const char *labels[] = {"Iniciar Jogo", "Continuar", "Configurações", "Créditos"};
         for (int i=0; i<4; i++) {
@@ -847,6 +855,11 @@ void DrawMenu(const Menu *m) {
         DrawRectangleRounded(chapelBox, .25f, 8, chapelHover ? (Color){44, 52, 86, 235} : (Color){24, 28, 44, 220});
         DrawRectangleRoundedLinesEx(chapelBox, .25f, 8, 2, chapelHover ? GOLD : (Color){184, 145, 76, 220});
         DrawGameTextIn("Capela", chapelBox, 24, chapelHover ? GOLD : RAYWHITE, true);
+        Rectangle invertedBox = TestInvertedChapelButtonBounds();
+        bool invertedHover = CheckCollisionPointRec(GetMousePosition(), invertedBox);
+        DrawRectangleRounded(invertedBox, .25f, 8, invertedHover ? (Color){44, 52, 86, 235} : (Color){24, 28, 44, 220});
+        DrawRectangleRoundedLinesEx(invertedBox, .25f, 8, 2, invertedHover ? GOLD : (Color){184, 145, 76, 220});
+        DrawGameTextIn("Capela Invertida", invertedBox, 24, invertedHover ? GOLD : RAYWHITE, true);
         return;
     }
     if (m->page==1) {

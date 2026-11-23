@@ -17,6 +17,27 @@
 #include <stdio.h>
 #include <string.h>
 
+static int DrawAngelRevival(const LogicMCQuestion *question) {
+    float w=(float)GetScreenWidth(), h=(float)GetScreenHeight();
+    float center=h*.5f;
+    float buttonWidth=fminf(660,w-48);
+    const int keys[]={KEY_ONE,KEY_TWO,KEY_THREE};
+    int choice=-1;
+    DrawGameTextIn("A bênção do Anjo", (Rectangle){20,center-185,w-40,62}, 50,GOLD,true);
+    DrawGameTextIn("Qual expressão é equivalente? Acerte para voltar com metade da vida.",
+                   (Rectangle){20,center-116,w-40,38}, 23,RAYWHITE,false);
+    DrawGameTextIn(question->questionText, (Rectangle){20,center-66,w-40,46}, 32,GOLD,false);
+    for(int i=0;i<LOGIC_CHOICE_COUNT;i++) {
+        Rectangle button={(w-buttonWidth)*.5f,center+8+i*57,buttonWidth,48};
+        bool hover=CheckCollisionPointRec(GetMousePosition(),button);
+        if (IsKeyPressed(keys[i]) || (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))) choice=i;
+        DrawRectangleRec(button,hover?MAROON:DARKGRAY);
+        DrawRectangleLinesEx(button,2,GOLD);
+        DrawGameTextIn(TextFormat("%d. %s",i+1,question->choices[i]),button,25,RAYWHITE,false);
+    }
+    return choice;
+}
+
 static Camera2D FitClearing(const Clearing *clearing) {
     const float mapWidth = (float) clearing->background.width;
     const float mapHeight = (float) clearing->background.height;
@@ -261,15 +282,24 @@ int main(void) {
     bool devOpeningWasPaused=false,devGuardianWasPaused=false;
     bool openingPreview=false;
     int previewReturnScreen=0;
-    DevAction practiceScenario=DEV_STAGE;
     bool openingSeen = false;
+    bool deathHandled=false, revivalPending=false;
+    LogicMCQuestion revivalQuestion={0};
+    bool choosingWeaponAfterDeath=false;
     int currentWeapon = -1;
     Encounter encounter = {.progress = {.weapon=0}};
     const float entryFadeDuration = 1.15f;
     float entryFadeRemaining = 0.0f;
 
     while (!WindowShouldClose()) {
-        bool devToggle=IsKeyPressed(KEY_F1);
+        bool resolvingDeath=(screen==2 || screen==3) && playerHealth<=0;
+        bool toolsBlocked=resolvingDeath || choosingWeaponAfterDeath;
+        if (toolsBlocked) devTools.open=false;
+        Rectangle toolsButton={16,12,194,38};
+        bool toolsClicked=screen==0 && !devTools.open &&
+            CheckCollisionPointRec(GetMousePosition(),toolsButton) &&
+            IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+        bool devToggle=!toolsBlocked && (IsKeyPressed(KEY_F1) || toolsClicked);
         bool devWasOpen=devTools.open;
         if (devToggle && !devWasOpen) {
             devTools.open=true;
@@ -331,10 +361,9 @@ int main(void) {
                 openingPreview=false;
                 devTools.open=false;
                 screen=0;
-            } else if (action==DEV_HEAL && inPractice) {
+            } else if (action==DEV_HEAL && inPractice && playerHealth>0) {
                 playerHealth=encounter.progress.maxHealth;
                 encounter.progress.health=playerHealth;
-                if (encounter.phase==ENCOUNTER_DEFEAT) encounter.phase=ENCOUNTER_FIGHT;
                 ResetGun(&gun);
                 ResetBible(&bible);
                 dodgeRemaining=dodgeCooldown=katanaAttackRemaining=katanaAttackCooldown=0;
@@ -373,7 +402,6 @@ int main(void) {
                     UnloadOpeningCutscene(&opening);
                     UnloadGuardianCutscene(&guardianIntro);
                     openingPreview=false;
-                    practiceScenario=action;
                     currentWeapon=encounter.progress.weapon;
                     playerMaxHealth=encounter.progress.maxHealth;
                     playerSpeed=encounter.progress.speed;
@@ -468,14 +496,17 @@ int main(void) {
                 playerHealth = progress.health;
                 playerSpeed = progress.speed;
                 screen = 2;
-            } else if (action == MENU_TEST_CHAPEL) {
-                if (!clearing.chapel) {
+            } else if (action == MENU_TEST_CHAPEL || action == MENU_TEST_INVERTED_CHAPEL) {
+                int chapelMap=action==MENU_TEST_CHAPEL ? CHAPEL_MAP : INVERTED_CHAPEL_MAP;
+                if (ClearingMapId(&clearing)!=chapelMap) {
                     UnloadClearing(&clearing);
                     clearing = (Clearing){0};
-                    if (!InitChapel(&clearing)) break;
+                    if (!InitCampaignMap(&clearing,chapelMap)) break;
                 }
                 RunProgress progress = {
-                    .map = 3,
+                    .map = chapelMap,
+                    .angelSceneCompleted = chapelMap==INVERTED_CHAPEL_MAP,
+                    .angelBlessingUses = chapelMap==INVERTED_CHAPEL_MAP,
                     .stage = CLEARING_BOSS_STAGE,
                     .weapon = WEAPON_KATANA,
                     .initialWeapon = WEAPON_KATANA,
@@ -514,6 +545,10 @@ int main(void) {
             BeginGameFrame();
                 ClearBackground(BLACK);
                 DrawMenu(&menu);
+                bool hoverTools=CheckCollisionPointRec(GetMousePosition(),toolsButton);
+                DrawRectangleRec(toolsButton,hoverTools?MAROON:Fade(BLACK,.65f));
+                DrawRectangleLinesEx(toolsButton,1,GOLD);
+                DrawGameTextIn("Ferramentas (F1)",toolsButton,20,RAYWHITE,false);
             EndGameFrame();
             continue;
         }
@@ -539,8 +574,13 @@ int main(void) {
             } else {
                 choice = UpdateWeaponSelect(&weaponSelect);
             }
-            if (choice == -2) { screen = 0; continue; }
+            if (choice == -2) {
+                choosingWeaponAfterDeath=false;
+                screen = 0;
+                continue;
+            }
             if (choice >= 0) {
+                choosingWeaponAfterDeath=false;
                 if (!openingSeen) {
                     openingSeen = true;
                     if (InitOpeningCutscene(&opening, menu.audio.volume[AUDIO_MUSIC]/100.0f,
@@ -598,7 +638,37 @@ int main(void) {
             screen=0;
             continue;
         }
+        if (playerHealth > 0) {
+            deathHandled=false;
+            revivalPending=false;
+        }
         if (playerHealth <= 0) {
+            if (!deathHandled) {
+                deathHandled=true;
+                devTools.invincible=false;
+                enemies.practiceInvincible=false;
+                revivalPending=OpenAngelRevival(&encounter,(unsigned)GetRandomValue(1,2147483647),&revivalQuestion);
+                if (!encounter.practice &&
+                    !SaveMenuCheckpoint(encounter.progress.initialWeapon))
+                    TraceLog(LOG_WARNING, "Nao foi possivel encerrar o checkpoint da tentativa");
+            }
+            bool revivalFailed=false;
+            if (revivalPending) {
+                BeginGameFrame();
+                ClearBackground((Color){16,10,22,255});
+                int choice=DrawAngelRevival(&revivalQuestion);
+                EndGameFrame();
+                if (choice<0) continue;
+                revivalPending=false;
+                if (AnswerAngelRevival(&encounter,&revivalQuestion,choice,&playerHealth)) {
+                    enemies.playerHitCooldown=fmaxf(enemies.playerHitCooldown,1.2f);
+                    dodgeRemaining=0;
+                    continue;
+                }
+                revivalFailed=true;
+            }
+            encounter.phase=ENCOUNTER_DEFEAT;
+            bool restartImmediately=revivalFailed;
             float sw = (float)GetScreenWidth();
             float sh = (float)GetScreenHeight();
             float centerX = sw / 2.0f;
@@ -611,58 +681,24 @@ int main(void) {
             Rectangle backToMenu = {centerX + btnGap * 0.5f, btnY, btnWidth, btnHeight};
             bool hoverRetry = CheckCollisionPointRec(GetMousePosition(), retry);
             bool hoverMenu = CheckCollisionPointRec(GetMousePosition(), backToMenu);
-            int initialWeapon = (encounter.progress.initialWeapon >= 0 && encounter.progress.initialWeapon < 3)
-                ? encounter.progress.initialWeapon
-                : ((currentWeapon >= 0 && currentWeapon < 3) ? currentWeapon : encounter.progress.weapon);
-            if (IsKeyPressed(KEY_ESCAPE) || (hoverMenu && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))) {
-                if (!encounter.practice && initialWeapon >= 0 && initialWeapon < 3) {
-                    SaveMenuCheckpoint(initialWeapon);
-                }
+            if (!restartImmediately && (IsKeyPressed(KEY_ESCAPE) ||
+                (hoverMenu && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)))) {
                 screen = 0;
                 continue;
             }
-            if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_R) ||
+            if (restartImmediately || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_R) ||
                 (hoverRetry && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))) {
-                bool practice=encounter.practice;
-                if (!practice && ClearingMapId(&clearing) != 0) {
-                    UnloadClearing(&clearing);
-                    clearing=(Clearing){0};
-                    if (!InitClearing(&clearing)) break;
-                }
-                RunProgress progress=practice ? encounter.progress : NewRunProgress(initialWeapon);
-                progress.health=progress.maxHealth;
-                if (practice) progress.guardianIntroSeen=true;
-                int retryForm=practice && clearing.necromancerArena ? enemies.list[0].necromancerForm : 0;
-                BeginEncounter(&encounter,&enemies,&clearing,progress,clearing.spawn);
-                encounter.practice=practice;
-                if (practice) {
-                    if (!clearing.boneland) encounter.presentation=(StagePresentation){0};
-                    if (retryForm>1) {
-                        Enemy *boss=&enemies.list[0];
-                        boss->necromancerForm=retryForm;
-                        boss->health=boss->maxHealth*(retryForm==2?70:35)/100;
-                        boss->state=ENEMY_IDLE;
-                        boss->position=clearing.pedestal;
-                    } else if (!clearing.necromancerArena && progress.stage==CLEARING_BOSS_STAGE &&
-                               practiceScenario==DEV_BOSS_TWO) {
-                        enemies.list[0].guardianPhase=GUARDIAN_PHASE_TWO;
-                        enemies.list[0].health=enemies.list[0].maxHealth/2;
-                        enemies.list[0].state=ENEMY_IDLE;
-                        enemies.list[0].stateTime=0;
-                    }
-                } else SaveClearingCheckpoint(&progress);
-                currentWeapon=progress.weapon;
-                player=clearing.spawn;
-                playerHealth=playerMaxHealth=progress.maxHealth;
-                playerSpeed=progress.speed;
-                ResetGun(&gun); ResetBible(&bible);
-                dodgeRemaining=dodgeCooldown=0;
-                katanaAttackRemaining=katanaAttackCooldown=0;
-                katanaAttackId=0; walkTime=0; facing=0;
-                katanaShockwaveCooldown = 0.0f;
-                memset(katanaShockwaves, 0, sizeof(katanaShockwaves));
-                pedestalMessageTime=0;
-                entryFadeRemaining=entryFadeDuration;
+                devTools.map=CLEARING_MAP;
+                devTools.wave=1;
+                choosingWeaponAfterDeath=true;
+                weaponSelect.selected=0;
+                openingSeen=true;
+                screen=1;
+                // Finish the frame so the restart click cannot select a weapon.
+                BeginGameFrame();
+                ClearBackground(BLACK);
+                DrawWeaponSelect(&weaponSelect);
+                EndGameFrame();
                 continue;
             }
             BeginGameFrame();
@@ -675,7 +711,7 @@ int main(void) {
                            22.0f, RAYWHITE, false);
             DrawRectangleRec(retry,hoverRetry?MAROON:DARKGRAY);
             DrawRectangleLinesEx(retry,2,GOLD);
-            DrawGameTextIn("Repetir", (Rectangle){retry.x + 12.0f, retry.y + 8.0f, retry.width - 24.0f, retry.height - 16.0f},
+            DrawGameTextIn("Reiniciar", (Rectangle){retry.x + 12.0f, retry.y + 8.0f, retry.width - 24.0f, retry.height - 16.0f},
                            32.0f, RAYWHITE, true);
             DrawRectangleRec(backToMenu,hoverMenu?MAROON:DARKGRAY);
             DrawRectangleLinesEx(backToMenu,2,GOLD);
@@ -868,8 +904,8 @@ int main(void) {
             }
         }
         if (!entering && IsKeyPressed(KEY_F4)) {
-            playerHealth -= 5;
-            if (playerHealth < 0) playerHealth = 0;
+            playerHealth = playerHealth>5 ? playerHealth-5 : 0;
+            if (playerHealth==0) continue;
         }
         if (!entering && IsKeyPressed(KEY_F5)) {
             playerHealth += 5;

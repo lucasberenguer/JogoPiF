@@ -239,11 +239,40 @@ bool EncounterPaused(const Encounter *e) {
            e->phase == ENCOUNTER_DEFEAT;
 }
 
+static bool CanUseAngelRevival(const Encounter *e) {
+    return e->phase==ENCOUNTER_FIGHT && e->progress.angelSceneCompleted &&
+           e->progress.map>=INVERTED_CHAPEL_MAP && e->progress.angelBlessingUses>0;
+}
+
+bool OpenAngelRevival(const Encounter *e, unsigned seed, LogicMCQuestion *question) {
+    if (!CanUseAngelRevival(e)) return false;
+    int minScore, maxScore;
+    EncounterSealRange(e->progress.map, true, &minScore, &maxScore);
+    LogicRng rng;
+    LogicRngSeed(&rng, seed);
+    return LogicGenerateMC(&rng, minScore, maxScore, CurrentEncounterLogicStyle(), question);
+}
+
+bool AnswerAngelRevival(Encounter *e, const LogicMCQuestion *question, int choice, int *health) {
+    if (*health>0 || choice<0 || choice>=LOGIC_CHOICE_COUNT || !CanUseAngelRevival(e))
+        return false;
+    e->progress.angelBlessingUses=0;
+    if (choice!=question->correct) {
+        e->phase=ENCOUNTER_DEFEAT;
+        return false;
+    }
+    *health=(e->progress.maxHealth+1)/2;
+    e->progress.health=*health;
+    if (!e->practice && !SaveClearingCheckpoint(&e->progress))
+        TraceLog(LOG_WARNING, "Nao foi possivel salvar a ressurreicao");
+    return true;
+}
+
 void CompleteAngelCinematic(Encounter *e, int health) {
     if (e->phase!=ENCOUNTER_ANGEL_CINEMATIC || e->progress.angelSceneCompleted) return;
     e->chapelAltarDone=true;
     e->progress.angelSceneCompleted=true;
-    e->progress.angelBlessingUses=3;
+    e->progress.angelBlessingUses=1;
     e->progress.health=health;
     e->phase=ENCOUNTER_FIGHT;
     snprintf(e->notice,sizeof(e->notice),"Bênção recebida. A passagem à esquerda está aberta.");
@@ -635,16 +664,14 @@ bool AnswerEncounterSeal(Encounter *e, EnemyGroup *enemies, int *health, int cho
     if (e->progress.map==NECROMANCER_MAP) {
         if (choice!=correct) e->progress.finalSealFailures++;
         bool finalAttempt=e->progress.finalSealFailures>=3;
-        bool savedByAngel=choice!=correct && finalAttempt && e->progress.angelBlessingUses>0;
-        if (savedByAngel) e->progress.angelBlessingUses--;
-        if (choice==correct || savedByAngel) {
+        if (choice==correct) {
             enemy->state=ENEMY_GONE;
             e->progress.stage=CLEARING_COMPLETE_STAGE;
             e->progress.finalSealFailures=0;
             e->progress.health=*health;
             e->phase=ENCOUNTER_CLEAR;
             BeginStagePresentation(&e->presentation,0,
-                savedByAngel?"O Anjo completou o selo final":"O Grande Selo Profano foi restaurado",NULL);
+                "O Grande Selo Profano foi restaurado",NULL);
             e->presentation.announcement="O Necromante foi selado";
             e->presentation.duration=e->presentation.remaining=3.5f;
             if (!e->practice) SaveClearingCheckpoint(&e->progress);
@@ -664,15 +691,7 @@ bool AnswerEncounterSeal(Encounter *e, EnemyGroup *enemies, int *health, int cho
         }
         return true;
     }
-    bool protectedSeal=choice!=correct && e->progress.angelBlessingUses>0 &&
-        *health<=e->progress.maxHealth/3;
-    if (protectedSeal) {
-        e->progress.angelBlessingUses--;
-        e->progress.health=*health;
-        snprintf(e->notice,sizeof(e->notice),"A bênção protegeu o selo. Restam %d usos.",e->progress.angelBlessingUses);
-        if (!e->practice) SaveClearingCheckpoint(&e->progress);
-    }
-    if (choice==correct || protectedSeal) {
+    if (choice==correct) {
         enemy->state=ENEMY_GONE;
         if (enemy->type==ENEMY_BOSS && e->progress.map==0 &&
             e->progress.stage==CLEARING_BOSS_STAGE) {
@@ -1349,7 +1368,7 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
                         "Grande Selo Profano" : "Selo - combate pausado") : "Fim da tentativa";
     DrawGameTextIn(title,(Rectangle){0,titleY,GetScreenWidth(),49},42,GOLD,true);
     if (e->phase==ENCOUNTER_DEFEAT) {
-        DrawGameText("Esc: menu | Continuar reinicia esta onda ou boss",GetScreenWidth()/2-270,titleY+80,20,RAYWHITE);
+        DrawGameText("Enter: repetir | Esc: voltar ao menu",GetScreenWidth()/2-270,titleY+80,20,RAYWHITE);
         return;
     }
     int count=enemies->list[e->sealEnemy].type==ENEMY_BOSS ? 3 : 2;

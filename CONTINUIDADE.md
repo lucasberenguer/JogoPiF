@@ -354,3 +354,15 @@ Na entrega do pós-boss de 18/11, build em `out/review` concluído e seis testes
 - Investida do Marechal com seis poses por direção. Poeira animada em passos, investida, frenagem, golpes e impacto dos ataques de área. Build e auditoria passaram.
 - Necromante reformulado: nas duas primeiras formas mantém distância, encadeia leques de projéteis e invoca espectros temporários nos flancos. A última forma combina combo e rasante com salvas autônomas sinalizadas. Novos sprites de lâmina e efeitos de combate. Build e auditoria passaram, incluindo salvas, invocação, limpeza na transição e magia simultânea ao ataque.
 - Caveiras invocadas: 230 PV, barra padrão, atingíveis pelas três armas e um projétil por segundo cada. Auditoria confere a cadência, o dano recebido e a remoção na transição.
+
+## Morte na campanha e ressurreição
+
+- A partir da Capela Invertida, a bênção recebida na Capela abre uma questão de equivalência com três alternativas na primeira morte em combate da partida. O acerto consome a bênção, devolve metade da vida máxima e retoma o mesmo encontro. Um erro encerra a tentativa e volta direto à escolha da arma.
+- Na morte definitiva da campanha, Repetir volta à escolha da arma e inicia uma nova partida na Clareira. Voltar ao Menu encerra a tentativa. O mesmo fluxo vale no modo de treino, em ondas e contra chefes.
+- O terceiro erro do Grande Selo Profano encerra a tentativa. A bênção passou a atuar nas mortes em combate.
+- Validação em out/review: jogo compilado e teste de encontro passou, incluindo acerto, erro e histórico da bênção.
+- F1 oferece Capela do Anjo e Capela Invertida. O menu principal também tem atalhos de prática para as duas. Na Capela Invertida, F4 simula dano. A auditoria confirmou uma ressurreição com 50 PV, ausência de uma segunda questão e preservação do checkpoint da campanha. Os dois executáveis de out/review foram sincronizados.
+- No Cemitério, morte definitiva leva direto à seleção de arma na campanha e na prática, inclusive contra o Coveiro. A nova tentativa sempre carrega a onda 1 da Clareira. As ferramentas ficam bloqueadas durante essa transição.
+- Validação da morte no Cemitério: simulação do loop do jogo passou na onda 4 e no Coveiro, na campanha e na prática, confirmando a tela de armas e a onda 1 da Clareira com atributos de nova partida.
+- Antes da Capela do Anjo (Clareira, Cemitério e Vila), morrer em qualquer onda ou chefe abre o Game Over, inclusive nos testes do F1. Reiniciar abre a escolha de arma e inicia uma nova partida na onda 1 da Clareira.
+- Reiniciar desenha a seleção de armas e fecha o quadro antes de processar entradas da nova tela. Isso impede que o clique do Game Over escolha a Bíblia.

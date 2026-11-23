@@ -3,7 +3,14 @@
 #include <math.h>
 #include <stdio.h>
 
-static const int practiceMaps[] = {0, 1, BONELAND_MAP, TEMPLAR_FIELD_MAP, NECROMANCER_MAP};
+static const int practiceMaps[] = {
+    CLEARING_MAP, CEMETERY_MAP, CHAPEL_MAP, INVERTED_CHAPEL_MAP,
+    BONELAND_MAP, TEMPLAR_FIELD_MAP, NECROMANCER_MAP,
+};
+
+static bool IsPracticeChapel(int map) {
+    return map==CHAPEL_MAP || map==INVERTED_CHAPEL_MAP;
+}
 
 static int PracticeMapIndex(int map) {
     for (int i = 0; i < (int)(sizeof(practiceMaps) / sizeof(practiceMaps[0])); i++)
@@ -29,7 +36,11 @@ static Rectangle Place(Rectangle logical) {
                        logical.width*scale,logical.height*scale};
 }
 
+enum { DEV_OPEN_CHAPEL_BUTTON=18, DEV_OPEN_INVERTED_BUTTON, DEV_CONTROL_COUNT };
+
 static Rectangle Control(int index) {
+    if (index>=DEV_OPEN_CHAPEL_BUTTON)
+        return Place((Rectangle){28+(index-DEV_OPEN_CHAPEL_BUTTON)*546,61,518,38});
     if (index<6) return Place((Rectangle){28+(index%2)*546,110+(index/2)*62,518,48});
     if (index==17) return Place((Rectangle){862,598,230,42});
     int button=index-6;
@@ -41,12 +52,13 @@ static void AdjustField(DevTools *tools, int index, int direction) {
         case 0: {
             int count = (int)(sizeof(practiceMaps) / sizeof(practiceMaps[0]));
             tools->map = practiceMaps[(PracticeMapIndex(tools->map) + direction + count) % count];
-            if (tools->map == TEMPLAR_FIELD_MAP || tools->map == NECROMANCER_MAP ||
+            if (IsPracticeChapel(tools->map) || tools->map == TEMPLAR_FIELD_MAP || tools->map == NECROMANCER_MAP ||
                 (tools->wave != CLEARING_BOSS_STAGE && tools->wave > PracticeWaves(tools->map)))
                 tools->wave = 1;
             break;
         }
         case 1: {
+            if (IsPracticeChapel(tools->map)) break;
             int count = PracticeWaves(tools->map) + 1;
             int wave = tools->wave == CLEARING_BOSS_STAGE ? count : tools->wave;
             wave = 1 + (wave - 1 + direction + count) % count;
@@ -62,20 +74,20 @@ static void AdjustField(DevTools *tools, int index, int direction) {
 
 DevAction UpdateDevTools(DevTools *tools, bool inPractice) {
     if (IsKeyPressed(KEY_ESCAPE)) return DEV_CLOSE;
-    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_TAB)) tools->selected=(tools->selected+1)%18;
-    if (IsKeyPressed(KEY_UP)) tools->selected=(tools->selected+17)%18;
+    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_TAB)) tools->selected=(tools->selected+1)%DEV_CONTROL_COUNT;
+    if (IsKeyPressed(KEY_UP)) tools->selected=(tools->selected+DEV_CONTROL_COUNT-1)%DEV_CONTROL_COUNT;
     int direction=(int)IsKeyPressed(KEY_RIGHT)-(int)IsKeyPressed(KEY_LEFT);
     if (direction) {
         if (tools->selected<6) AdjustField(tools,tools->selected,direction);
-        else tools->selected=(tools->selected+direction+18)%18;
+        else tools->selected=(tools->selected+direction+DEV_CONTROL_COUNT)%DEV_CONTROL_COUNT;
     }
     Vector2 mouse=GetMousePosition(), motion=GetMouseDelta();
     if (motion.x!=0 || motion.y!=0)
-        for (int i=0; i<18; i++) if (CheckCollisionPointRec(mouse,Control(i))) tools->selected=i;
+        for (int i=0; i<DEV_CONTROL_COUNT; i++) if (CheckCollisionPointRec(mouse,Control(i))) tools->selected=i;
     bool activate=IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE);
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         activate=false;
-        for (int i=0; i<18; i++) if (CheckCollisionPointRec(mouse,Control(i))) {
+        for (int i=0; i<DEV_CONTROL_COUNT; i++) if (CheckCollisionPointRec(mouse,Control(i))) {
             tools->selected=i;
             activate=true;
         }
@@ -86,11 +98,18 @@ DevAction UpdateDevTools(DevTools *tools, bool inPractice) {
         }
     }
     if (!activate) return DEV_NONE;
+    if (tools->selected>=DEV_OPEN_CHAPEL_BUTTON) {
+        tools->map=tools->selected==DEV_OPEN_CHAPEL_BUTTON ? CHAPEL_MAP : INVERTED_CHAPEL_MAP;
+        tools->wave=1;
+        return DEV_STAGE;
+    }
     if (tools->selected<6) {
         AdjustField(tools,tools->selected,1);
         return DEV_NONE;
     }
     if (!inPractice && (tools->selected==12 || tools->selected==13)) return DEV_NONE;
+    if (IsPracticeChapel(tools->map) &&
+        (tools->selected==7 || tools->selected==8 || tools->selected==11)) return DEV_NONE;
     static const DevAction actions[]={DEV_STAGE,DEV_BOSS_ONE,DEV_BOSS_TWO,DEV_OPENING,DEV_GUARDIAN,
         DEV_SEAL,DEV_HEAL,DEV_CLEAR_STAGE,DEV_LIBERATION,DEV_PASSAGE,DEV_MENU,DEV_CLOSE};
     return actions[tools->selected-6];
@@ -105,8 +124,14 @@ void DrawDevTools(const DevTools *tools, bool inPractice) {
     DrawRectangleRoundedLinesEx(panel,.025f,8,1,gold);
     DrawGameTextIn("Ferramentas de desenvolvimento",Place((Rectangle){28,16,1064,45}),
                    34*scale,text,false);
-    DrawGameTextIn("Escolha o cenário, a arma e o ponto da luta",Place((Rectangle){28,64,1064,30}),
-                   23*scale,gold,false);
+    for (int i=DEV_OPEN_CHAPEL_BUTTON; i<DEV_CONTROL_COUNT; i++) {
+        Rectangle button=Control(i);
+        bool focused=tools->selected==i;
+        DrawRectangleRec(button,focused ? (Color){114,37,46,255} : (Color){49,22,34,255});
+        DrawRectangleLinesEx(button,focused ? 2 : 1,gold);
+        DrawGameTextIn(i==DEV_OPEN_CHAPEL_BUTTON ? "Jogar Capela do Anjo" : "Jogar Capela Invertida",
+                       button,fmaxf(17,23*scale),text,true);
+    }
     static const char *names[]={"Mapa","Onda","Arma","Upgrade da arma","Invulnerabilidade","Colisões"};
     const char *weapons[]={"Arma de fogo","Bíblia","Katana"};
     char waveText[24],levelText[24];
@@ -119,9 +144,12 @@ void DrawDevTools(const DevTools *tools, bool inPractice) {
     else
         snprintf(waveText,sizeof(waveText),"%d / %d",tools->wave,waves);
     snprintf(levelText,sizeof(levelText),"%d / %d",tools->weaponLevel,MAX_WEAPON_LEVEL);
-    static const char *mapNames[] = {"Clareira", "Cemitério", "Terra dos Ossos", "Campo dos Templários", "Topo do Palácio"};
-    const char *values[]={mapNames[PracticeMapIndex(tools->map)],
-        tools->wave==CLEARING_BOSS_STAGE && tools->map != TEMPLAR_FIELD_MAP &&
+    static const char *mapNames[] = {"Clareira", "Cemitério", "Capela do Anjo", "Capela Invertida",
+                                    "Terra dos Ossos", "Campo dos Templários", "Topo do Palácio"};
+    int mapIndex=PracticeMapIndex(tools->map);
+    bool chapel=IsPracticeChapel(tools->map);
+    const char *values[]={mapIndex>=0 ? mapNames[mapIndex] : "Selecione o mapa",
+        chapel ? "Exploração" : tools->wave==CLEARING_BOSS_STAGE && tools->map != TEMPLAR_FIELD_MAP &&
             tools->map != NECROMANCER_MAP ? "Chefe" : waveText,weapons[tools->weapon],
         levelText,tools->invincible ? "Ligada" : "Desligada",
         tools->collision ? "Visíveis" : "Ocultas"};
@@ -141,15 +169,17 @@ void DrawDevTools(const DevTools *tools, bool inPractice) {
         "Menu principal","Fechar · F1 / Esc"};
     for (int i=6; i<18; i++) {
         Rectangle button=Control(i);
-        bool enabled = inPractice || (i!=12 && i!=13);
+        bool enabled = (inPractice || (i!=12 && i!=13)) &&
+            !(chapel && (i==7 || i==8 || i==11));
         bool focused=tools->selected==i;
         Color ink=enabled ? text : (Color){155,134,141,255};
         DrawRectangleRec(button,focused && enabled ? (Color){114,37,46,255} : (Color){49,22,34,255});
         DrawRectangleLinesEx(button,focused ? 2 : 1,focused ? gold : (Color){116,65,62,255});
-        DrawGameTextIn(labels[i-6],(Rectangle){button.x+8*scale,button.y,button.width-16*scale,button.height},
+        DrawGameTextIn(i==6 && chapel ? "Entrar na capela" : labels[i-6],(Rectangle){button.x+8*scale,button.y,button.width-16*scale,button.height},
                        fmaxf(18,25*scale),ink,false);
     }
     const char *status=tools->status[0] ? tools->status :
+        tools->map==INVERTED_CHAPEL_MAP ? "Teste as perguntas de ressurreição. Use F4 para simular dano." :
         "Os cenários usam prática. Continuar no menu retoma seu checkpoint.";
     DrawGameTextIn(status,Place((Rectangle){28,536,1064,45}),fmaxf(17,22*scale),gold,false);
     DrawGameTextIn("Setas ajustam e navegam · Enter executa · Clique para selecionar",
@@ -160,6 +190,8 @@ bool StartDevEncounter(const DevTools *tools, DevAction action, Encounter *e,
                        EnemyGroup *enemies, Clearing *map, Vector2 *player, int *health) {
     if (action!=DEV_STAGE && action!=DEV_BOSS_ONE && action!=DEV_BOSS_TWO &&
         action!=DEV_GUARDIAN && action!=DEV_SEAL && action!=DEV_LIBERATION && action!=DEV_PASSAGE) return false;
+    if (IsPracticeChapel(tools->map) &&
+        (action==DEV_BOSS_ONE || action==DEV_BOSS_TWO || action==DEV_SEAL)) return false;
     if (PracticeMapIndex(tools->map) < 0 || tools->wave < 1 ||
         (tools->wave > PracticeWaves(tools->map) && tools->wave != CLEARING_BOSS_STAGE) ||
         tools->weapon<0 || tools->weapon>2 || tools->weaponLevel<0 || tools->weaponLevel>MAX_WEAPON_LEVEL) return false;
@@ -173,6 +205,10 @@ bool StartDevEncounter(const DevTools *tools, DevAction action, Encounter *e,
     }
     RunProgress progress=NewRunProgress(tools->weapon);
     progress.stage=action==DEV_STAGE && mapId!=NECROMANCER_MAP ? tools->wave : CLEARING_BOSS_STAGE;
+    if (mapId>=INVERTED_CHAPEL_MAP) {
+        progress.angelSceneCompleted=true;
+        progress.angelBlessingUses=1;
+    }
     SetRunWeaponLevel(&progress, tools->weaponLevel);
     progress.guardianIntroSeen=action!=DEV_GUARDIAN;
     if (aftermath) {

@@ -1242,7 +1242,7 @@ int main(void) {
         assert(ChooseEncounterReward(&templars, &enemies, &field, field.spawn, &fieldHealth, 0));
         assert(LoadClearingCheckpoint(&fieldProgress));
         assert(fieldProgress.map == TEMPLAR_FIELD_MAP && fieldProgress.stage == templars.progress.stage);
-        assert(fieldProgress.angelSceneCompleted && fieldProgress.angelBlessingUses == 2);
+        assert(fieldProgress.angelSceneCompleted && fieldProgress.angelBlessingUses == 1);
     }
     assert(templars.progress.stage == CLEARING_BOSS_STAGE && EnemiesRemaining(&enemies) == 1);
     assert(enemies.marshalPortrait.id && templars.presentation.separateBossWave);
@@ -1271,14 +1271,15 @@ int main(void) {
     marshal->state = ENEMY_IDLE;
     marshal->position = marshalStart;
     marshal->attackCooldown = 0;
+    marshal->attackBurst = 3;
     Vector2 target = {marshalStart.x, marshalStart.y + 125};
     UpdateEnemies(&enemies, &field, target, .01f, false, &fieldHealth, 100);
     assert(marshal->bossAttack == MARSHAL_RUPTURE);
     int before = fieldHealth;
-    marshal->stateTime = .81f;
+    marshal->stateTime = .70f;
     UpdateEnemies(&enemies, &field, target, .02f, true, &fieldHealth, 100);
     assert(fieldHealth == before && enemies.templarBlood.remaining <= 0);
-    marshal->stateTime = .81f;
+    marshal->stateTime = .70f;
     marshal->attackConnected = false;
     UpdateEnemies(&enemies, &field, target, .02f, false, &fieldHealth, 100);
     assert(fieldHealth < before && enemies.templarBlood.remaining > 0);
@@ -1353,7 +1354,7 @@ int main(void) {
         UpdateEnemies(&enemies,&palace,palace.pedestal,1.3f,true,&finalHealth,100);
         assert(enemies.necromancer.shots[0].life==0);
     }
-    assert(seenSkills==(1<<10)-1 && necromancer->state==ENEMY_FALLEN);
+    assert(seenSkills==(1<<8)-1 && necromancer->state==ENEMY_FALLEN);
     for (int miss=0;miss<3;miss++) {
         float power=final.progress.bossPower;
         necromancer->state=ENEMY_FALLEN;
@@ -1361,13 +1362,16 @@ int main(void) {
         assert(OpenEncounterSeal(&final,&enemies,palace.pedestal));
         assert(AnswerEncounterSeal(&final,&enemies,&finalHealth,(final.answer+1)%3));
         RunProgress savedFinal;
-        assert(LoadClearingCheckpoint(&savedFinal) && savedFinal.map==NECROMANCER_MAP);
+        assert(LoadClearingCheckpoint(&savedFinal));
         if(miss<2) {
+            assert(savedFinal.map==NECROMANCER_MAP);
             assert(final.phase==ENCOUNTER_FIGHT && final.progress.bossPower>power);
             assert(savedFinal.finalSealFailures==miss+1 && necromancer->necromancerForm==1);
         } else {
-            assert(final.phase==ENCOUNTER_CLEAR && savedFinal.stage==CLEARING_COMPLETE_STAGE);
-            assert(savedFinal.angelBlessingUses==0 && finalHealth==100);
+            assert(final.phase==ENCOUNTER_DEFEAT && savedFinal.map==CLEARING_MAP);
+            assert(savedFinal.angelBlessingUses==0 && finalHealth==0);
+            LogicMCQuestion blocked;
+            assert(!OpenAngelRevival(&final,1,&blocked));
         }
     }
     final.practice=true;
@@ -1447,7 +1451,28 @@ int main(void) {
     CompleteAngelCinematic(&encounter,100);
     assert(encounter.chapelAltarDone && !encounter.basementComplete);
     RunProgress blessed;
-    assert(LoadClearingCheckpoint(&blessed) && blessed.angelSceneCompleted && blessed.angelBlessingUses==3);
+    assert(LoadClearingCheckpoint(&blessed) && blessed.angelSceneCompleted && blessed.angelBlessingUses==1);
+    LogicMCQuestion revival;
+    Encounter revived=encounter;
+    int revivalHealth=0;
+    assert(!OpenAngelRevival(&(Encounter){.phase=ENCOUNTER_FIGHT},1,&revival));
+    assert(!OpenAngelRevival(&revived,1,&revival));
+    revived.progress.map=INVERTED_CHAPEL_MAP;
+    assert(OpenAngelRevival(&revived,1,&revival));
+    assert(AnswerAngelRevival(&revived,&revival,revival.correct,&revivalHealth));
+    assert(revivalHealth==50 && revived.progress.angelBlessingUses==0);
+    assert(!OpenAngelRevival(&revived,2,&revival));
+    RunProgress savedRevival;
+    assert(LoadClearingCheckpoint(&savedRevival) && savedRevival.health==50 &&
+           savedRevival.angelBlessingUses==0);
+    revived.progress=savedRevival;
+    revived.progress.map=BONELAND_MAP;
+    assert(!OpenAngelRevival(&revived,3,&revival));
+    revived.progress.angelBlessingUses=1;
+    revivalHealth=0;
+    assert(OpenAngelRevival(&revived,3,&revival));
+    assert(!AnswerAngelRevival(&revived,&revival,(revival.correct+1)%LOGIC_CHOICE_COUNT,&revivalHealth));
+    assert(revivalHealth==0 && revived.phase==ENCOUNTER_DEFEAT && revived.progress.angelBlessingUses==0);
     RunProgress boneBlessed=blessed;
     boneBlessed.map=BONELAND_MAP;
     boneBlessed.stage=BONELAND_WAVES;
@@ -1461,6 +1486,23 @@ int main(void) {
     BeginEncounter(&encounter,&enemies,&clearing,blessed,clearing.spawn);
     CompleteAngelCinematic(&encounter,100);
     assert(encounter.chapelAltarDone && encounter.progress.angelBlessingUses==0);
+
+    DevTools chapelTools={.map=CHAPEL_MAP,.wave=1,.weapon=2};
+    Vector2 chapelPlayer;
+    int chapelHealth;
+    assert(StartDevEncounter(&chapelTools,DEV_STAGE,&encounter,&enemies,&clearing,&chapelPlayer,&chapelHealth));
+    assert(clearing.chapel && encounter.practice && !OpenAngelRevival(&encounter,4,&revival));
+    chapelTools.map=INVERTED_CHAPEL_MAP;
+    assert(StartDevEncounter(&chapelTools,DEV_STAGE,&encounter,&enemies,&clearing,&chapelPlayer,&chapelHealth));
+    assert(clearing.invertedChapel && encounter.practice && OpenAngelRevival(&encounter,5,&revival));
+    chapelHealth=0;
+    assert(AnswerAngelRevival(&encounter,&revival,revival.correct,&chapelHealth));
+    assert(chapelHealth==50);
+    chapelHealth=0;
+    assert(!OpenAngelRevival(&encounter,6,&revival));
+    assert(!AnswerAngelRevival(&encounter,&revival,revival.correct,&chapelHealth));
+    assert(LoadClearingCheckpoint(&restoredBoneBlessing) &&
+           restoredBoneBlessing.map==BONELAND_MAP && restoredBoneBlessing.angelBlessingUses==1);
     UnloadEnemies(&enemies);
     UnloadClearing(&clearing);
     UnloadEncounterRewardUi();
