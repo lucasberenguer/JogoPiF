@@ -63,8 +63,8 @@ static void CheckBonelandWaves(void) {
     EnemyGroup group = {0};
     const int totals[] = {26, 34};
     const int rangedCounts[] = {7, 10};
-    const int ghoulHealth[] = {49, 53};
-    const int cultistHealth[] = {36, 39};
+    const int ghoulHealth[] = {45, 48};
+    const int cultistHealth[] = {33, 36};
     for (int wave = 1; wave <= BONELAND_WAVES; wave++) {
         StartEnemyWave(&group, &map, wave, map.spawn, 1);
         int ghouls = 0, cultists = 0;
@@ -268,8 +268,8 @@ static void CheckTemplarBalance(void) {
                     .playableBounds = {0, 0, 1672, 941}, .spawn = {835, 840}};
     EnemyGroup group = {0};
     const int health[] = {
-        [TEMPLAR_SHIELD] = 242, [TEMPLAR_EXECUTIONER] = 311,
-        [TEMPLAR_CROSSBOW] = 173, [TEMPLAR_STANDARD] = 207,
+        [TEMPLAR_SHIELD] = 218, [TEMPLAR_EXECUTIONER] = 280,
+        [TEMPLAR_CROSSBOW] = 156, [TEMPLAR_STANDARD] = 187,
     };
     for (int wave = 1; wave <= 2; wave++) {
         StartEnemyWave(&group, &map, wave, map.spawn, 1);
@@ -277,12 +277,12 @@ static void CheckTemplarBalance(void) {
         for (int i = 0; i < ENEMY_COUNT; i++) {
             const Enemy *enemy = &group.list[i];
             if (enemy->state == ENEMY_GONE) continue;
-            assert(enemy->templarRole >= TEMPLAR_SHIELD && enemy->templarRole <= TEMPLAR_STANDARD);
+            assert(enemy->templarRole >= TEMPLAR_SHIELD && enemy->templarRole < TEMPLAR_STANDARD);
             assert(enemy->health == health[enemy->templarRole]);
             assert(enemy->maxHealth == enemy->health);
             count++;
         }
-        assert(count == wave + 4);
+        assert(count == 5);
     }
 
     const TemplarRole roles[] = {TEMPLAR_SHIELD, TEMPLAR_EXECUTIONER, TEMPLAR_CROSSBOW};
@@ -300,6 +300,31 @@ static void CheckTemplarBalance(void) {
         UpdateEnemies(&group,&map,map.spawn,.03f,true,&hp,100);
         assert(enemy->state==ENEMY_IDLE);
     }
+
+    StartEnemyWave(&group, &map, 2, map.spawn, 1);
+    for (int i = 1; i < ENEMY_COUNT; i++) group.list[i].state = ENEMY_GONE;
+    Enemy *special = &group.list[0];
+    for (int scenario = 0; scenario < 3; scenario++) {
+        special->position = (Vector2){600,500};
+        special->state = ENEMY_IDLE;
+        special->attackCooldown = 0;
+        group.playerHitCooldown = 0;
+        Vector2 target = {830,500};
+        int hp = 100;
+        map.obstacleCount = 0;
+        UpdateEnemies(&group,&map,target,.01f,false,&hp,100);
+        assert(special->state == ENEMY_ATTACK);
+        UpdateEnemies(&group,&map,target,.48f,false,&hp,100);
+        assert(special->position.x == 600 && hp == 100);
+        if (scenario == 2) {
+            map.obstacles[0] = (Rectangle){680,460,20,80};
+            map.obstacleCount = 1;
+        }
+        UpdateEnemies(&group,&map,target,.29f,scenario == 1,&hp,100);
+        assert(scenario == 2 ? special->position.x < 680 : special->position.x > 750);
+        assert(hp == (scenario == 0 ? 73 : 100));
+    }
+    map.obstacleCount = 0;
 
     StartArenaBoss(&group, &map, map.spawn, 1);
     Enemy *marshal = &group.list[0];
@@ -527,10 +552,10 @@ int main(void) {
     UpdateEnemies(&group,&map,meleeTarget,.30f,false,&meleeTargetHealth,100);
     assert(meleeTargetHealth==100 && !melee->attackConnected);
     UpdateEnemies(&group,&map,meleeTarget,.02f,false,&meleeTargetHealth,100);
-    assert(meleeTargetHealth==88 && melee->attackConnected);
+    assert(meleeTargetHealth==86 && melee->attackConnected);
     group.playerHitCooldown=0;
     UpdateEnemies(&group,&map,meleeTarget,.30f,false,&meleeTargetHealth,100);
-    assert(meleeTargetHealth==88 && melee->state==ENEMY_IDLE);
+    assert(meleeTargetHealth==86 && melee->state==ENEMY_IDLE);
     const Vector2 archerTargets[] = {{400,600},{400,200},{200,400},{600,400}};
     for (int direction=0;direction<4;direction++) {
         ClearEnemyAttacks(&group);
@@ -755,7 +780,7 @@ int main(void) {
             const Enemy *enemy=&group.list[i];
             if (enemy->state==ENEMY_GONE) continue;
             int base=(int)((enemy->type==ENEMY_SPECIAL ? 100 : 45)*(1.0f+(wave-1)*.12f)*1.0f);
-            assert(enemy->maxHealth==(int)ceilf(base*1.10f));
+            assert(enemy->maxHealth==(int)ceilf(ceilf(base*1.10f)*.90f));
             assert(fabsf(enemy->damageScale-1.15f)<.001f);
             assert(fabsf(enemy->power-(1.0f+(wave-1)*.09f))<.001f);
         }
@@ -774,7 +799,7 @@ int main(void) {
             if (group.list[i].state==ENEMY_GONE) continue;
             const Enemy *enemy=&group.list[i];
             int base=(int)((enemy->type==ENEMY_SPECIAL ? 100 : 45)*(1.0f+(wave-1)*.12f));
-            assert(enemy->maxHealth==(int)ceilf(base*1.10f)+90);
+            assert(enemy->maxHealth==(int)ceilf((ceilf(base*1.10f)+90)*.90f));
             assert(fabsf(enemy->damageScale-1.15f*1.30f)<.001f);
             assert(fabsf(enemy->power-(1.0f+(wave-1)*.09f))<.001f);
             if (group.list[i].type==ENEMY_COMMON_MELEE) melee++;

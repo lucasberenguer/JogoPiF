@@ -128,7 +128,7 @@ static void CheckVillageZombies(Encounter *encounter, EnemyGroup *enemies, Clear
     UpdateEnemies(enemies, map, ground, .01f, false, &health, 100);
     assert(health == 100);
     UpdateEnemies(enemies, map, ground, .02f, false, &health, 100);
-    assert(health == 88 && enemies->list[0].attackConnected);
+    assert(health == 86 && enemies->list[0].attackConnected);
 
     const EnemyState states[] = {ENEMY_IDLE, ENEMY_WALK, ENEMY_ATTACK, ENEMY_SPAWNING};
     for (int row = 0; row < 4; row++) for (int face = 0; face < 4; face++) {
@@ -1334,10 +1334,10 @@ int main(void) {
     assert(templars.presentation.areaSubtitle);
     assert(enemies.templarIdle[TEMPLAR_SHIELD].width == 640 &&
            enemies.templarIdle[TEMPLAR_CROSSBOW].width == 640);
-    assert(enemies.templarWalk[TEMPLAR_SHIELD].width == 960 &&
-           enemies.templarWalk[TEMPLAR_CROSSBOW].width == 960);
+    assert(enemies.templarWalk[TEMPLAR_SHIELD].width == 640 &&
+           enemies.templarWalk[TEMPLAR_CROSSBOW].width == 1280);
     assert(enemies.templarAttack[TEMPLAR_SHIELD].width == 960 &&
-           enemies.templarAttack[TEMPLAR_CROSSBOW].width == 640);
+           enemies.templarAttack[TEMPLAR_CROSSBOW].width == 960);
     Enemy shield = {.templarRole = TEMPLAR_SHIELD, .state = ENEMY_IDLE,
                     .position = {100, 100}, .health = 100, .maxHealth = 100};
     DamageEnemyFrom(&shield, 20, (Vector2){100, 140});
@@ -1348,8 +1348,8 @@ int main(void) {
     DamageEnemyFrom(&shield, 20, (Vector2){100, 140});
     assert(shield.health == 50);
     for (int wave = 1; wave <= TEMPLAR_FIELD_WAVES; wave++) {
-        assert(templars.progress.stage == wave && EnemiesRemaining(&enemies) == wave + 4);
-        assert(enemies.list[0].templarRole == (wave == 1 ? TEMPLAR_SHIELD : TEMPLAR_STANDARD));
+        assert(templars.progress.stage == wave && EnemiesRemaining(&enemies) == 5);
+        assert(enemies.list[0].templarRole == (wave == 1 ? TEMPLAR_SHIELD : TEMPLAR_EXECUTIONER));
         if (wave == 1) {
             Encounter waveView = templars;
             waveView.presentation = (StagePresentation){0};
@@ -1369,8 +1369,9 @@ int main(void) {
             enemies.list[4].walkTime = .23f;
             Capture("audit/portao_espadachim_arqueiro.png",&waveView,&enemies,&field,field.spawn);
         }
-        for (int i = 0; i < wave + 4; i++) {
+        for (int i = 0; i < 5; i++) {
             Enemy *enemy = &enemies.list[i];
+            assert(enemy->templarRole != TEMPLAR_STANDARD);
             assert(!IsMapActorBlocked(&field, enemy->position));
             enemy->state = ENEMY_IDLE;
             DamageEnemy(enemy, enemy->health * 2);
@@ -1412,8 +1413,12 @@ int main(void) {
     Enemy *marshal = &enemies.list[0];
     assert(marshal->templarRole == TEMPLAR_MARSHAL && !IsMapActorBlocked(&field, marshal->position));
     for (int i = 0; i < IGRIS_ART_COUNT; i++) assert(enemies.igrisArt[i].id);
-    for (int role = TEMPLAR_SHIELD; role < TEMPLAR_MARSHAL; role++)
+    for (int role = TEMPLAR_SHIELD; role < TEMPLAR_STANDARD; role++)
         assert(enemies.templarAttack[role].id);
+    assert(!enemies.templarAttack[TEMPLAR_STANDARD].id);
+    assert(enemies.templarIdle[TEMPLAR_EXECUTIONER].width == 640 &&
+           enemies.templarWalk[TEMPLAR_EXECUTIONER].width == 640 &&
+           enemies.templarAttack[TEMPLAR_EXECUTIONER].width == 800);
     marshal->state = ENEMY_IDLE;
     Vector2 marshalStart = marshal->position;
     Vector2 eclipseTarget = {marshalStart.x, marshalStart.y + 120};
@@ -1490,7 +1495,7 @@ int main(void) {
     DevTools fieldTools = {.map = TEMPLAR_FIELD_MAP, .wave = 2, .weapon = 2};
     Vector2 fieldPlayer;
     assert(StartDevEncounter(&fieldTools, DEV_STAGE, &templars, &enemies, &field, &fieldPlayer, &fieldHealth));
-    assert(templars.practice && EnemiesRemaining(&enemies) == 6);
+    assert(templars.practice && EnemiesRemaining(&enemies) == 5);
     assert(templars.presentation.areaEntry && templars.presentation.wave == 2);
     assert(templars.presentation.waveTotal == 3);
     for (int phase = 1; phase <= 2; phase++) {
