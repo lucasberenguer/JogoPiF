@@ -4,6 +4,8 @@ Atualizado em 22/11/2026. Leia junto do código e de `git status` antes de retom
 
 ## Retomada rápida
 
+- **22/11 — Disparo do Cérbero:** velocidade do projétil aumentada de 485 para 680 unidades/s. Release compilada em `out/review` e auditoria de inimigos aprovada com asserções ativas.
+
 - **22/11 — Molduras ritualísticas:** proposições e alternativas dos selos V/F, selos de chefe, pilares do porão e questão da bênção usam os dois PNGs com alfa em `assets/ui/ritual_*.png`. O layout preserva a proporção, empilha em janelas estreitas e calcula as áreas de clique com a mesma geometria do desenho. Texto e alternativas continuam dinâmicos; os resultados e a progressão usam as regras existentes. Release em `out/review` e seis testes CTest executados com sucesso (exceto o teste geral de cutscenes, que ficou fora da execução). Testes de lógica e encontro também passaram com asserções ativas. Capturas verificadas em 1280×720, 800×450 e 540×800.
 
 - **Integração com `c1c93a9`:** reaplicadas as nove folhas de maior resolução do Coveiro e as mudanças de animação sobre o pull com a bênção de ressurreição do Anjo e o novo fluxo de reinício. Compilação Release em `out/review`, `enemy_audit` e `clearing_encounter` passaram após a integração.
