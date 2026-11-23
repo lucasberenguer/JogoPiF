@@ -45,7 +45,7 @@ static bool LoadSequence(GuardianCutscene *scene, const char *sequence) {
             shot = &scene->scenes[scene->count++];
             *shot = (GuardianScene){.duration=4, .fadeIn=.55f, .fadeOut=.55f,
                 .narrationAt=.65f, .narrationDuration=3.6f, .narrationFade=.5f,
-                .cueGain=.55f, .scoreGain=1,
+                .cueGain=.55f, .scoreGain=1, .musicLoop=true,
                 .zoomStart=1, .zoomEnd=1.04f, .focusStart={.5f,.5f}, .focusEnd={.5f,.5f},
                 .sealPosition={.65f,.72f}, .transitionIn=CINEMATIC_CROSSFADE,
                 .transitionOut=CINEMATIC_CROSSFADE, .artIndex=-1};
@@ -107,6 +107,10 @@ static bool LoadSequence(GuardianCutscene *scene, const char *sequence) {
         else if (!strcmp(key,"chapter_card")) shot->chapterCard=!strcmp(value,"true");
         else if (!strcmp(key,"score_gain")) shot->scoreGain=strtof(value,NULL);
         else if (!strcmp(key,"music_start")) shot->musicStart=strtof(value,NULL);
+        else if (!strcmp(key,"music_loop")) {
+            if (strcmp(value,"true") && strcmp(value,"false")) valid=false;
+            shot->musicLoop=!strcmp(value,"true");
+        }
         else if (!strcmp(key,"next")) {
             if (strcmp(value,"duration") && strcmp(value,"advance")) valid=false;
             shot->waitsForInput = !strcmp(value,"advance");
@@ -170,7 +174,7 @@ static void EnterScene(GuardianCutscene *scene) {
         if (IsAudioDeviceReady() && shot->music[0] && FileExists(shot->music)) {
             scene->music = LoadMusicStream(shot->music);
             if (scene->music.stream.buffer) {
-                scene->music.looping = true;
+                scene->music.looping = shot->musicLoop;
                 SetMusicVolume(scene->music,0);
                 PlayMusicStream(scene->music);
                 if (shot->musicStart>0 && shot->musicStart<GetMusicTimeLength(scene->music))
@@ -230,6 +234,14 @@ bool InitVillageCutscene(GuardianCutscene *scene, float musicVolume, float effec
 
 bool InitCoveiroCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume) {
     return InitSequence(scene,"assets/cutscenes/coveiro/","sequencia.ini",musicVolume,effectsVolume);
+}
+
+bool InitIgrisCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume) {
+    return InitSequence(scene,"assets/cutscenes/igris/","sequencia.ini",musicVolume,effectsVolume);
+}
+
+bool InitIgrisAftermath(GuardianCutscene *scene, float musicVolume, float effectsVolume) {
+    return InitSequence(scene,"assets/cutscenes/igris_aftermath/","sequencia.ini",musicVolume,effectsVolume);
 }
 
 bool InitBonelandCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume) {

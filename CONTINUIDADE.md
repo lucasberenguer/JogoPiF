@@ -1,8 +1,15 @@
 # Jogo PIF — continuidade entre computadores e chats
 
-Atualizado em 22/11/2026. Leia junto do código e de `git status` antes de retomar.
+Atualizado em 23/11/2026. Leia junto do código e de `git status` antes de retomar.
 
 ## Retomada rápida
+
+- **23/11 — Integração com `764da84`:** o pull trouxe a identificação **Você** nas cutscenes, as cartelas góticas e o rebalanceamento da Clareira e do Cemitério, além da barra de chefes no centro inferior. Reaplicadas as cutscenes pré e pós-luta de Igris e as seis folhas do espadachim e do arqueiro do Portão. Os atalhos de primeira e segunda fase no F1 mantêm as cartelas de área, onda e chefe. A Release compilou em `out/review/release` e os sete testes de Debug passaram em `out/review/boss-hud-check`, incluindo as cartelas no F1, o HUD e o fluxo de Igris.
+
+- **23/11 — Inimigos comuns do Portão da Última Sentença:** as seis folhas em `assets/templarios/` substituem espadachim com escudo e arqueiro nas duas ondas. Cada um tem espera, marcha e ataque nas quatro direções, mantendo as formações, os tempos de dano e disparo, a defesa frontal do escudo e as barras de inimigos comuns. O carrasco e o porta-estandarte continuam usando as folhas existentes. A prévia dos atlas foi conferida e `clearing_encounter` aprovou o carregamento e as formações, com captura em `audit/portao_espadachim_arqueiro.png`.
+
+- **23/11 — Pós-luta de Igris:** zerar a vida na terceira fase interrompe o combate, oculta a barra e salva a vitória como cutscene pendente. Concluir ou pular termina o áudio, salva a chegada e entrega o controle após a transição para o Topo do Palácio, destino existente do portão. A sequência usa as cinco artes enviadas, seis falas manuais com **Você** e **Igris**, pausa entre as duas últimas falas, trilha enviada em loop durante o diálogo e trecho final durante a queda e a subida, com efeitos de espada e passos. A queda usa temporariamente um enquadramento fechado da arte 06. A arte própria da cena 05, com o pedido de Igris para parar, ainda está pendente.
+  - **Validação:** os sete testes passaram com asserções ativas em `out/review/boss-hud-check`. Os testes cobrem o disparo na derrota da terceira fase, retomada da cena pelo checkpoint, conclusão das seis falas, pulo, áudio, chegada e recuperação do movimento. A captura do monólogo em 800×450 foi conferida. A Release foi compilada em `out/review/release`, e o executável e os novos assets foram conferidos por hash após a cópia para `build`.
 
 - **22/11 — Carregamento sob demanda de sprites de inimigos por mapa:** `InitEnemies()` em `src/enemy.c` deixou de carregar todos os spritesheets de todos os mapas e chefes na abertura do jogo, mantendo no startup apenas o marcador compartilhado (`assets/inimigo_selo.png`). Os sprites de cada área (Clareira, Cemitério/Coveiro, Vila, Terra dos Ossos/Cérbero, Templários/Marechal e Necromante) agora são carregados sob demanda em `EnsureEnemyMapAssets()` ao iniciar um encontro (`BeginEncounter`, `StartEnemyWave`, `StartArenaBoss`), descarregando as texturas da área anterior para economizar VRAM e diluindo o tempo de carga nas transições com fade preto, cutscenes e apresentações de área. Build em `out/review` concluído e 6/6 testes CTest aprovados (`logica`, `enemy_audit`, `map_connectivity`, `player_collision`, `clearing_encounter` e `guardian_story_flow`; `guardian_cutscene` ficou fora da execução).
 
@@ -427,8 +434,13 @@ Na entrega do pós-boss de 18/11, build em `out/review` concluído e seis testes
 - Clareira: três ondas de 10, 14 e 18 inimigos. O Guardião ocupa a quarta etapa.
 - Cemitério: três ondas de 12, 18 e 20 inimigos. O Coveiro ocupa a quarta etapa. Checkpoints da antiga quarta onda migram para o chefe.
 - Cada classe do Cemitério usa a base da classe equivalente da Clareira na mesma onda, com +90 PV e multiplicador de dano de 1,3. O Coveiro tem a vida do Guardião +400 e os ataques correspondentes multiplicados por 1,15 (arredondados no acerto): golpe próximo por golpe próximo, raízes por raízes, pá pela onda de raízes e investida pela maldição.
+
 ## Cartelas de mapas, ondas e chefes
 
 - As cartelas usam UnifrakturMaguntia em todos os mapas. O S maiúsculo do atlas usa o desenho da Crimson Text Semibold, alinhado ao tamanho e à base das capitais góticas, para que “Selo” seja legível sem trocar a fonte da cartela.
 - A entrada por F1 em uma onda ou mapa exibe a apresentação da área, inclusive na Vila e nas Capelas. Áreas sem ondas não mostram uma onda fictícia. A Clareira e o Cemitério exibem a contagem completa das etapas, incluindo o chefe. Quando uma cutscene apresenta o chefe na entrada, a cartela do mapa permanece na fila.
 - Build local em `out/review/JogoPiF-Apresentacoes.exe`. O teste de encontro verificou as cartelas das ondas iniciais via F1, a Vila e as Capelas.
+## Pré-luta de Igris
+
+- **Pré-luta de Igris:** após a recompensa da última onda no Portão da Última Sentença, a indicação manda caminhar até a base da escadaria. A cutscene em `assets/cutscenes/igris/` usa as cinco artes finais, a trilha enviada, um piscar de 0,55 s em preto e sem trilha e quatro falas manuais. Espaço ou Enter completam e avançam as falas, P pausa e Esc pula. Concluir ou pular volta à posição anterior, libera o HUD **IGRIS — O COMANDANTE**, inicia a trilha de combate pelo fade existente e dá 1,6 s antes que o chefe possa iniciar um ataque. O trecho toca uma vez por entrada no encontro, inclusive ao retomar um checkpoint do duelo. Os atalhos diretos de fase ou selo do F1 podem ir direto ao chefe.
+  - **Validação:** 7/7 testes com asserções ativas em `out/review/boss-hud-check`. O teste da sequência verificou cinco artes, diálogo, silêncio e encerramento da trilha. O loop real verificou a caminhada até o gatilho, o pulo, a conclusão, a retomada de movimento, a barra, o início da trilha de combate e o estado de Igris. Capturas do diálogo e do desafio em `audit/guardian_cinematic_igris_*_800.png`.

@@ -116,6 +116,10 @@ bool SaveClearingCheckpoint(const RunProgress *p) {
         size_t used=strlen(data);
         snprintf(data+used,sizeof(data)-used,"village_aftermath=%d\n",p->villageAftermath);
     }
+    if (p->igrisAftermathPending) {
+        size_t used=strlen(data);
+        snprintf(data+used,sizeof(data)-used,"igris_aftermath=1\n");
+    }
     if (p->angelSceneCompleted) {
         size_t used=strlen(data);
         snprintf(data+used,sizeof(data)-used,"angel_blessing=%d\n",p->angelBlessingUses);
@@ -192,6 +196,11 @@ bool LoadClearingCheckpoint(RunProgress *p) {
     bool villageValid=!village || (sscanf(village,"\nvillage_aftermath=%d",&aftermathVillage)==1 &&
         aftermathVillage>=VILLAGE_DUEL && aftermathVillage<=VILLAGE_SCENE_SEEN);
     loaded.villageAftermath=(VillageAftermath)aftermathVillage;
+    const char *igris=strstr(data,"\nigris_aftermath=");
+    int igrisPending=0;
+    bool igrisValid=!igris || (sscanf(igris+1,"igris_aftermath=%d",&igrisPending)==1 &&
+        igrisPending==1 && loaded.map==TEMPLAR_FIELD_MAP && loaded.stage==CLEARING_BOSS_STAGE);
+    loaded.igrisAftermathPending=igrisPending==1;
     const char *angel=strstr(data,"\nangel_blessing=");
     bool angelValid=!angel || (sscanf(angel+1,"angel_blessing=%d",&loaded.angelBlessingUses)==1 &&
         loaded.angelBlessingUses>=0 && loaded.angelBlessingUses<=3);
@@ -210,7 +219,8 @@ bool LoadClearingCheckpoint(RunProgress *p) {
     if ((loaded.map==CLEARING_MAP || loaded.map==CEMETERY_MAP) &&
         loaded.stage>CampaignWaveCount(loaded.map) && loaded.stage<CLEARING_BOSS_STAGE)
         loaded.stage=CLEARING_BOSS_STAGE;
-    bool valid=initWeaponValid && finalSealValid && angelValid && villageValid && (!currentFormat || seen==0 || seen==1) && loaded.map>=0 &&
+    bool valid=initWeaponValid && finalSealValid && angelValid && villageValid && igrisValid &&
+        (!currentFormat || seen==0 || seen==1) && loaded.map>=0 &&
         loaded.map<=(aftermathFormat ? NECROMANCER_MAP : BONELAND_MAP - 1) &&
         (loaded.map != BONELAND_MAP || loaded.stage <= BONELAND_WAVES || loaded.stage >= CLEARING_BOSS_STAGE) &&
         (loaded.map != NECROMANCER_MAP || loaded.stage >= CLEARING_BOSS_STAGE) &&

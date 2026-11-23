@@ -223,6 +223,16 @@ bool StartDevEncounter(const DevTools *tools, DevAction action, Encounter *e,
     *health=progress.maxHealth;
     BeginEncounter(e,enemies,map,progress,*player);
     e->practice=true;
+    if (map->templarField && action != DEV_STAGE) {
+        StagePresentation presentation=e->presentation;
+        CompleteIgrisIntro(e,enemies);
+        if (action==DEV_BOSS_ONE || action==DEV_BOSS_TWO) {
+            presentation.bossName=IGRIS_TITLE;
+            ShowWaveBeforeBoss(&presentation);
+            BeginAreaEntry(&presentation);
+            e->presentation=presentation;
+        }
+    }
     if (action==DEV_STAGE && map->cemetery && progress.stage==CLEARING_BOSS_STAGE)
         e->guardianIntroPending=true;
     if (action == DEV_SEAL ||

@@ -375,6 +375,79 @@ int main(void) {
     UpdateGuardianCutscene(&scene,0,(GuardianCutsceneInput){.skip=true});
     assert(scene.finished && scene.skipped);
     UnloadGuardianCutscene(&scene);
+    for (int skip=0; skip<2; skip++) {
+        assert(InitIgrisCutscene(&scene,.12f,0));
+        assert(scene.artCount==5 && scene.count==9);
+        if (IsAudioDeviceReady()) assert(scene.music.stream.buffer);
+        const char *speakers[] = {"Você", "Igris", "Você", "Igris"};
+        const char *dialogue[] = {
+            "Seus cavaleiros caíram defendendo essa escadaria.", "Por minha ordem.",
+            "E foi ele quem mandou você descer?",
+            "Meu senhor só me pediu que guardasse o portão. Descer foi ideia minha."
+        };
+        for (int i=0; i<4; i++) {
+            const GuardianScene *line = &scene.scenes[4+i];
+            assert(line->waitsForInput && line->scoreGain < scene.scenes[3].scoreGain);
+            assert(!strcmp(line->speaker,speakers[i]) && !strcmp(line->dialogue,dialogue[i]));
+        }
+        if (skip) UpdateGuardianCutscene(&scene,0,(GuardianCutsceneInput){.skip=true});
+        else {
+            bool blink=false;
+            int previous=-1;
+            for (int i=0; i<500 && !scene.finished; i++) {
+                if (scene.current==2) {
+                    assert(scene.scenes[2].chapterCard && !scene.music.stream.buffer);
+                    blink=true;
+                }
+                if (scene.current!=previous) {
+                    if (scene.current==4 || scene.current==8) {
+                        GuardianCutscene preview = scene;
+                        preview.elapsed = .8f;
+                        preview.letters = GetCodepointCount(scene.scenes[scene.current].dialogue);
+                        Capture(&preview,800,scene.current==4 ? "igris_dialogue" : "igris_challenge");
+                    }
+                    previous=scene.current;
+                }
+                UpdateGuardianCutscene(&scene,.1f,(GuardianCutsceneInput){
+                    .advance=scene.scenes[scene.current].waitsForInput});
+            }
+            assert(blink);
+        }
+        assert(scene.finished && scene.skipped==(skip!=0));
+        assert(!scene.music.stream.buffer || !IsMusicStreamPlaying(scene.music));
+        UnloadGuardianCutscene(&scene);
+    }
+    assert(InitIgrisAftermath(&scene,.12f,.12f));
+    assert(scene.count==11 && scene.artCount>=5);
+    const char *aftermathSpeakers[]={"Igris","Você","Igris","Você","Igris","Igris"};
+    int aftermathLines=0;
+    for (int i=0; i<scene.count; i++) {
+        assert(scene.scenes[i].artIndex>=0);
+        assert(scene.scenes[i].musicLoop==(i<9));
+        if (scene.scenes[i].waitsForInput) {
+            assert(aftermathLines<6 && !strcmp(scene.scenes[i].speaker,aftermathSpeakers[aftermathLines]));
+            aftermathLines++;
+        }
+    }
+    assert(aftermathLines==6 && !strcmp(scene.scenes[7].id,"pausa"));
+    assert(!strcmp(scene.scenes[9].audioEvent,"espada") && !strcmp(scene.scenes[10].audioEvent,"passos"));
+    bool soundReady=IsAudioDeviceReady(), swordCue=false, footstepsCue=false;
+    if (soundReady) assert(scene.music.stream.buffer && scene.music.looping);
+    for (int i=0; i<300 && !scene.finished; i++) {
+        if (scene.current==1 && scene.letters==0) {
+            GuardianCutscene preview=scene;
+            preview.elapsed=.8f;
+            preview.letters=GetCodepointCount(scene.scenes[1].dialogue);
+            Capture(&preview,800,"igris_aftermath_monologue");
+        }
+        if (soundReady && scene.current>=9) assert(scene.music.stream.buffer && !scene.music.looping);
+        if (scene.current==9 && scene.cueStarted) swordCue=true;
+        if (scene.current==10 && scene.cueStarted) footstepsCue=true;
+        UpdateGuardianCutscene(&scene,.1f,(GuardianCutsceneInput){.advance=scene.scenes[scene.current].waitsForInput});
+    }
+    assert(scene.finished && !scene.skipped);
+    if (soundReady) assert(swordCue && footstepsCue && !IsMusicStreamPlaying(scene.music));
+    UnloadGuardianCutscene(&scene);
     UnloadGameFonts();
     if (IsAudioDeviceReady()) CloseAudioDevice();
     CloseWindow();

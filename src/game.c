@@ -263,7 +263,8 @@ int main(void) {
     int screen = 0; /* 0: menu, 1: escolha da arma, 2: partida, 3: pausa */
     OpeningCutscene opening = {0};
     GuardianCutscene guardianIntro = {0};
-    enum { GUARDIAN_STORY_INTRO, GUARDIAN_STORY_LIBERATION, GUARDIAN_STORY_PASSAGE, VILLAGE_STORY_AFTERMATH, ANGEL_STORY } guardianStory=GUARDIAN_STORY_INTRO;
+    enum { GUARDIAN_STORY_INTRO, GUARDIAN_STORY_LIBERATION, GUARDIAN_STORY_PASSAGE,
+           VILLAGE_STORY_AFTERMATH, ANGEL_STORY, IGRIS_STORY_INTRO, IGRIS_STORY_AFTERMATH } guardianStory=GUARDIAN_STORY_INTRO;
     DevTools devTools={.wave=1,.selected=6};
     bool devOpeningWasPaused=false,devGuardianWasPaused=false;
     bool openingPreview=false;
@@ -314,7 +315,9 @@ int main(void) {
         } else if ((screen == 2 || screen == 3) && playerHealth > 0 &&
                  encounter.progress.stage <= CLEARING_BOSS_STAGE) {
             track = (encounter.guardianIntroPending || encounter.phase==ENCOUNTER_VILLAGE_CINEMATIC ||
-                encounter.phase==ENCOUNTER_LETTER || encounter.phase==ENCOUNTER_VILLAGE_LETTER_READY) ? TRACK_SILENT :
+                encounter.phase==ENCOUNTER_LETTER || encounter.phase==ENCOUNTER_VILLAGE_LETTER_READY ||
+                encounter.phase==ENCOUNTER_IGRIS_APPROACH || encounter.phase==ENCOUNTER_IGRIS_CINEMATIC ||
+                encounter.phase==ENCOUNTER_IGRIS_AFTERMATH) ? TRACK_SILENT :
                 encounter.progress.stage == CLEARING_BOSS_STAGE ? TRACK_MINIBOSS : TRACK_COMBAT;
             if (encounter.progress.map == TEMPLAR_FIELD_MAP &&
                 encounter.progress.stage == CLEARING_BOSS_STAGE &&
@@ -428,9 +431,12 @@ int main(void) {
                     if (skipped) FindFreeMapPosition(&clearing,clearing.pedestal,&player);
                 } else if (guardianStory==VILLAGE_STORY_AFTERMATH) CompleteVillageCinematic(&encounter);
                 else if (guardianStory==ANGEL_STORY) CompleteAngelCinematic(&encounter,playerHealth);
+                else if (guardianStory==IGRIS_STORY_INTRO) CompleteIgrisIntro(&encounter,&enemies);
+                else if (guardianStory==IGRIS_STORY_AFTERMATH)
+                    CompleteIgrisAftermath(&encounter,&enemies,&clearing,&player,playerHealth);
                 else CompleteGuardianPassage(&encounter,&enemies,&clearing,&player,playerHealth);
                 screen=2;
-                entryFadeRemaining=entryFadeDuration;
+                entryFadeRemaining=guardianStory==IGRIS_STORY_INTRO ? 0 : entryFadeDuration;
             }
             BeginGameFrame();
                 ClearBackground(BLACK);
@@ -748,6 +754,32 @@ int main(void) {
             katanaAttackRemaining=0;
             katanaAttackCooldown=0;
             dodgeRemaining=0;
+        }
+        if (encounter.phase==ENCOUNTER_IGRIS_CINEMATIC || encounter.phase==ENCOUNTER_IGRIS_AFTERMATH) {
+            bool aftermath=encounter.phase==ENCOUNTER_IGRIS_AFTERMATH;
+            StopGameMusic(&menu.audio);
+            guardianStory=aftermath ? IGRIS_STORY_AFTERMATH : IGRIS_STORY_INTRO;
+            ResetGun(&gun);
+            ResetBible(&bible);
+            ClearEnemyAttacks(&enemies);
+            katanaAttackRemaining=katanaAttackCooldown=dodgeRemaining=dodgeCooldown=0;
+            katanaShockwaveCooldown=0;
+            memset(katanaShockwaves,0,sizeof(katanaShockwaves));
+            float music=menu.audio.volume[AUDIO_MUSIC]/100.0f;
+            float effects=menu.audio.volume[AUDIO_EFFECTS]/100.0f;
+            bool loaded=aftermath ? InitIgrisAftermath(&guardianIntro,music,effects)
+                                  : InitIgrisCutscene(&guardianIntro,music,effects);
+            if (loaded) screen=GUARDIAN_SCREEN;
+            else if (aftermath) {
+                CompleteIgrisAftermath(&encounter,&enemies,&clearing,&player,playerHealth);
+                entryFadeRemaining=entryFadeDuration;
+            }
+            else CompleteIgrisIntro(&encounter,&enemies);
+            BeginGameFrame();
+            ClearBackground(BLACK);
+            if (screen==GUARDIAN_SCREEN) DrawGuardianCutscene(&guardianIntro);
+            EndGameFrame();
+            continue;
         }
         if (encounter.phase==ENCOUNTER_ANGEL_CINEMATIC) {
             StopGameMusic(&menu.audio);
@@ -1127,6 +1159,7 @@ int main(void) {
                     enemies.villageBossDeathWeapon = currentWeapon;
                 }
             }
+            if (BeginIgrisAftermath(&encounter,&enemies,playerHealth)) continue;
             int remainingVillagers=enemies.villageSpawnRemaining;
             bool villageHorde=clearing.village && encounter.villageHordeStarted;
             bool initialEmergence=villageHorde && enemies.list[0].state==ENEMY_SPAWNING &&

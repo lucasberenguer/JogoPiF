@@ -1321,6 +1321,12 @@ int main(void) {
     assert(templars.progress.map == TEMPLAR_FIELD_MAP);
     assert(templars.presentation.areaEntry && templars.presentation.waveTotal == 3);
     assert(templars.presentation.areaSubtitle);
+    assert(enemies.templarIdle[TEMPLAR_SHIELD].width == 640 &&
+           enemies.templarIdle[TEMPLAR_CROSSBOW].width == 640);
+    assert(enemies.templarWalk[TEMPLAR_SHIELD].width == 960 &&
+           enemies.templarWalk[TEMPLAR_CROSSBOW].width == 960);
+    assert(enemies.templarAttack[TEMPLAR_SHIELD].width == 960 &&
+           enemies.templarAttack[TEMPLAR_CROSSBOW].width == 640);
     Enemy shield = {.templarRole = TEMPLAR_SHIELD, .state = ENEMY_IDLE,
                     .position = {100, 100}, .health = 100, .maxHealth = 100};
     DamageEnemyFrom(&shield, 20, (Vector2){100, 140});
@@ -1333,6 +1339,25 @@ int main(void) {
     for (int wave = 1; wave <= TEMPLAR_FIELD_WAVES; wave++) {
         assert(templars.progress.stage == wave && EnemiesRemaining(&enemies) == wave + 4);
         assert(enemies.list[0].templarRole == (wave == 1 ? TEMPLAR_SHIELD : TEMPLAR_STANDARD));
+        if (wave == 1) {
+            Encounter waveView = templars;
+            waveView.presentation = (StagePresentation){0};
+            enemies.list[0].state = ENEMY_ATTACK;
+            enemies.list[0].stateTime = .49f;
+            enemies.list[0].facing = 3;
+            enemies.list[0].attackDirection = (Vector2){1,0};
+            enemies.list[1].state = ENEMY_IDLE;
+            enemies.list[2].state = ENEMY_WALK;
+            enemies.list[2].walkTime = .23f;
+            enemies.list[3].state = ENEMY_ATTACK;
+            enemies.list[3].stateTime = .45f;
+            enemies.list[3].facing = 3;
+            enemies.list[3].attackDirection = (Vector2){1,0};
+            enemies.list[4].state = ENEMY_WALK;
+            enemies.list[4].facing = 2;
+            enemies.list[4].walkTime = .23f;
+            Capture("audit/portao_espadachim_arqueiro.png",&waveView,&enemies,&field,field.spawn);
+        }
         for (int i = 0; i < wave + 4; i++) {
             Enemy *enemy = &enemies.list[i];
             assert(!IsMapActorBlocked(&field, enemy->position));
@@ -1349,11 +1374,23 @@ int main(void) {
         assert(fieldProgress.map == TEMPLAR_FIELD_MAP && fieldProgress.stage == templars.progress.stage);
         assert(fieldProgress.angelSceneCompleted && fieldProgress.angelBlessingUses == 1);
     }
-    assert(templars.progress.stage == CLEARING_BOSS_STAGE && EnemiesRemaining(&enemies) == 1);
-    assert(enemies.igrisArt[IGRIS_IDLE_ART].id && templars.presentation.separateBossWave);
+    assert(templars.progress.stage == CLEARING_BOSS_STAGE && EnemiesRemaining(&enemies) == 0);
+    assert(enemies.igrisArt[IGRIS_IDLE_ART].id && templars.phase == ENCOUNTER_IGRIS_APPROACH);
     assert(templars.presentation.wave == 3 && !templars.presentation.boss);
     UpdateStagePresentation(&templars.presentation, templars.presentation.remaining);
-    assert(templars.presentation.boss && templars.presentation.remaining > 0);
+    Vector2 stairFoot = {835, 382};
+    assert(!IsMapActorBlocked(&field, stairFoot));
+    assert(!EncounterPaused(&templars) && !EncounterBossVisible(&templars, &enemies));
+    UpdateEncounter(&templars, &enemies, &field, field.spawn, &fieldHealth);
+    assert(templars.phase == ENCOUNTER_IGRIS_APPROACH);
+    UpdateEncounter(&templars, &enemies, &field, stairFoot, &fieldHealth);
+    assert(templars.phase == ENCOUNTER_IGRIS_CINEMATIC && EncounterPaused(&templars));
+    assert(!EncounterBossVisible(&templars, &enemies) && !EnemyCanBeHit(&enemies.list[0]));
+    CompleteIgrisIntro(&templars, &enemies);
+    assert(!EncounterPaused(&templars) && EncounterBossVisible(&templars, &enemies));
+    assert(EnemiesRemaining(&enemies) == 1 && enemies.list[0].attackCooldown >= 1.5f);
+    UpdateEncounter(&templars, &enemies, &field, stairFoot, &fieldHealth);
+    assert(templars.phase == ENCOUNTER_FIGHT);
     Enemy *marshal = &enemies.list[0];
     assert(marshal->templarRole == TEMPLAR_MARSHAL && !IsMapActorBlocked(&field, marshal->position));
     for (int i = 0; i < IGRIS_ART_COUNT; i++) assert(enemies.igrisArt[i].id);
@@ -1362,6 +1399,7 @@ int main(void) {
     marshal->state = ENEMY_IDLE;
     Vector2 marshalStart = marshal->position;
     Vector2 eclipseTarget = {marshalStart.x, marshalStart.y + 120};
+    marshal->attackCooldown = 0;
     UpdateEnemies(&enemies, &field, eclipseTarget, .3f, false, &fieldHealth, 100);
     assert(marshal->state == ENEMY_ATTACK && marshal->bossAttack == IGRIS_ECLIPSE);
     marshal->state = ENEMY_IDLE;
@@ -1435,6 +1473,19 @@ int main(void) {
     assert(templars.practice && EnemiesRemaining(&enemies) == 6);
     assert(templars.presentation.areaEntry && templars.presentation.wave == 2);
     assert(templars.presentation.waveTotal == 3);
+    for (int phase = 1; phase <= 2; phase++) {
+        assert(StartDevEncounter(&fieldTools, phase == 1 ? DEV_BOSS_ONE : DEV_BOSS_TWO,
+                                 &templars, &enemies, &field, &fieldPlayer, &fieldHealth));
+        assert(templars.phase == ENCOUNTER_FIGHT && templars.presentation.areaEntry);
+        assert(templars.presentation.wave == 3 && templars.presentation.waveTotal == 3);
+        UpdateStagePresentation(&templars.presentation, templars.presentation.remaining);
+        assert(!templars.presentation.areaEntry && !templars.presentation.boss);
+        UpdateStagePresentation(&templars.presentation, templars.presentation.remaining);
+        assert(templars.presentation.boss && !strcmp(templars.presentation.bossName, IGRIS_TITLE));
+        UpdateStagePresentation(&templars.presentation, templars.presentation.remaining);
+        assert(EncounterBossVisible(&templars, &enemies));
+        assert(enemies.list[0].guardianPhase == (phase == 1 ? GUARDIAN_PHASE_ONE : GUARDIAN_PHASE_TWO));
+    }
     assert(StartDevEncounter(&fieldTools, DEV_SEAL, &templars, &enemies, &field, &fieldPlayer, &fieldHealth));
     assert(templars.practice && templars.phase == ENCOUNTER_SEAL && enemies.list[0].state == ENEMY_FALLEN);
     assert(LoadClearingCheckpoint(&fieldProgress) && fieldProgress.stage == CLEARING_COMPLETE_STAGE);

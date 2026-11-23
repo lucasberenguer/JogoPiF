@@ -29,6 +29,7 @@ typedef struct GuardianScene {
     int artIndex;
     bool waitsForInput;
     bool chapterCard;
+    bool musicLoop;
     Sound cue;
 } GuardianScene;
 
@@ -55,6 +56,8 @@ float GuardianNarrationOpacity(const GuardianScene *shot, float elapsed);
 bool InitAngelCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume);
 bool InitVillageCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume);
 bool InitCoveiroCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume);
+bool InitIgrisCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume);
+bool InitIgrisAftermath(GuardianCutscene *scene, float musicVolume, float effectsVolume);
 bool InitBonelandCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume);
 bool InitGuardianCutscene(GuardianCutscene *scene, float musicVolume, float effectsVolume);
 bool InitGuardianAftermath(GuardianCutscene *scene, bool passage, float musicVolume, float effectsVolume);

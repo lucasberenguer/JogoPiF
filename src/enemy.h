@@ -22,7 +22,7 @@ enum { IGRIS_IDLE_ART, IGRIS_WALK_ART, IGRIS_MELEE_ART, IGRIS_ECLIPSE_ART, IGRIS
        IGRIS_VORTEX_ART, IGRIS_VORTEX_FX, IGRIS_FINAL_IDLE, IGRIS_FINAL_WALK,
        IGRIS_FINAL_MELEE, IGRIS_Z_DOWN, IGRIS_Z_UP, IGRIS_Z_LEFT, IGRIS_Z_RIGHT,
        IGRIS_GRAB_ART, IGRIS_GRAB_FX, IGRIS_ECHO_ART, IGRIS_ECHO_FX, IGRIS_ART_COUNT };
-#define IGRIS_TITLE "Igris - O Comandante"
+#define IGRIS_TITLE "IGRIS — O COMANDANTE"
 #define IGRIS_FINAL_HEALTH_PERCENT 25
 enum { BONE_CLAW, BONE_RANGED, BONE_RAIN, BONE_DASH, BONE_BLAST, BONE_ATTACK_COUNT };
 enum { BONE_IDLE_SHEET, BONE_WALK_SHEET, BONE_CLAW_SHEET, BONE_RANGED_SHEET,
@@ -115,7 +115,7 @@ typedef struct EnemyGroup {
     Texture2D necromancerBlade, necromancerEffects, necromancerThrone, necromancerPortrait;
     NecromancerFight necromancer;
     Texture2D igrisArt[IGRIS_ART_COUNT], templarEffects, templarDust;
-    Texture2D templarWalk[TEMPLAR_MARSHAL + 1], templarAttack[TEMPLAR_MARSHAL + 1];
+    Texture2D templarIdle[TEMPLAR_MARSHAL], templarWalk[TEMPLAR_MARSHAL], templarAttack[TEMPLAR_MARSHAL];
     Texture2D bonelandGhoul, bonelandCultist;
     Texture2D boneLordSheets[BONE_SHEET_COUNT];
     Texture2D sealMarker;

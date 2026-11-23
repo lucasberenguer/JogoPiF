@@ -188,8 +188,7 @@ static void StartStage(Encounter *e, EnemyGroup *enemies, const Clearing *cleari
             : (clearing->village ? "Chã da Tristeza"
             : (clearing->cemetery ? "Cemitério das Raízes" : "Clareira do Selo"))));
         const char *bossTitle = clearing->necromancerArena ? "Necromante" :
-            clearing->templarField ? IGRIS_TITLE
-            : clearing->boneland ? boneLordName : (clearing->village || clearing->chapel || clearing->basement || clearing->invertedChapel) ? NULL
+            clearing->boneland ? boneLordName : (clearing->templarField || clearing->village || clearing->chapel || clearing->basement || clearing->invertedChapel) ? NULL
             : (clearing->cemetery ? "Coveiro das Raízes" : "Guardião da Clareira");
         int wave = e->progress.stage;
         if (clearing->necromancerArena || clearing->village || clearing->chapel || clearing->basement || clearing->invertedChapel)
@@ -210,15 +209,18 @@ static void StartStage(Encounter *e, EnemyGroup *enemies, const Clearing *cleari
             e->presentation.areaSubtitle = "A última defesa do palácio";
             if (wave <= TEMPLAR_FIELD_WAVES)
                 e->presentation.announcement = wave == 1 ? "A Linha de Frente" : "O Último Estandarte";
-            else
-                ShowWaveBeforeBoss(&e->presentation);
         }
         if (clearing->cemetery || clearing->village) e->presentation.portraitCenterX=.73f;
         e->guardianIntroPending=(e->progress.map == 0 || clearing->boneland) &&
                                 e->progress.stage==CLEARING_BOSS_STAGE &&
                                 !e->progress.guardianIntroSeen;
-        if (e->progress.stage == CLEARING_BOSS_STAGE) StartArenaBoss(enemies, clearing, player, e->progress.bossPower);
-        else StartEnemyWave(enemies, clearing, e->progress.stage, player, e->progress.damage);
+        if (e->progress.stage == CLEARING_BOSS_STAGE) {
+            StartArenaBoss(enemies, clearing, player, e->progress.bossPower);
+            if (clearing->templarField) {
+                e->phase = ENCOUNTER_IGRIS_APPROACH;
+                enemies->list[0].state = ENEMY_GONE;
+            }
+        } else StartEnemyWave(enemies, clearing, e->progress.stage, player, e->progress.damage);
     }
 }
 
@@ -232,7 +234,11 @@ void BeginEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing,
     *e = (Encounter){.progress=progress, .sealEnemy=-1};
     e->chapelAltarDone=progress.angelSceneCompleted;
     StartStage(e, enemies, clearing, player);
-    if (clearing->village && progress.stage==CLEARING_BOSS_STAGE && progress.villageAftermath!=VILLAGE_DUEL) {
+    if (clearing->templarField && progress.stage==CLEARING_BOSS_STAGE && progress.igrisAftermathPending) {
+        enemies->list[0].health=0;
+        e->phase=ENCOUNTER_IGRIS_AFTERMATH;
+        e->presentation=(StagePresentation){0};
+    } else if (clearing->village && progress.stage==CLEARING_BOSS_STAGE && progress.villageAftermath!=VILLAGE_DUEL) {
         enemies->list[0].health=0;
         enemies->list[0].state=ENEMY_FALLEN;
         e->phase=progress.villageAftermath==VILLAGE_SCENE_PENDING ? ENCOUNTER_VILLAGE_LETTER_READY : ENCOUNTER_LETTER;
@@ -245,7 +251,8 @@ bool EncounterPaused(const Encounter *e) {
            e->presentation.remaining>0 || e->phase == ENCOUNTER_REWARD ||
            e->phase == ENCOUNTER_SEAL || e->phase == ENCOUNTER_VILLAGE_CINEMATIC || e->phase == ENCOUNTER_LETTER ||
            e->phase == ENCOUNTER_ANGEL_CINEMATIC || e->phase == ENCOUNTER_CHAPEL_TEXT || e->phase == ENCOUNTER_BASEMENT_PILLAR ||
-           e->phase == ENCOUNTER_DEFEAT;
+           e->phase == ENCOUNTER_DEFEAT || e->phase == ENCOUNTER_IGRIS_CINEMATIC ||
+           e->phase == ENCOUNTER_IGRIS_AFTERMATH;
 }
 
 static bool CanUseAngelRevival(const Encounter *e) {
@@ -328,6 +335,61 @@ void CompleteGuardianIntro(Encounter *e, bool cinematicPlayed) {
     e->progress.guardianIntroSeen=true;
     if (!e->practice && !SaveClearingCheckpoint(&e->progress))
         TraceLog(LOG_WARNING,"Nao foi possivel salvar a conclusao da cutscene do Guardiao.");
+}
+
+void CompleteIgrisIntro(Encounter *e, EnemyGroup *enemies) {
+    if (e->phase != ENCOUNTER_IGRIS_CINEMATIC && e->phase != ENCOUNTER_IGRIS_APPROACH) return;
+    Enemy *boss = &enemies->list[0];
+    boss->state = ENEMY_IDLE;
+    boss->stateTime = 0;
+    boss->attackCooldown = 1.6f;
+    ClearEnemyAttacks(enemies);
+    e->phase = ENCOUNTER_FIGHT;
+    e->presentation = (StagePresentation){0};
+}
+
+bool BeginIgrisAftermath(Encounter *e, EnemyGroup *enemies, int health) {
+    const Enemy *boss = &enemies->list[0];
+    if (e->phase != ENCOUNTER_FIGHT || e->progress.map != TEMPLAR_FIELD_MAP ||
+        e->progress.stage != CLEARING_BOSS_STAGE || boss->templarRole != TEMPLAR_MARSHAL ||
+        !boss->igrisFinalForm || boss->state != ENEMY_DIE || boss->health > 0 || health <= 0)
+        return false;
+    ClearEnemyAttacks(enemies);
+    enemies->list[0].state = ENEMY_GONE;
+    enemies->list[0].pickupAvailable = false;
+    e->phase = ENCOUNTER_IGRIS_AFTERMATH;
+    e->progress.igrisAftermathPending = true;
+    e->progress.health = health;
+    if (!e->practice && !SaveClearingCheckpoint(&e->progress))
+        TraceLog(LOG_WARNING, "Nao foi possivel salvar a derrota de Igris.");
+    return true;
+}
+
+bool CompleteIgrisAftermath(Encounter *e, EnemyGroup *enemies, Clearing *map,
+                            Vector2 *player, int health) {
+    if (e->phase != ENCOUNTER_IGRIS_AFTERMATH) return false;
+    bool practice = e->practice;
+    e->progress.igrisAftermathPending = false;
+    e->progress.health = health;
+    e->progress.stage = CLEARING_COMPLETE_STAGE;
+    e->phase = ENCOUNTER_CLEAR;
+    map->exitLocked = false;
+    Clearing castle = {0};
+    bool entered = InitCampaignMap(&castle, NECROMANCER_MAP);
+    if (entered) {
+        RunProgress progress = e->progress;
+        progress.map = NECROMANCER_MAP;
+        progress.stage = CLEARING_BOSS_STAGE;
+        progress.bossPower = 1;
+        UnloadClearing(map);
+        *map = castle;
+        *player = castle.spawn;
+        BeginEncounter(e, enemies, map, progress, *player);
+        e->practice = practice;
+    }
+    if (!practice && !SaveClearingCheckpoint(&e->progress))
+        TraceLog(LOG_WARNING, "Nao foi possivel salvar a passagem de Igris ao castelo.");
+    return entered;
 }
 
 bool ClearingAltarOpen(const Encounter *e, const Clearing *clearing) {
@@ -448,6 +510,7 @@ float EncounterDamage(const Encounter *e) {
 
 bool EncounterBossVisible(const Encounter *e, const EnemyGroup *enemies) {
     return !e->guardianIntroPending && e->presentation.remaining <= 0 && e->progress.stage == CLEARING_BOSS_STAGE &&
+           e->phase != ENCOUNTER_IGRIS_APPROACH && e->phase != ENCOUNTER_IGRIS_CINEMATIC &&
            enemies->list[0].type == ENEMY_BOSS && enemies->list[0].health > 0;
 }
 
@@ -843,6 +906,14 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
     if (*health<=0) { e->phase=ENCOUNTER_DEFEAT; return false; }
     if (e->guardianIntroPending || GuardianLiberationPending(e) || GuardianPassagePending(e) ||
         e->presentation.remaining>0) return false;
+    if (e->phase == ENCOUNTER_IGRIS_APPROACH) {
+        Rectangle stairFoot = {clearing->exit.x, clearing->exit.y + clearing->exit.height,
+                               clearing->exit.width, 120};
+        if (CheckCollisionPointRec(player, stairFoot)) e->phase = ENCOUNTER_IGRIS_CINEMATIC;
+        return false;
+    }
+    if (e->phase == ENCOUNTER_IGRIS_CINEMATIC || e->phase == ENCOUNTER_IGRIS_AFTERMATH ||
+        BeginIgrisAftermath(e,enemies,*health)) return false;
     if (e->progress.map == 3) {
         if (e->phase == ENCOUNTER_CHAPEL_TEXT) {
             if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_E) ||
@@ -1237,6 +1308,7 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         DrawGameText(status,24,statusY,20,GOLD);
     } else if (e->progress.map == TEMPLAR_FIELD_MAP) {
         const char *status = e->phase == ENCOUNTER_CLEAR ? "Igris derrotado"
+            : e->phase == ENCOUNTER_IGRIS_APPROACH ? "Aproxime-se da escadaria"
             : e->progress.stage == CLEARING_BOSS_STAGE ? "Encontro 3/3 - " IGRIS_TITLE
             : TextFormat("Encontro %d/3 | Restantes: %d", e->progress.stage, EnemiesRemaining(enemies));
         DrawGameText(status, 24, statusY, 20, GOLD);
@@ -1287,6 +1359,7 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         DrawBossHealthHud(bossLabel, phase, boss->health, boss->maxHealth, healthColor, markers, markerCount,
                           e->practice ? PRACTICE_FOOTER_HEIGHT : 0);
     }
+    if (e->phase == ENCOUNTER_IGRIS_CINEMATIC || e->phase == ENCOUNTER_IGRIS_AFTERMATH) return;
     if (!EncounterPaused(e)) return;
     DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,.86f));
     if (e->phase == ENCOUNTER_CHAPEL_TEXT) {

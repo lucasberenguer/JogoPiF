@@ -346,6 +346,7 @@ static void UnloadEnemyMapAssets(EnemyGroup *group) {
     UnloadTexIfLoaded(&group->backSprites);
     UnloadTexIfLoaded(&group->frontSprites);
     for (int role = TEMPLAR_SHIELD; role < TEMPLAR_MARSHAL; role++) {
+        UnloadTexIfLoaded(&group->templarIdle[role]);
         UnloadTexIfLoaded(&group->templarWalk[role]);
         UnloadTexIfLoaded(&group->templarAttack[role]);
     }
@@ -546,19 +547,28 @@ static bool LoadBonelandEnemyAssets(EnemyGroup *group) {
 }
 
 static bool LoadTemplarEnemyAssets(EnemyGroup *group) {
+    static const char *const idleFiles[TEMPLAR_MARSHAL] = {
+        [TEMPLAR_SHIELD] = "assets/templarios/espadachim_idle.png",
+        [TEMPLAR_CROSSBOW] = "assets/templarios/arqueiro_idle.png",
+    };
     static const char *const templarFiles[] = {
-        [TEMPLAR_SHIELD] = "assets/templario_escudo.png",
+        [TEMPLAR_SHIELD] = "assets/templarios/espadachim_andar.png",
         [TEMPLAR_EXECUTIONER] = "assets/templario_carrasco.png",
-        [TEMPLAR_CROSSBOW] = "assets/templario_besteiro.png",
+        [TEMPLAR_CROSSBOW] = "assets/templarios/arqueiro_andar.png",
         [TEMPLAR_STANDARD] = "assets/templario_estandarte.png",
     };
     static const char *const attackFiles[] = {
-        [TEMPLAR_SHIELD] = "assets/templario_escudo_ataque_v2.png",
+        [TEMPLAR_SHIELD] = "assets/templarios/espadachim_ataque.png",
         [TEMPLAR_EXECUTIONER] = "assets/templario_carrasco_ataque_v2.png",
-        [TEMPLAR_CROSSBOW] = "assets/templario_besteiro_ataque_v2.png",
+        [TEMPLAR_CROSSBOW] = "assets/templarios/arqueiro_ataque.png",
         [TEMPLAR_STANDARD] = "assets/templario_estandarte_ataque_v2.png",
     };
     for (int role = TEMPLAR_SHIELD; role < TEMPLAR_MARSHAL; role++) {
+        if (idleFiles[role]) {
+            group->templarIdle[role] = LoadTexture(idleFiles[role]);
+            if (!group->templarIdle[role].id) return false;
+            SetTextureFilter(group->templarIdle[role], TEXTURE_FILTER_POINT);
+        }
         group->templarWalk[role] = LoadTexture(templarFiles[role]);
         group->templarAttack[role] = LoadTexture(attackFiles[role]);
         if (!group->templarWalk[role].id || !group->templarAttack[role].id) return false;
@@ -2175,7 +2185,7 @@ static void DrawIgris(const EnemyGroup *group, const Enemy *enemy) {
         Vector2 origin = {landing.x,70};
         feet = arrival < .76f ? Vector2Lerp(origin,landing,arrival/.76f) :
             Vector2Lerp(landing,feet,(arrival-.76f)/.24f);
-        Enemy escort = {.templarRole = TEMPLAR_SHIELD};
+        Enemy escort = {.templarRole = TEMPLAR_SHIELD, .state = ENEMY_WALK};
         float exit = Clamp((arrival-.53f)/.47f,0,1);
         for (int side = -1; side <= 1; side += 2) {
             Vector2 escortFeet = {feet.x+side*(57+130*exit),feet.y+22+42*exit};
@@ -2242,9 +2252,22 @@ static void DrawIgris(const EnemyGroup *group, const Enemy *enemy) {
     if (fallen) DrawGameText("E: selar",(int)feet.x-30,(int)feet.y+12,18,GOLD);
 }
 
+static void DrawTemplarKnightPose(Texture2D texture, const Enemy *enemy, Vector2 feet,
+                                  int facing, int frame, float tilt, Color tint) {
+    const int rows[] = {0, 2, 3, 1};
+    float size = enemy->templarRole == TEMPLAR_SHIELD ? 145 : 138;
+    DrawTexturePro(texture, (Rectangle){frame * 160, rows[facing] * 160, 160, 160},
+                   (Rectangle){feet.x, feet.y, size, size},
+                   (Vector2){size * .5f, size * (150.0f / 160)}, tilt, tint);
+}
+
 static void DrawTemplarAttackPose(const EnemyGroup *group, const Enemy *enemy, Vector2 feet,
                                  int facing, int frame, float tilt, Color tint) {
     Texture2D texture = group->templarAttack[enemy->templarRole];
+    if (group->templarIdle[enemy->templarRole].id) {
+        DrawTemplarKnightPose(texture, enemy, feet, facing, frame, tilt, tint);
+        return;
+    }
     float tileW = texture.width / 6.0f, tileH = texture.height / 4.0f;
     float size = templarSizes[enemy->templarRole] * (enemy->templarRole == TEMPLAR_EXECUTIONER ? 1.08f : 1);
     Rectangle source = {frame * tileW, templarRows[facing] * tileH, tileW, tileH};
@@ -2254,6 +2277,14 @@ static void DrawTemplarAttackPose(const EnemyGroup *group, const Enemy *enemy, V
 
 static void DrawTemplarSprite(const EnemyGroup *group, const Enemy *enemy,
                               Vector2 position, int facing, int frame, float tilt, Color tint) {
+    if (group->templarIdle[enemy->templarRole].id) {
+        bool walking = enemy->state == ENEMY_WALK || enemy->state == ENEMY_SPAWNING;
+        Texture2D texture = walking ? group->templarWalk[enemy->templarRole] :
+                                     group->templarIdle[enemy->templarRole];
+        if (!walking) frame = (int)(enemy->stateTime * 4) % 4;
+        DrawTemplarKnightPose(texture, enemy, position, facing, frame, tilt, tint);
+        return;
+    }
     // A parte mais larga da arma ou bandeira não coincide com a posição dos pés.
     static const float anchors[][4] = {
         [TEMPLAR_SHIELD] = {64, 64, 57, 65},
@@ -2325,6 +2356,8 @@ static void DrawTemplar(const EnemyGroup *group, const Enemy *enemy) {
         float followThrough = Clamp((t - impact) / (duration - impact), 0, 1);
         int pose = t < impact ? (preparation < .24f ? 0 : preparation < .64f ? 1 : 2) :
             followThrough < .26f ? 3 : followThrough < .70f ? 4 : 5;
+        if (role == TEMPLAR_CROSSBOW)
+            pose = t < impact ? (preparation < .35f ? 0 : preparation < .72f ? 1 : 2) : 3;
         Vector2 feet = enemy->position;
         float recoilEnd = role == TEMPLAR_CROSSBOW ? impact + .12f : activeEnd;
         float recoilAge = Clamp((t - impact) / (recoilEnd - impact), 0, 1);
@@ -2341,10 +2374,12 @@ static void DrawTemplar(const EnemyGroup *group, const Enemy *enemy) {
         } else DrawTemplarEffect(group->templarDust,2,feet,(Vector2){1,0},(t-impact)/.43f,98);
         float lean = enemy->facing == 2 ? -recoil : recoil;
         DrawTemplarAttackPose(group,enemy,feet,enemy->facing,pose,4*lean,tint);
-        int effect = role == TEMPLAR_SHIELD ? 0 : role == TEMPLAR_CROSSBOW ? 2 : 1;
-        Vector2 origin = Vector2Add((Vector2){feet.x,feet.y-24},Vector2Scale(enemy->attackDirection,35));
-        DrawTemplarEffect(group->templarEffects,effect,origin,enemy->attackDirection,(t-impact)/.32f,
-                          role == TEMPLAR_EXECUTIONER ? 142 : 91);
+        if (role != TEMPLAR_SHIELD) {
+            int effect = role == TEMPLAR_CROSSBOW ? 2 : 1;
+            Vector2 origin = Vector2Add((Vector2){feet.x,feet.y-24},Vector2Scale(enemy->attackDirection,35));
+            DrawTemplarEffect(group->templarEffects,effect,origin,enemy->attackDirection,(t-impact)/.32f,
+                              role == TEMPLAR_EXECUTIONER ? 142 : 91);
+        }
         return;
     }
     if (enemy->state == ENEMY_WALK) {
