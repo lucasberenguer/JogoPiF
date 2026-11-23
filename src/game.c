@@ -37,11 +37,6 @@ static Camera2D FitClearing(const Clearing *clearing) {
     return camera;
 }
 
-static void MoveWithCollision(const Clearing *clearing, Vector2 *position,
-                              Vector2 movement) {
-    MoveMapPlayer(clearing,position,movement);
-}
-
 static Vector2 FacingVector(int facing) {
     switch (facing) {
         case 1: return (Vector2) { 0.0f, -1.0f };
@@ -325,6 +320,14 @@ int main(void) {
                  (clearing.chapel || clearing.basement || clearing.invertedChapel)) {
             track = TRACK_CHAPEL;
             if (screen == 3 || EncounterPaused(&encounter)) musicStrength = 0.42f;
+        } else if ((screen == 2 || screen == 3) && clearing.necromancerArena) {
+            const Enemy *boss = &enemies.list[0];
+            if (playerHealth > 0 && boss->type == ENEMY_BOSS && boss->health > 0 &&
+                encounter.phase == ENCOUNTER_FIGHT &&
+                !(boss->state == ENEMY_SPAWNING && encounter.presentation.remaining > 0)) {
+                track = TRACK_NECROMANCER;
+                if (screen == 3 || EncounterPaused(&encounter)) musicStrength = 0.42f;
+            }
         } else if ((screen == 2 || screen == 3) && playerHealth > 0 &&
                  encounter.progress.stage <= CLEARING_BOSS_STAGE) {
             track = (encounter.guardianIntroPending || encounter.phase==ENCOUNTER_VILLAGE_CINEMATIC ||
@@ -1133,8 +1136,8 @@ int main(void) {
         int dodgeFrame = 0;
         if (dodging) {
             float activeTime = fminf(deltaTime, dodgeRemaining);
-            MoveWithCollision(&clearing, &player,
-                              Vector2Scale(dodgeDirection, dodgeSpeed * activeTime));
+            MoveNecromancerPlayer(&enemies, &clearing, &player,
+                                  Vector2Scale(dodgeDirection, dodgeSpeed * activeTime));
             dodgeRemaining -= activeTime;
             float progress = 1.0f - dodgeRemaining / dodgeDuration;
             int dodgeFrameCount = dodgeFacing < 2 ? 5 : 6;
@@ -1143,8 +1146,8 @@ int main(void) {
             if (Vector2DistanceSqr(previous, player) < 0.01f) dodgeRemaining = 0.0f;
         } else if (Vector2LengthSqr(direction) > 0.0f) {
             direction = Vector2Normalize(direction);
-            MoveWithCollision(&clearing, &player,
-                              Vector2Scale(direction, playerSpeed * deltaTime));
+            MoveNecromancerPlayer(&enemies, &clearing, &player,
+                                  Vector2Scale(direction, playerSpeed * deltaTime));
         }
         Vector2 traveled = Vector2Subtract(player, previous);
         walking = !dodging && Vector2LengthSqr(traveled) > 0.01f;
@@ -1256,7 +1259,10 @@ int main(void) {
             UpdateEnemies(&enemies, &clearing, player, deltaTime,
                           dodging || enemies.practiceInvincible,
                           &playerHealth, playerMaxHealth);
-            if (playerHealth > 0) ApplyIgrisGrab(&enemies,&clearing,&player,deltaTime);
+            if (playerHealth > 0) {
+                ApplyIgrisGrab(&enemies,&clearing,&player,deltaTime);
+                ApplyNecromancerPull(&enemies,&clearing,&player);
+            }
             if (villageHorde && (initialEmergence || enemies.villageSpawnRemaining<remainingVillagers))
                 PlayVillageEmergence(&menu.audio,initialEmergence);
         }

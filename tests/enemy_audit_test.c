@@ -455,7 +455,7 @@ static void CheckNecromancerPressure(void) {
     boss->state=ENEMY_IDLE;
     boss->attackCooldown=0;
     UpdateNecromancer(&group,&map,player,.01f,false,&health);
-    UpdateNecromancer(&group,&map,player,.61f,false,&health);
+    UpdateNecromancer(&group,&map,player,.48f,false,&health);
     assert(CountNecromancerShots(&group)==5);
 
     StartNecromancer(&group,1);
@@ -489,13 +489,115 @@ static void CheckNecromancerPressure(void) {
     for(int i=0;i<5;i++) UpdateNecromancer(&group,&map,player,.08f,true,&health);
     assert(boss->state==ENEMY_ATTACK);
     assert(group.necromancer.automaticVolley==1);
-    assert(CountNecromancerShots(&group)==5);
+    assert(CountNecromancerShots(&group)==7);
+}
+
+static void StartNecromancerAuditSkill(EnemyGroup *group,int form,int rotation) {
+    StartNecromancer(group,1);
+    Enemy *boss=&group->list[0];
+    boss->state=ENEMY_IDLE;
+    boss->attackCooldown=0;
+    boss->necromancerForm=form;
+    boss->position=(Vector2){836,420};
+    group->necromancer.rotation=rotation;
+}
+
+static void CheckNecromancerCombos(void) {
+    Clearing map={.necromancerArena=true,.background={.width=1672,.height=941},
+                  .playableBounds={0,0,1672,941}};
+    EnemyGroup group={0};
+    Vector2 target={836,670};
+    int health=100;
+    StartNecromancerAuditSkill(&group,1,1);
+    UpdateNecromancer(&group,&map,target,.01f,false,&health);
+    UpdateNecromancer(&group,&map,target,.45f,false,&health);
+    assert(health==100);
+    UpdateNecromancer(&group,&map,target,.02f,false,&health);
+    assert(health==66);
+
+    health=100;
+    StartNecromancerAuditSkill(&group,1,3);
+    UpdateNecromancer(&group,&map,target,.01f,false,&health);
+    UpdateNecromancer(&group,&map,target,.65f,false,&health);
+    assert(CountNecromancerShots(&group)==0);
+    UpdateNecromancer(&group,&map,target,.04f,false,&health);
+    assert(group.necromancer.shots[0].life>0 && group.necromancer.shots[0].sword);
+
+    StartNecromancerAuditSkill(&group,2,4);
+    UpdateNecromancer(&group,&map,target,.01f,false,&health);
+    UpdateNecromancer(&group,&map,target,1.03f,false,&health);
+    Vector2 player;
+    const Vector2 escapeSteps[]={{155,0},{-155,0},{0,155},{0,-155},
+        {120,120},{120,-120},{-120,120},{-120,-120}};
+    for(int i=0;i<8;i++) {
+        player=target;
+        MoveNecromancerPlayer(&group,&map,&player,escapeSteps[i]);
+        assert(hypotf(player.x-target.x,player.y-target.y)<116);
+    }
+    player=(Vector2){target.x,target.y+109};
+    MoveNecromancerPlayer(&group,&map,&player,(Vector2){0,100});
+    assert(player.y<target.y+116);
+    UpdateNecromancer(&group,&map,target,.53f,false,&health);
+    assert(health==18);
+    UpdateNecromancer(&group,&map,target,.70f,true,&health);
+    player=target;
+    MoveNecromancerPlayer(&group,&map,&player,(Vector2){155,0});
+    assert(player.x>target.x+145);
+
+    health=100;
+    StartNecromancerAuditSkill(&group,2,3);
+    group.list[1]=(Enemy){.necromancerWraith=true,.health=230,.maxHealth=230,
+                         .state=ENEMY_IDLE,.position=target,.attackCooldown=.1f};
+    UpdateNecromancer(&group,&map,target,.01f,false,&health);
+    UpdateNecromancer(&group,&map,target,.85f,false,&health);
+    assert(CountNecromancerShots(&group)==0);
+    DamageEnemy(&group.list[1],230);
+    UpdateNecromancer(&group,&map,target,.34f,false,&health);
+    assert(health==100);
+
+    StartNecromancerAuditSkill(&group,3,2);
+    player=target;
+    UpdateNecromancer(&group,&map,player,.01f,false,&health);
+    for(int i=0;i<65;i++) {
+        UpdateNecromancer(&group,&map,player,.016f,false,&health);
+        ApplyNecromancerPull(&group,&map,&player);
+    }
+    assert(player.y<target.y-120 && health==100 && group.necromancer.automaticVolley==0);
+    player.x+=250;
+    UpdateNecromancer(&group,&map,player,.8f,false,&health);
+    assert(health==100);
+
+    StartNecromancerAuditSkill(&group,3,2);
+    UpdateNecromancer(&group,&map,target,.01f,false,&health);
+    UpdateNecromancer(&group,&map,target,.83f,true,&health);
+    player=target;
+    ApplyNecromancerPull(&group,&map,&player);
+    assert(player.y==target.y && health==100);
+
+    StartNecromancerAuditSkill(&group,3,1);
+    UpdateNecromancer(&group,&map,target,.01f,false,&health);
+    Vector2 flanking={986,670};
+    UpdateNecromancer(&group,&map,flanking,1.07f,true,&health);
+    Vector2 landing=group.list[0].position;
+    assert(landing.y>900 && health==100);
+    Vector2 nearLanding={landing.x+120,landing.y};
+    UpdateNecromancer(&group,&map,nearLanding,.31f,false,&health);
+    assert(health==22);
+
+    DamageNecromancer(&group.list[0],group.list[0].maxHealth);
+    UpdateNecromancer(&group,&map,target,.85f,false,&health);
+    assert(group.list[0].state==ENEMY_DIE && !EnemyCanBeHit(&group.list[0]));
+    UpdateNecromancer(&group,&map,target,.32f,false,&health);
+    assert(group.list[0].state==ENEMY_FALLEN);
+    assert(group.list[0].position.x==landing.x && group.list[0].position.y==landing.y);
+
 }
 
 int main(void) {
     CheckCoveiroWalk();
     CheckCoveiroChoices();
     CheckNecromancerPressure();
+    CheckNecromancerCombos();
     CheckTemplarBalance();
     const int expected[] = {20, 25, 45, 65, 100};
     for (int type=0; type<5; type++) {
