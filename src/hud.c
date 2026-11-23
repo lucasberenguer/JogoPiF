@@ -6,8 +6,47 @@
 #define HUD_WIDTH 2082.0f
 #define HUD_HEIGHT 640.0f
 
+static void DrawBossPhasePulse(Rectangle track, float threshold, float elapsed) {
+    const float duration = .65f;
+    if (elapsed < 0 || elapsed >= duration) return;
+    float progress = elapsed/duration;
+    float intensity = fminf(1,elapsed/.05f)*powf(1-progress,.8f);
+    Color violet = {203,97,255,255};
+    float markerX = track.x+2+(track.width-4)*threshold;
+    float floorY = track.y+track.height;
+    DrawCircleGradient((int)markerX,(int)(track.y+15),20+10*progress,
+                       Fade(violet,intensity*.58f),BLANK);
+    DrawRectangleRec((Rectangle){markerX-1,track.y-2,3,9},Fade(violet,intensity));
+    DrawRectangleRec((Rectangle){markerX-1,floorY-7,3,9},Fade(violet,intensity));
+    for (int side=-1;side<=1;side+=2) {
+        for (int spark=0;spark<14;spark++) {
+            float x = markerX+side*(track.width*.30f*progress-spark*3);
+            if (x < track.x || x+3 > track.x+track.width) continue;
+            Color light = Fade(violet,intensity*(1-spark/14.0f));
+            DrawRectangleRec((Rectangle){x,track.y-1,3,2},light);
+            DrawRectangleRec((Rectangle){x,floorY-1,3,2},light);
+        }
+    }
+    // A caveira fica no rodapé para liberar o nome e os PV.
+    const char *skull[] = {"..####..",".######.","########","##..##..",
+                           "##..##..","########",".##..##.","..####.."};
+    int top = (int)(floorY+3-6*progress);
+    for (int row=0;row<8;row++) for (int col=0;col<8;col++) {
+        if (skull[row][col] != '#') continue;
+        if (progress>.55f && (col*13+row*7)%17 < (progress-.55f)*38) continue;
+        Color bone = row<3 ? (Color){247,207,255,255} : (Color){216,144,255,255};
+        DrawRectangle((int)markerX+(col-4)*2,top+row,2,1,Fade(bone,intensity));
+    }
+    for (int i=0;i<10;i++) {
+        float x = markerX+((i*17)%41-20)*progress*1.5f;
+        float y = floorY+4-((i*9)%13)*progress;
+        DrawRectangle((int)x,(int)y,2,2,Fade(violet,intensity*.65f));
+    }
+}
+
 void DrawBossHealthHud(const char *name, const char *phase, int health, int maxHealth,
-                       Color fill, const float *phaseMarkers, int markerCount, int bottomOffset) {
+                       Color fill, const float *phaseMarkers, int markerCount, int bottomOffset,
+                       int transitionMarker, float transitionTime) {
     if (maxHealth <= 0) return;
 
     const Color bronze = {179, 133, 93, 255};
@@ -42,6 +81,9 @@ void DrawBossHealthHud(const char *name, const char *phase, int health, int maxH
     }
     DrawLineEx((Vector2){x+13,y-2},(Vector2){x+52,y-2},1,Fade(bronze,.7f));
     DrawLineEx((Vector2){x+width-52,y-2},(Vector2){x+width-13,y-2},1,Fade(bronze,.7f));
+
+    if (transitionMarker >= 0 && transitionMarker < markerCount)
+        DrawBossPhasePulse(track,phaseMarkers[transitionMarker],transitionTime);
 
     Rectangle title = {x, y-30, width, 29};
     Rectangle shadow = title;

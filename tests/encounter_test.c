@@ -43,7 +43,7 @@ static void CheckSinglePhaseBossHud(void) {
         BeginTextureMode(target);
         ClearBackground((Color){9, 16, 19, 255});
         int footer = i == 0 ? 0 : PRACTICE_FOOTER_HEIGHT;
-        DrawBossHealthHud("Chefe de fase única", NULL, 50, 100, MAROON, NULL, 0, footer);
+        DrawBossHealthHud("Chefe de fase única", NULL, 50, 100, MAROON, NULL, 0, footer, -1, 0);
         if (footer) DrawRectangle(0, h-footer, w, footer, BLACK);
         Enemy common = {.position={w*.5f, h*.5f},.health=25,.maxHealth=50,.state=ENEMY_IDLE};
         DrawEnemyHealthBar(&common, h/2);

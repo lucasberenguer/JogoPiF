@@ -19,6 +19,7 @@ void DrawHud(const Hud *hud, int health, int maxHealth,
              float dodgeCooldown, float dodgeRecovery, double runSeconds);
 void UnloadHud(Hud *hud);
 void DrawBossHealthHud(const char *name, const char *phase, int health, int maxHealth,
-                       Color fill, const float *phaseMarkers, int markerCount, int bottomOffset);
+                       Color fill, const float *phaseMarkers, int markerCount, int bottomOffset,
+                       int transitionMarker, float transitionTime);
 
 #endif

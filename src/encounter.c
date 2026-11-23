@@ -1383,8 +1383,12 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         float markers[] = {.5f, IGRIS_FINAL_HEALTH_PERCENT / 100.0f};
         if (boss->necromancerForm) { markers[0] = .70f; markers[1] = .35f; }
         int markerCount = boss->necromancerForm || boss->templarRole == TEMPLAR_MARSHAL ? 2 : 1;
+        int transitionMarker = -1;
+        if (boss->guardianPhase == GUARDIAN_PHASE_TRANSITION)
+            transitionMarker = boss->necromancerForm == 2 || boss->igrisFinalForm ? 1 : 0;
         DrawBossHealthHud(bossLabel, phase, boss->health, boss->maxHealth, healthColor, markers, markerCount,
-                          e->practice ? PRACTICE_FOOTER_HEIGHT : 0);
+                          e->practice ? PRACTICE_FOOTER_HEIGHT : 0,
+                          transitionMarker,boss->stateTime);
     }
     if (e->phase == ENCOUNTER_IGRIS_CINEMATIC || e->phase == ENCOUNTER_IGRIS_AFTERMATH) return;
     if (!EncounterPaused(e)) return;
