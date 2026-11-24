@@ -4,6 +4,22 @@
 #include "raymath.h"
 #include <math.h>
 
+static bool ObstacleMayTouch(const MapObstacle *obstacle, Vector2 point, float margin) {
+    return !obstacle->hasBounds ||
+        (point.x >= obstacle->min.x - margin && point.x <= obstacle->max.x + margin &&
+         point.y >= obstacle->min.y - margin && point.y <= obstacle->max.y + margin);
+}
+
+static void SetObstacleBounds(MapObstacle *obstacle) {
+    obstacle->min = obstacle->max = obstacle->vertices[0];
+    for (int i = 1; i < obstacle->count; i++) {
+        Vector2 vertex = obstacle->vertices[i];
+        obstacle->min = (Vector2){fminf(obstacle->min.x, vertex.x), fminf(obstacle->min.y, vertex.y)};
+        obstacle->max = (Vector2){fmaxf(obstacle->max.x, vertex.x), fmaxf(obstacle->max.y, vertex.y)};
+    }
+    obstacle->hasBounds = true;
+}
+
 bool MapHasClearPath(const Clearing *map,Vector2 from,Vector2 to) {
     Vector2 delta=Vector2Subtract(to,from);
     int steps=(int)(Vector2Length(delta)/4)+1;
@@ -30,6 +46,8 @@ static void PlayerSlideCandidate(const Clearing *map, Vector2 position, Vector2 
     }
 }
 
+static const float playerSlideRadius = 11;
+
 static void PlayerSlideEdge(const Clearing *map,Vector2 position,Vector2 movement,
                             Vector2 a,Vector2 b,Vector2 *best,float *score) {
     Vector2 edge=Vector2Subtract(b,a);
@@ -37,11 +55,40 @@ static void PlayerSlideEdge(const Clearing *map,Vector2 position,Vector2 movemen
     if (lengthSqr<.001f) return;
     float along=Clamp(Vector2DotProduct(Vector2Subtract(position,a),edge)/lengthSqr,0,1);
     Vector2 nearest=Vector2Add(a,Vector2Scale(edge,along));
-    if (Vector2DistanceSqr(position,nearest)>11*11) return;
+    if (Vector2DistanceSqr(position,nearest)>playerSlideRadius*playerSlideRadius) return;
     /* Project input onto the contacted edge; pushing straight into it stops. */
     Vector2 tangent=Vector2Scale(edge,1/sqrtf(lengthSqr));
     Vector2 slide=Vector2Scale(tangent,Vector2DotProduct(movement,tangent));
     PlayerSlideCandidate(map,position,movement,slide,best,score);
+}
+
+static float FindWallContact(const Clearing *map, Vector2 position, Vector2 step) {
+    /* Keep the part of the step that stops short of the wall. */
+    float low = 0, high = 1;
+    for (int i = 0; i < 8; i++) {
+        float mid = (low + high) * .5f;
+        if (IsMapActorBlocked(map, Vector2Add(position, Vector2Scale(step, mid)))) high = mid;
+        else low = mid;
+    }
+    return low;
+}
+
+static Vector2 FindPlayerSlide(const Clearing *map, Vector2 position, Vector2 remaining) {
+    Vector2 slide = {0};
+    float score = .000001f;
+    for (int i = 0; i < map->boundaryCount; i++)
+        PlayerSlideEdge(map, position, remaining, map->boundary[i],
+            map->boundary[(i + 1) % map->boundaryCount], &slide, &score);
+    for (int i = 0; i < map->shapeCount; i++) {
+        const MapObstacle *obstacle = &map->shapes[i];
+        if (!ObstacleMayTouch(obstacle, position, playerSlideRadius)) continue;
+        for (int j = 0; j < obstacle->count; j++)
+            PlayerSlideEdge(map, position, remaining, obstacle->vertices[j],
+                obstacle->vertices[(j + 1) % obstacle->count], &slide, &score);
+    }
+    PlayerSlideCandidate(map, position, remaining, (Vector2){remaining.x, 0}, &slide, &score);
+    PlayerSlideCandidate(map, position, remaining, (Vector2){0, remaining.y}, &slide, &score);
+    return slide;
 }
 
 void MoveMapPlayer(const Clearing *map,Vector2 *position,Vector2 delta) {
@@ -57,28 +104,14 @@ void MoveMapPlayer(const Clearing *map,Vector2 *position,Vector2 delta) {
     Vector2 step=Vector2Scale(delta,1.0f/(float)steps);
     for (int i=0;i<steps;i++) {
         Vector2 next=Vector2Add(*position,step);
-        if (!IsMapActorBlocked(map,next)) { *position=next;continue; }
-        /* Approach the wall without discarding the entire movement step. */
-        float low=0,high=1;
-        for (int j=0;j<8;j++) {
-            float mid=(low+high)*.5f;
-            if (IsMapActorBlocked(map,Vector2Add(*position,Vector2Scale(step,mid)))) high=mid;
-            else low=mid;
+        if (!IsMapActorBlocked(map,next)) {
+            *position = next;
+            continue;
         }
-        *position=Vector2Add(*position,Vector2Scale(step,low));
-        Vector2 remaining=Vector2Scale(step,1-low),slide={0};float score=.000001f;
-        for (int j=0;j<map->boundaryCount;j++)
-            PlayerSlideEdge(map,*position,remaining,map->boundary[j],
-                map->boundary[(j+1)%map->boundaryCount],&slide,&score);
-        for (int j=0;j<map->shapeCount;j++) {
-            const MapObstacle *shape=&map->shapes[j];
-            for (int k=0;k<shape->count;k++)
-                PlayerSlideEdge(map,*position,remaining,shape->vertices[k],
-                    shape->vertices[(k+1)%shape->count],&slide,&score);
-        }
-        PlayerSlideCandidate(map,*position,remaining,(Vector2){remaining.x,0},&slide,&score);
-        PlayerSlideCandidate(map,*position,remaining,(Vector2){0,remaining.y},&slide,&score);
-        *position=Vector2Add(*position,slide);
+        float contact = FindWallContact(map, *position, step);
+        *position = Vector2Add(*position, Vector2Scale(step, contact));
+        Vector2 slide = FindPlayerSlide(map, *position, Vector2Scale(step, 1 - contact));
+        *position = Vector2Add(*position, slide);
     }
 }
 
@@ -148,10 +181,12 @@ void ConfigureCemeteryBoundary(Clearing *map) {
     map->shapeCount=(int)(sizeof(shapes)/sizeof(shapes[0]));
     map->obstacleCount=0;
     for (int i=0;i<map->shapeCount;i++) {
-        map->shapes[i].count=shapes[i].count;
-        for (int j=0;j<shapes[i].count;j++)
-            map->shapes[i].vertices[j]=(Vector2){shapes[i].vertices[j].x/1668.0f*map->background.width,
+        MapObstacle *obstacle = &map->shapes[i];
+        obstacle->count = shapes[i].count;
+        for (int j = 0; j < obstacle->count; j++)
+            obstacle->vertices[j]=(Vector2){shapes[i].vertices[j].x/1668.0f*map->background.width,
                 shapes[i].vertices[j].y/906.0f*map->background.height};
+        SetObstacleBounds(obstacle);
     }
 }
 
@@ -612,8 +647,11 @@ bool IsClearingBlocked(const Clearing *clearing, Vector2 point) {
     if (clearing->boundaryCount>0) {
         /* The authored polygon replaces the old painted contour entirely. */
         if (!CheckCollisionPointPoly(point,clearing->boundary,clearing->boundaryCount)) return true;
-        for (int i=0;i<clearing->shapeCount;i++)
-            if (CheckCollisionPointPoly(point,clearing->shapes[i].vertices,clearing->shapes[i].count)) return true;
+        for (int i = 0; i < clearing->shapeCount; i++) {
+            const MapObstacle *obstacle = &clearing->shapes[i];
+            if (ObstacleMayTouch(obstacle, point, 0) &&
+                CheckCollisionPointPoly(point, obstacle->vertices, obstacle->count)) return true;
+        }
         if (clearing->cemetery || clearing->village) return false;
         /* Isolated small altar stone remains solid inside the new perimeter. */
         Vector2 rock={clearing->background.width*.622f,clearing->background.height*.228f};
