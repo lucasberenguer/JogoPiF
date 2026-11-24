@@ -10,6 +10,39 @@
 #include <stdio.h>
 #include <string.h>
 
+static void CheckGunBodyScale(void) {
+    Gun gun;
+    assert(InitGun(&gun));
+    const Vector2 player = {300,400};
+    for (int facing = 0; facing < 4; facing++) {
+        int idleRow = facing < 2 ? facing : 5-facing;
+        GunBodyFrame reference = gun.idleFit.frames[idleRow][0];
+        assert(reference.headWidth && reference.bottom > reference.top);
+        Rectangle idle = GunBodyDestination(&gun,(Rectangle){0,idleRow*80,64,80},
+                                            player,facing,false,false);
+        for (int action = 0; action < 2; action++) {
+            bool firing = action == 1;
+            const GunBodyAtlas *fit = firing ? &gun.shotFit : &gun.walkFit;
+            int planes = firing ? 1 : 3;
+            for (int plane = 0; plane < planes; plane++) {
+                int row = facing + 4*plane;
+                for (int col = 0; col < 8; col++) {
+                    GunBodyFrame frame = fit->frames[row][col];
+                    assert(frame.headWidth && frame.bottom > frame.top);
+                    Rectangle draw = GunBodyDestination(&gun,(Rectangle){col*64,row*80,64,80},
+                                                        player,facing,!firing,firing);
+                    assert(fabsf(draw.width*frame.headWidth - idle.width*reference.headWidth) < .01f);
+                    assert(fabsf(draw.height*(frame.bottom-frame.top) -
+                                 idle.height*(reference.bottom-reference.top)) < .01f);
+                    assert(fabsf(draw.y+draw.height*frame.bottom/80 -
+                                 idle.y-idle.height*reference.bottom/80) < .01f);
+                }
+            }
+        }
+    }
+    UnloadGun(&gun);
+}
+
 static void Capture(const char *name, Encounter *encounter, EnemyGroup *enemies,
                     Clearing *clearing, Vector2 player) {
     RenderTexture2D target=LoadRenderTexture(GetScreenWidth(),GetScreenHeight());
@@ -886,6 +919,7 @@ int main(void) {
     SetTraceLogLevel(LOG_WARNING);
     SetConfigFlags(FLAG_WINDOW_HIDDEN);
     InitWindow(1280,720,"Encounter audit");
+    CheckGunBodyScale();
     assert(IsWindowReady());
     LoadGameFonts();
     CheckLegacyCheckpoints();

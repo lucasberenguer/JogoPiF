@@ -1383,17 +1383,16 @@ int main(void) {
                         bodyDestination = (Rectangle){player.x - 80.0f,
                                                        player.y - 108.0f, 160.0f, 112.0f};
                     } else if (invoking) {
-                        bodySource = PlayerSpriteSource(pose,bodyFacing,128,112);
-                        bodyDestination = (Rectangle){player.x - 64, player.y - 108, 128, 112};
+                        bodySource = (Rectangle){(int)pose*128.0f,bodyFacing*112.0f,128,112};
+                        // A margem extra da folha acomoda a auréola. O corpo usa a escala da marcha.
+                        bodyDestination = (Rectangle){player.x - 60,player.y - 102,120,105};
                     } else if (currentWeapon == WEAPON_GUN) {
+                        if (firing)
+                            bodySource = (Rectangle){(int)pose*64.0f,bodyFacing*80.0f,64,80};
                         // Só a folha da pose parada ordena os perfis como direita, esquerda.
                         if (!firing && !walking && bodyFacing >= 2)
                             bodySource = PlayerSpriteSource(pose,5-bodyFacing,64,80);
-                        // A arte da arma tem o corpo mais estreito que o sprite normal.
-                        // Usa a mesma escala para espera, caminhada e disparo.
-                        float width = bodyFacing < 2 ? 68.0f : 76.0f;
-                        bodyDestination = (Rectangle){player.x - width * 0.5f,
-                            player.y - 72.0f, width, 75.0f};
+                        bodyDestination = GunBodyDestination(&gun,bodySource,player,bodyFacing,walking,firing);
                     }
                     if (attacking && katanaAttackRemaining <= katanaAttackDuration * .5f) {
                         Vector2 center = {player.x, player.y - 35};
