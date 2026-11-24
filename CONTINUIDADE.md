@@ -1,8 +1,10 @@
 # Jogo PIF — continuidade entre computadores e chats
 
-Atualizado em 23/11/2026. Leia junto do código e de `git status` antes de retomar.
+Atualizado em 24/11/2026. Leia junto do código e de `git status` antes de retomar.
 
 ## Retomada rápida
+
+- **24/11 — Coveiro com quadros intermediários (implementado):** as oito folhas de espera, corrida, emergência, queda, pazada, raízes, arremesso e investida ganharam duas poses intermediárias por quadro original. `tools/prepare_coveiro_inbetweens.py` reproduz os atlas em `assets/coveiro/fluido/`; o jogo usa as folhas novas com amostragem tripla, preservando os quadros originais que determinam a preparação e o impacto dos golpes. As imagens geradas usam 75% da resolução dos atlas originais por célula, mantendo o tamanho desenhado no jogo. Prévia dos intermediários em `out/review/coveiro_intermediarios.png`. **Validação:** build Debug em `out/review/coveiro-check`, `enemy_audit` e `clearing_encounter` aprovados; revisão visual em partida pendente.
 
 - **23/11 — Escala da arma de fogo por quadro (implementado):** ao carregar as três folhas, o jogo mede a largura da cabeça acima do cano e a altura do corpo até os pés. Em cada quadro de espera, caminhada e disparo, essas medidas são ajustadas à pose de espera da mesma direção, com os pés no mesmo ponto. Isso substitui as médias por ação. **Validação:** build Release em `out/review/release` e `clearing_encounter` aprovado com checagem das medidas e do apoio dos pés nos 128 quadros de marcha e disparo. O Windows continua negando a substituição do executável Debug. Revisão em partida pendente.
 

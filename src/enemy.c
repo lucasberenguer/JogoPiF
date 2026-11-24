@@ -437,15 +437,15 @@ static bool LoadCemeteryEnemyAssets(EnemyGroup *group) {
         group->cemeterySpecial[i] = LoadTexture(specialSheets[i]);
         if (group->cemeterySpecial[i].id) SetTextureFilter(group->cemeterySpecial[i], TEXTURE_FILTER_POINT);
     }
-    group->coveiroIdle = LoadTexture("assets/coveiro_visual_espera.png");
-    group->coveiroWalk = LoadTexture("assets/coveiro_visual_corrida.png");
-    group->coveiroEmerge = LoadTexture("assets/coveiro_visual_emergencia.png");
-    group->coveiroFall = LoadTexture("assets/coveiro_visual_queda.png");
-    group->coveiroMelee = LoadTexture("assets/coveiro_ataque_pazada.png");
+    group->coveiroIdle = LoadTexture("assets/coveiro/fluido/coveiro_visual_espera.png");
+    group->coveiroWalk = LoadTexture("assets/coveiro/fluido/coveiro_visual_corrida.png");
+    group->coveiroEmerge = LoadTexture("assets/coveiro/fluido/coveiro_visual_emergencia.png");
+    group->coveiroFall = LoadTexture("assets/coveiro/fluido/coveiro_visual_queda.png");
+    group->coveiroMelee = LoadTexture("assets/coveiro/fluido/coveiro_ataque_pazada.png");
     group->cemeterySpell = LoadTexture("assets/zumbi_lanterna_projetil.png");
-    group->boss[0] = LoadTexture("assets/coveiro_ataque_raizes.png");
-    group->boss[1] = LoadTexture("assets/coveiro_ataque_arremesso.png");
-    group->boss[2] = LoadTexture("assets/coveiro_ataque_investida.png");
+    group->boss[0] = LoadTexture("assets/coveiro/fluido/coveiro_ataque_raizes.png");
+    group->boss[1] = LoadTexture("assets/coveiro/fluido/coveiro_ataque_arremesso.png");
+    group->boss[2] = LoadTexture("assets/coveiro/fluido/coveiro_ataque_investida.png");
     group->effects[0] = LoadTexture("assets/coveiro_novo_pull_effect.png");
     group->effects[1] = LoadTexture("assets/coveiro_pa_vento_v4.png");
     group->effects[2] = LoadTexture("assets/coveiro_efeito_investida.png");

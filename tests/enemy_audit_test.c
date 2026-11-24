@@ -717,9 +717,9 @@ int main(void) {
     float attackTime=group.list[0].stateTime;
     DamageEnemy(&group.list[0],25);
     assert(group.list[0].state==ENEMY_ATTACK && group.list[0].stateTime==attackTime);
-    group.list[0].stateTime=.79f;
+    group.list[0].stateTime=.59f;
     UpdateEnemies(&group,&map,target,.02f,true,&health,100);
-    assert(health==100); /* Dodge during active roots. */
+    assert(health==100 && !group.list[0].attackConnected); /* Warning still active. */
     UpdateEnemies(&group,&map,target,.02f,false,&health,100);
     assert(health==62);
     UpdateEnemies(&group,&map,target,.02f,false,&health,100);
@@ -737,8 +737,8 @@ int main(void) {
     UpdateEnemies(&group, &map, target, .25f, true, &health, 100);
     assert(coveiro->guardianPhase == GUARDIAN_PHASE_TWO && coveiro->bossAttack == COVEIRO_CHARGE);
     coveiro->bossAttack = COVEIRO_SHOVEL;
-    coveiro->stateTime = .79f;
-    UpdateEnemies(&group, &map, target, .02f, true, &health, 100);
+    coveiro->stateTime = .60f;
+    UpdateEnemies(&group, &map, target, .03f, true, &health, 100);
     assert(group.cemeteryProjectiles[2].active && !group.cemeteryProjectiles[3].active);
     assert(group.cemeteryProjectiles[0].damage == 91); /* The projectile keeps corruption power. */
     assert(fabsf(group.cemeteryProjectiles[0].velocity.x) +
@@ -752,7 +752,7 @@ int main(void) {
     UpdateEnemies(&group,&map,target,.01f,false,&health,100);
     assert(coveiro->state==ENEMY_ATTACK && coveiro->guardianMelee && coveiro->facing==3);
     assert(CemeteryAnimationPose(coveiro).atlas==CEM_BOSS_MELEE && CemeteryAnimationPose(coveiro).frame==0);
-    UpdateEnemies(&group,&map,target,.34f,false,&health,100);
+    UpdateEnemies(&group,&map,target,.28f,false,&health,100);
     assert(health==100 && !coveiro->attackConnected);
     UpdateEnemies(&group,&map,target,.03f,false,&health,100);
     assert(health==67 && coveiro->attackConnected && CemeteryAnimationPose(coveiro).frame==4);
