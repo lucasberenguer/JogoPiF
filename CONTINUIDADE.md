@@ -1,5 +1,9 @@
 # Jogo PIF — continuidade entre computadores e chats
 
+## Interface durante a partida (25/11/2026)
+
+- Retirado o quadro de instruções do canto superior esquerdo, incluindo as legendas de ataque e o nome da arma no mesmo bloco. Vida, esquiva, cronômetro, seta de navegação e atalhos de ferramentas continuam disponíveis. Os controles podem ser consultados no menu de pausa.
+
 ## Ajuda de navegação (25/11/2026)
 
 - Uma seta dourada aparece perto do jogador após 8 segundos de jogo com o mesmo próximo objetivo disponível. Usa os gatilhos das passagens e ajuda a encontrar o altar, os pilares, a carta, a escadaria de Igris e os chefes caídos que ainda aguardam selamento. Na arena final, leva ao selamento do Necromante. A contagem para durante as telas de diálogo, apresentações e pausa e reinicia quando muda o objetivo.

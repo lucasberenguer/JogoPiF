@@ -290,7 +290,6 @@ int main(void) {
     bool walking = false;
     bool showCollisionGuide = false;
     bool showSpriteDebug = false;
-    float pedestalMessageTime = 0.0f;
     const float katanaAttackDuration = 0.42f;
     float katanaAttackRemaining = 0.0f;
     float katanaAttackCooldown = 0.0f;
@@ -512,7 +511,6 @@ int main(void) {
                     walkLean=0;
                     gunWalkPose=0;
                     facing=walkFacing=0;
-                    pedestalMessageTime=0;
                     entryFadeRemaining=0;
                     showCollisionGuide=devTools.collision;
                     screen=2;
@@ -644,7 +642,6 @@ int main(void) {
                 walkTime = 0.0f;
                 walkLean = 0.0f;
                 gunWalkPose = 0.0f;
-                pedestalMessageTime = 0.0f;
                 ResetBible(&bible);
                 ResetGun(&gun);
                 katanaAttackRemaining = 0.0f;
@@ -732,7 +729,6 @@ int main(void) {
                 walkTime = 0.0f;
                 walkLean = 0.0f;
                 gunWalkPose = 0.0f;
-                pedestalMessageTime = 0.0f;
                 ResetBible(&bible);
                 ResetGun(&gun);
                 katanaAttackRemaining = 0.0f;
@@ -1093,10 +1089,6 @@ int main(void) {
         if (!entering && IsKeyPressed(KEY_F6)) showSpriteDebug = !showSpriteDebug;
         if (clearing.templarField)
             clearing.exitLocked = encounter.progress.stage != CLEARING_COMPLETE_STAGE;
-        bool nearExit = (clearing.cemetery || clearing.village || clearing.boneland) &&
-            CheckCollisionPointRec(player, clearing.exit);
-        bool nearPedestal = encounter.progress.map == 0 &&
-            CheckCollisionPointCircle(player, clearing.pedestal, CLEARING_ALTAR_RADIUS);
         bool altarOpen = ClearingAltarOpen(&encounter, &clearing);
         bool interactPressed = IsKeyPressed(KEY_E) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_LEFT);
         encounter.progress.health=playerHealth;
@@ -1455,8 +1447,6 @@ int main(void) {
         bool showMapGuide=playerHealth>0 && !entering &&
             UpdateEncounterGuide(&encounter,&clearing,&enemies,deltaTime);
         int frame = walking ? 1 + (int) (walkTime * 7.0f) % 4 : 0;
-        if (!entering && nearPedestal && interactPressed) pedestalMessageTime = 3.0f;
-        if (pedestalMessageTime > 0.0f) pedestalMessageTime -= deltaTime;
 
         SceneLights scene = {0};
         const bool dynamicLighting = GetVideoSettings()->dynamicLighting;
@@ -1651,46 +1641,8 @@ int main(void) {
             EndMode2D();
             DrawWorldFrame(camera, &scene);
 
-            DrawRectangle(12, 12, 490, 130, Fade(BLACK, 0.72f));
-            DrawGameText(InputHint("WASD: mover  |  Espaço/botão direito: esquiva", "Analógico esquerdo: mover  |  L1/L2: dash"), 24, 23, 17, RAYWHITE);
-            DrawGameText(InputHint("F1: ferramentas | F3: colisão | Esc: pausa", "Analógico direito: mirar  |  [Options]: pausa"), 24, 76, 17, RAYWHITE);
-            if (!UsingGamepad()) DrawGameText("F4/F5: testar dano e cura", 24, 104, 17, RAYWHITE);
-            if (altarOpen) {
-                DrawGameText(nearPedestal ? InputHint("E: Interagir com o Altar Antigo", "[Quadrado]: interagir com o Altar Antigo")
-                                      : "Investigue o altar da clareira",
-                         24, 53, 18, GOLD);
-            } else if (pedestalMessageTime > 0.0f) {
-                DrawGameText("Conclua as ondas e sele o Guardião", 24, 53, 18, GOLD);
-            } else if (nearPedestal) {
-                DrawGameText("O altar está selado", 24, 53, 18, GOLD);
-            } else {
-                DrawGameText(nearExit
-                    ? (clearing.boneland ? "Passagem para o " TEMPLAR_FIELD_TITLE
-                        : clearing.village ? "Entrar na Capela do Anjo" : "Saída para Chã da Tristeza")
-                    : (clearing.templarField ? (clearing.exitLocked ? "Derrote Igris para liberar a escadaria"
-                        : "Suba ao Topo do Palácio") : clearing.necromancerArena ? "Topo do Palácio" : clearing.boneland ? "Terra dos Ossos"
-                        : clearing.invertedChapel ? "Capela Invertida - saída ao sul"
-                        : (clearing.basement ? InputHint("Porão da Capela (E nas placas da parede e nos 4 pilares)", "Porão da Capela ([Quadrado] nas placas e pilares)")
-                        : (clearing.chapel ? (encounter.chapelAltarDone
-                            ? "Capela do Anjo - porta superior esquerda aberta para o Porão"
-                            : InputHint("Capela do Anjo (E perto do altar / estátuas / trono)", "Capela do Anjo ([Quadrado] no altar, estátuas e trono)"))
-                        : (clearing.village ? "Chã da Tristeza"
-                        : (clearing.cemetery ? "Cemitério das Raízes" : "Explore a clareira"))))),
-                    24, 53, 18, RAYWHITE);
-            }
             DrawHud(&hud, playerHealth, playerMaxHealth,
                     dodgeCooldown, dodgeRecovery, SpeedrunTime());
-            DrawGameText(TextFormat("Arma: %s", WeaponName((Weapon)currentWeapon)),
-                     24, 150, 19, GOLD);
-            if (currentWeapon == WEAPON_KATANA)
-                DrawGameText(InputHint("Clique esquerdo: corte de katana", "R1/R2: corte de katana"), 24, 176, 18, RAYWHITE);
-            if (currentWeapon == WEAPON_BIBLE)
-                DrawGameText(bible.boostCooldown <= 0.0f
-                             ? InputHint("Clique esquerdo: acelerar órbitas", "R1/R2: acelerar órbitas")
-                             : TextFormat("Aceleração: %.1f s", bible.boostCooldown),
-                         24, 176, 18, RAYWHITE);
-            if (currentWeapon == WEAPON_GUN)
-                DrawGameText(InputHint("Clique esquerdo: disparar (um tiro por clique)", "R1/R2: disparar (um tiro por aperto)"), 24, 176, 18, RAYWHITE);
             if (showMapGuide) DrawMapGuideArrow(camera,player,encounter.guideTarget);
             DrawEncounter(&encounter,&enemies);
             DrawAtmospherePanel(&clearing);
