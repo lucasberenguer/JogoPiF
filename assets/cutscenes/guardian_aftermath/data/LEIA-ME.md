@@ -17,6 +17,7 @@ Pular a libertação libera o altar e posiciona o jogador num ponto livre próxi
 - `libertacao.ini`: 16 enquadramentos, oito falas; aproximadamente 60 s, com leitura manual livre.
 - `passagem.ini`: sete enquadramentos, duas falas; aproximadamente 30 s mais a cartela.
 - `../images/quadro_01.png` a `quadro_11.png`: os 11 anexos, copiados sem edição (SHA-256 conferido).
+- `../images/abertura/quadro_01.png` a `quadro_10.png`: as novas versões dos quadros narrativos usadas em `libertacao.ini` e `passagem.ini`.
 - `../audio/`: trilha convertida e seis efeitos; fontes e limitações em `CREDITOS.md`.
 - `guardian_cutscene.c/.h`: carregador, pan/zoom proporcional, transições, caixa de diálogo, música contínua, pausa e descarregamento compartilhados com a cena anterior ao boss.
 - `encounter.c/.h`, `run_progress.h`, `menu.c`: purificação, altar, passagem e checkpoint.
@@ -27,7 +28,7 @@ As chaves existentes de câmera, falas, `audio_at`, `audio_gain`, duração e tr
 
 ## Correspondência dos 23 enquadramentos com os anexos
 
-O roteiro descreve 22 imagens narrativas e uma cartela, mas foram fornecidos dez quadros narrativos e uma cartela. As repetições abaixo são intencionais; não existem arquivos referenciados ausentes nem artes substitutas geradas.
+Os 22 planos narrativos reutilizam dez quadros com diferentes enquadramentos. A cartela final usa a tipografia do jogo sobre preto, conforme a tabela.
 
 | Enquadramentos do roteiro | Arquivos usados | Tratamento |
 | --- | --- | --- |

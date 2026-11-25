@@ -201,6 +201,7 @@ static void CheckAftermath(void) {
             int current=scene.current;
             GuardianScene *shot=&scene.scenes[current];
             assert(shot->artIndex>=0 && !shot->narration[0]);
+            if (!shot->chapterCard) assert(strncmp(shot->image,"abertura/",9)==0);
             if (shot->audioEvent[0] && IsAudioDeviceReady()) assert(shot->cue.stream.buffer);
             if (shot->dialogue[0]) {
                 assert(spoken<10 && !strcmp(shot->dialogue,dialogues[spoken]));
@@ -261,6 +262,7 @@ int main(void) {
     assert(InitGuardianCutscene(&scene,.12f,0));
     assert(scene.count==30 && scene.artCount==16);
     for (int i=0; i<scene.count; i++) {
+        assert(strncmp(scene.scenes[i].image,"abertura/",9)==0);
         assert(scene.scenes[i].artIndex>=0);
         assert(scene.scenes[i].artIndex<scene.artCount);
         assert(scene.art[scene.scenes[i].artIndex].id!=0);
@@ -316,22 +318,38 @@ int main(void) {
         float duration=0;
         for (int i=0;i<scene.count;i++) {
             assert(scene.scenes[i].artIndex>=0);
+            assert(strncmp(scene.scenes[i].image,"abertura/",9)==0);
             if (IsAudioDeviceReady()) assert(scene.scenes[i].cue.stream.buffer);
             duration+=scene.scenes[i].duration;
         }
         assert(duration==43);
         if (skip) UpdateGuardianCutscene(&scene,0,(GuardianCutsceneInput){.skip=true});
-        else for (int i=0;i<500 && !scene.finished;i++)
+        else for (int i=0,previous=-1;i<500 && !scene.finished;i++) {
+            if (scene.current!=previous) {
+                GuardianScene *shot=&scene.scenes[scene.current];
+                if (shot->narration[0] || shot->title[0]) {
+                    GuardianCutscene preview=scene;
+                    preview.elapsed=1.7f;
+                    char label[80];
+                    snprintf(label,sizeof(label),"coveiro_%s",shot->id);
+                    Capture(&preview,800,label);
+                }
+                previous=scene.current;
+            }
             UpdateGuardianCutscene(&scene,.1f,(GuardianCutsceneInput){0});
+        }
         assert(scene.finished && scene.skipped==(skip!=0));
         UnloadGuardianCutscene(&scene);
     }
     assert(InitVillageCutscene(&scene,.12f,.12f));
     assert(scene.count==5 && scene.artCount==4);
-    const char *villageImages[]={"cha_de_alegria.png","febre.png","selo.png","presente.png","presente.png"};
+    const char *villageImages[]={
+        "abertura/cha_de_alegria.png","abertura/febre.png","abertura/selo.png",
+        "abertura/presente.png","abertura/presente.png"
+    };
     for (int i=0;i<scene.count;i++) {
         const GuardianScene *shot=&scene.scenes[i];
-        assert(!strcmp(shot->image,villageImages[i]));
+        assert(shot->artIndex>=0 && !strcmp(shot->image,villageImages[i]));
         assert(shot->type==GUARDIAN_NARRATION && shot->narration[0] && !shot->waitsForInput);
         float readingTime=shot->narrationAt+shot->narrationDuration/2;
         assert(GuardianNarrationOpacity(shot,readingTime)==1);
@@ -349,34 +367,82 @@ int main(void) {
     assert(scene.finished && !scene.skipped);
     UnloadGuardianCutscene(&scene);
     assert(InitBonelandCutscene(&scene,.12f,.12f));
-    assert(scene.count==7 && scene.artCount>=4);
+    assert(scene.count==7 && scene.artCount==7);
     const float bonelandDurations[] = {5,5,4,6,5,4,6};
     for (int i=0; i<7; i++) {
-        const char *image = TextFormat("cena_%02d.png",i+1);
+        const char *image = TextFormat("abertura/cena_%02d.png",i+1);
         assert(strcmp(scene.scenes[i].image,image)==0);
-        bool exists = FileExists(TextFormat("assets/cutscenes/terra_dos_ossos/images/%s",image));
-        assert((scene.scenes[i].artIndex>=0)==exists);
+        assert(scene.scenes[i].artIndex>=0);
         assert(scene.scenes[i].duration==bonelandDurations[i]);
         assert(strcmp(scene.scenes[0].music,scene.scenes[i].music)==0);
     }
     assert(scene.scenes[0].narration[0] && scene.scenes[6].narration[0]);
     assert(strcmp(scene.scenes[5].audioEvent,"rugido")==0);
     if (IsAudioDeviceReady()) assert(scene.scenes[5].cue.stream.buffer);
-    for (int i=0; i<400 && !scene.finished; i++)
+    int bonelandPrevious=-1;
+    for (int i=0; i<400 && !scene.finished; i++) {
+        if (scene.current!=bonelandPrevious) {
+            if (scene.current==5 || scene.current==6) {
+                GuardianCutscene preview=scene;
+                preview.elapsed=2.0f;
+                Capture(&preview,800,scene.current==5 ? "boneland_roar" : "boneland_standoff");
+            }
+            bonelandPrevious=scene.current;
+        }
         UpdateGuardianCutscene(&scene,.1f,(GuardianCutsceneInput){0});
+    }
     assert(scene.finished && !scene.skipped);
     UnloadGuardianCutscene(&scene);
     assert(InitBonelandCutscene(&scene,0,0));
     UpdateGuardianCutscene(&scene,0,(GuardianCutsceneInput){.skip=true});
     assert(scene.finished && scene.skipped);
     UnloadGuardianCutscene(&scene);
+    assert(InitBonelandAftermath(&scene,.12f,.12f));
+    assert(scene.count==8 && scene.artCount==7);
+    for (int i=0; i<scene.count; i++) {
+        assert(scene.scenes[i].artIndex>=0);
+        assert(strncmp(scene.scenes[i].image,"abertura/",9)==0);
+    }
+    assert(scene.scenes[6].artIndex==scene.scenes[7].artIndex);
+    bonelandPrevious=-1;
+    for (int i=0; i<600 && !scene.finished; i++) {
+        if (scene.current!=bonelandPrevious) {
+            if (scene.current==0 || scene.current==5 || scene.current==6) {
+                GuardianCutscene preview=scene;
+                preview.elapsed=2.0f;
+                Capture(&preview,800,scene.scenes[scene.current].id);
+            }
+            bonelandPrevious=scene.current;
+        }
+        UpdateGuardianCutscene(&scene,.1f,(GuardianCutsceneInput){0});
+    }
+    assert(scene.finished && !scene.skipped);
+    UnloadGuardianCutscene(&scene);
     assert(InitAngelCutscene(&scene,.12f,.12f));
     assert(scene.count==52 && scene.artCount==15 && scene.mouseAdvance);
     if (IsAudioDeviceReady()) assert(scene.music.stream.buffer);
     int angelLines=0;
+    int angelPrevious=-1;
     for (int step=0;step<200 && !scene.finished;step++) {
         GuardianScene *shot=&scene.scenes[scene.current];
         assert(shot->artIndex>=0);
+        assert(strncmp(shot->image,"abertura/",9)==0);
+        if (!strcmp(shot->id,"04_fala_01")) {
+            Texture2D panorama=scene.art[shot->artIndex];
+            assert(panorama.width==3*panorama.height);
+        }
+        if (scene.current!=angelPrevious) {
+            if (!strcmp(shot->id,"04_fala_01") || !strcmp(shot->id,"09_sacrificio") ||
+                !strcmp(shot->id,"12_fala_01") || !strcmp(shot->id,"14_fala_06")) {
+                GuardianCutscene preview=scene;
+                preview.elapsed=1.5f;
+                preview.letters=GetCodepointCount(shot->dialogue);
+                char label[80];
+                snprintf(label,sizeof(label),"angel_%s",shot->id);
+                Capture(&preview,800,label);
+            }
+            angelPrevious=scene.current;
+        }
         if (shot->waitsForInput && scene.letters==0 && !scene.exiting) angelLines++;
         UpdateGuardianCutscene(&scene,.1f,(GuardianCutsceneInput){.advance=true});
     }
@@ -437,7 +503,8 @@ int main(void) {
         UnloadGuardianCutscene(&scene);
     }
     assert(InitIgrisAftermath(&scene,.12f,.12f));
-    assert(scene.count==11 && scene.artCount>=5);
+    assert(scene.count==11 && scene.artCount==6);
+    assert(scene.scenes[9].artIndex!=scene.scenes[10].artIndex);
     const char *aftermathSpeakers[]={"Igris","Você","Igris","Você","Igris","Igris"};
     int aftermathLines=0;
     for (int i=0; i<scene.count; i++) {
@@ -452,12 +519,17 @@ int main(void) {
     assert(aftermathLines==6 && !strcmp(scene.scenes[7].id,"pausa"));
     bool soundReady=IsAudioDeviceReady();
     if (soundReady) assert(scene.music.stream.buffer && scene.music.looping);
+    bool capturedFall=false;
     for (int i=0; i<300 && !scene.finished; i++) {
         if (scene.current==1 && scene.letters==0) {
             GuardianCutscene preview=scene;
             preview.elapsed=.8f;
             preview.letters=GetCodepointCount(scene.scenes[1].dialogue);
             Capture(&preview,800,"igris_aftermath_monologue");
+        }
+        if (scene.current==9 && !capturedFall && scene.elapsed>=1.0f) {
+            Capture(&scene,800,"igris_aftermath_fall");
+            capturedFall=true;
         }
         if (soundReady && scene.current>=9) assert(scene.music.stream.buffer && !scene.music.looping);
         UpdateGuardianCutscene(&scene,.1f,(GuardianCutsceneInput){.advance=scene.scenes[scene.current].waitsForInput});

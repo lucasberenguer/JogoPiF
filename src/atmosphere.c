@@ -81,7 +81,7 @@ static struct {
     int count, map, quality, flags, selected, bossPhase;
     float time;
     uint32_t random;
-    bool debug, reduced, dragging, guides;
+    bool debug, reduced, dragging, guides, lightingEnabled;
 } atmosphere;
 
 static Color Paint(unsigned rgb, float opacity) {
@@ -176,6 +176,7 @@ void InitAtmosphere(void) {
     atmosphere.map = atmosphere.selected = -1;
     atmosphere.quality = 2;
     atmosphere.flags = 255;
+    atmosphere.lightingEnabled = true;
 #ifdef _WIN32
     int animate = 1;
     if (SystemParametersInfoA(0x1042u, 0, &animate, 0)) atmosphere.reduced = !animate;
@@ -330,6 +331,19 @@ static void AdvanceAtmosphere(float dt, bool visible) {
     }
 }
 
+bool MapHasAtmosphere(const Clearing *map) {
+    return configs[ClearingMapId(map)].mist > 0;
+}
+
+void SetAtmosphereLighting(bool enabled) {
+    atmosphere.lightingEnabled = enabled;
+}
+
+static bool LayerEnabled(int layer) {
+    return (atmosphere.flags & layer) == layer &&
+           (atmosphere.lightingEnabled || !(layer & (LIGHT | RAY)));
+}
+
 bool UpdateAtmosphere(const Clearing *map, Camera2D camera, float dt) {
     int id = ClearingMapId(map);
     if (atmosphere.map != id) LoadMapAtmosphere(id);
@@ -461,7 +475,7 @@ void DrawAtmosphereShadow(const Clearing *map, Vector2 feet, float radius) {
         direction = Vector2Normalize(Vector2Subtract(feet,Vector2Multiply(direction,size)));
     float length = atmosphere.map == 0 || atmosphere.map >= 6 ? 3.5f : 2.7f;
     float strongest = 0;
-    if (atmosphere.flags & LIGHT) for (int i = 0; i < LIGHTS && atmosphere.config.lights[i].radius > 0; i++) {
+    if (LayerEnabled(LIGHT)) for (int i = 0; i < LIGHTS && atmosphere.config.lights[i].radius > 0; i++) {
         const Light *l = &atmosphere.config.lights[i];
         Vector2 away = Vector2Subtract(feet,Vector2Multiply(l->at,size));
         float distance = Vector2Length(away);
@@ -529,7 +543,7 @@ void DrawAtmosphereBackground(const Clearing *map, int bossPhase) {
         }
     }
     BeginBlendMode(BLEND_ADDITIVE);
-    if (atmosphere.flags & LIGHT) {
+    if (LayerEnabled(LIGHT)) {
         for (int i=0;i<LIGHTS && config->lights[i].radius>0;i++) {
             const Light *l=&config->lights[i];
             float scale=l->mode==FLICKER ? .86f+.19f*Flicker(time,i*1.97f) : 1;
@@ -545,13 +559,13 @@ void DrawAtmosphereBackground(const Clearing *map, int bossPhase) {
                         Paint(color,.19f+.15f*Flicker(time*speed,i*2.5f)));
         }
     }
-    if (atmosphere.flags & RAY) for (int i=0;i<RAYS && config->rays[i].strength>0;i++) {
+    if (LayerEnabled(RAY)) for (int i=0;i<RAYS && config->rays[i].strength>0;i++) {
         const LightBeam *ray=&config->rays[i];
         if (ray->to.y <= ray->from.y) continue;
         DrawSurface(map,1,ray->to,(Vector2){ray->width*1.4f,ray->width*.9f},time,
                     Paint(ray->color,(.74f+.26f*sinf(time*1.2f+i))*ray->strength*1.8f));
     }
-    if ((atmosphere.flags & (LIGHT|FIRE)) == (LIGHT|FIRE)) {
+    if (LayerEnabled(LIGHT|FIRE)) {
         for (int i=0;i<FLAMES && config->flames[i].width>0;i++) {
             const SurfaceEffect *fire=&config->flames[i];
             float pulse=Flicker(time,9.7f+i*2.31f);
@@ -576,7 +590,7 @@ void DrawAtmosphereBackground(const Clearing *map, int bossPhase) {
 }
 
 void BeginAtmosphereActors(const Clearing *map) {
-    if (atmosphere.actorCount < 0 || !(atmosphere.flags&LIGHT)) return;
+    if (atmosphere.actorCount < 0 || !atmosphere.config.mist || !LayerEnabled(LIGHT)) return;
     float lights[LIGHTS][4], colors[LIGHTS][4];
     float w=map->background.width,h=map->background.height;
     int count=0;
@@ -599,7 +613,7 @@ void BeginAtmosphereActors(const Clearing *map) {
 }
 
 void EndAtmosphereActors(void) {
-    if (atmosphere.actorCount >= 0 && (atmosphere.flags&LIGHT)) EndShaderMode();
+    if (atmosphere.actorCount >= 0 && atmosphere.config.mist && LayerEnabled(LIGHT)) EndShaderMode();
 }
 
 static void DrawParticles(Vector2 size, bool dustOnly) {
@@ -614,7 +628,6 @@ static void DrawParticles(Vector2 size, bool dustOnly) {
         Vector2 at = p->origin;
         int width = 2, height = 2;
         if (p->type == DUST) {
-            if (!(atmosphere.flags & RAY)) continue;
             at = RayPoint(&atmosphere.config.rays[p->ray],size,
                           .08f+.82f*p->origin.x+.038f*sinf(age*.74f+p->angle),
                           (p->origin.y*2-1)*.82f+.10f*wave);
@@ -643,9 +656,9 @@ void DrawAtmosphereAbove(const Clearing *map) {
     if (!atmosphere.config.mist) return;
     Vector2 size = {map->background.width,map->background.height};
     float time = atmosphere.reduced ? 0 : atmosphere.time;
-    if (atmosphere.flags & RAY) {
+    if (LayerEnabled(RAY)) {
         BeginBlendMode(BLEND_ADDITIVE);
-        if ((atmosphere.flags & RAY) && atmosphere.beam.id) {
+        if (atmosphere.beam.id) {
             for (int i = 0; i < RAYS && atmosphere.config.rays[i].strength > 0; i++) {
                 const LightBeam *ray = &atmosphere.config.rays[i];
                 Vector2 from = Vector2Multiply(ray->from,size);
@@ -660,7 +673,7 @@ void DrawAtmosphereAbove(const Clearing *map) {
     }
     if (!atmosphere.reduced) {
         if (atmosphere.flags & PARTICLE) DrawParticles(size,false);
-        if (atmosphere.flags & RAY) DrawParticles(size,true);
+        if (LayerEnabled(RAY)) DrawParticles(size,true);
     }
     DrawGusts(size,true);
     if ((atmosphere.flags & FIRE) && !atmosphere.reduced) {
@@ -709,7 +722,7 @@ void DrawAtmospherePanel(const Clearing *map) {
         atmosphere.reduced ? "sim" : "nao"),x+10,19,17,RAYWHITE);
     DrawText("1 Nevoa  2 Luz  3 Raios  4 Particulas  5 Sombras  6 Cor  7 Vento  8 Fogo",x+10,42,14,RAYWHITE);
     DrawText(TextFormat("Visivel: %d %d %d %d %d %d %d %d   |   Tab: colisao e transicoes",
-        !!(atmosphere.flags&FOG),!!(atmosphere.flags&LIGHT),!!(atmosphere.flags&RAY),
+        !!(atmosphere.flags&FOG),LayerEnabled(LIGHT),LayerEnabled(RAY),
         !!(atmosphere.flags&PARTICLE),!!(atmosphere.flags&SHADOW),!!(atmosphere.flags&TINT),
         !!(atmosphere.flags&WIND),!!(atmosphere.flags&FIRE)),x+10,62,15,RAYWHITE);
     DrawText("Arraste uma luz  |  Roda: raio  |  Shift + roda: intensidade",x+10,82,15,RAYWHITE);

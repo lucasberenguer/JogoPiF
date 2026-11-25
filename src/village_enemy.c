@@ -6,10 +6,11 @@
 
 enum { VILLAGE_AXE_SLASH, VILLAGE_CHARGE, VILLAGE_SEAL_PULSE, VILLAGE_ATTACK_COUNT };
 enum {
-    VILLAGE_ACTIVE_LIMIT = 36, VILLAGE_ZOMBIE_HEALTH = 90, VILLAGE_BRUTE_HEALTH = 140,
+    VILLAGE_ACTIVE_LIMIT = 44, VILLAGE_ZOMBIE_HEALTH = 72, VILLAGE_BRUTE_HEALTH = 112,
     VILLAGE_BRUTE_DAMAGE = 32, VILLAGE_COMMON_PER_BRUTE = 10
 };
 static const float bruteImpact=.64f, bruteRecoveryEnd=1.23f, bruteRadius=118;
+static const float hordeReinforcementInterval = .42f;
 
 static Vector2 VillageHordeSpot(const Clearing *clearing, Vector2 player) {
     float w = (float)clearing->background.width, h = (float)clearing->background.height;
@@ -39,7 +40,7 @@ static void SpawnNecroticVillager(Enemy *enemy, const Clearing *clearing,
         .health = health,
         .maxHealth = health,
         .villageBrute = brute,
-        .speed = brute ? 82.0f : 112.0f,
+        .speed = NON_BOSS_SPEED_SCALE * (brute ? 82.0f : 112.0f),
         .power = 1.05f,
         .attackCooldown = 0.45f,
         .lastKatanaSwing = -1
@@ -56,11 +57,11 @@ void StartVillageHorde(EnemyGroup *group, const Clearing *clearing,
     for (int i = 0; i < VILLAGE_HORDE_INITIAL; i++) {
         SpawnNecroticVillager(&group->list[i], clearing, player, i);
         if (!group->list[i].villageBrute)
-            group->list[i].speed = 104.0f + 4.0f * (float)(i % 5);
+            group->list[i].speed = NON_BOSS_SPEED_SCALE * (104.0f + 4.0f * (float)(i % 5));
         group->list[i].attackCooldown = 0.35f + 0.08f * (float)(i % 6);
     }
     group->villageSpawnRemaining = VILLAGE_HORDE_REINFORCEMENTS;
-    group->villageSpawnTimer = 0.65f;
+    group->villageSpawnTimer = hordeReinforcementInterval;
 }
 
 void VillageUpdateHorde(EnemyGroup *group, const Clearing *clearing,
@@ -91,7 +92,7 @@ void VillageUpdateHorde(EnemyGroup *group, const Clearing *clearing,
                 group->villageSpawnRemaining;
             SpawnNecroticVillager(&group->list[i],clearing,player,spawnIndex);
             group->villageSpawnRemaining--;
-            group->villageSpawnTimer = 0.65f;
+            group->villageSpawnTimer = hordeReinforcementInterval;
             return;
         }
     }
@@ -130,6 +131,7 @@ static void HurtPlayer(EnemyGroup *group, int *playerHealth, bool dodging, int d
 
 void VillageUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss,
                        Vector2 player, float dt, bool dodging, int *playerHealth) {
+    Vector2 velocity = SampleBossPlayerVelocity(boss,player,dt);
     if (boss->guardianPhase == GUARDIAN_PHASE_ONE && boss->health <= boss->maxHealth / 2) {
         boss->guardianPhase = GUARDIAN_PHASE_TWO;
     }
@@ -150,6 +152,15 @@ void VillageUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss,
             boss->stateTime = 0.0f;
             boss->attackConnected = false;
             boss->attackDirection = toward;
+            if (boss->bossAttack != VILLAGE_SEAL_PULSE) {
+                float lead = boss->bossAttack == VILLAGE_CHARGE ? .24f : .18f;
+                Vector2 target = PredictBossTarget(map,boss->position,player,velocity,lead);
+                Vector2 aim = Vector2Subtract(target,boss->position);
+                if (Vector2LengthSqr(aim) > .001f) {
+                    boss->attackDirection = Vector2Normalize(aim);
+                    boss->facing = VillageFacing(aim,boss->facing);
+                }
+            }
             return;
         }
         if (distance > 86.0f) {

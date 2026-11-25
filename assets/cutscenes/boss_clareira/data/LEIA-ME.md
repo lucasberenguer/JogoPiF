@@ -6,7 +6,7 @@ O projeto usa C99 e raylib 5.5. `src/game.c` coordena as telas, `encounter.c` in
 
 `guardian_cutscene.c` implementa a nova sequência com a tipografia compartilhada em `game_text.c`. Ela começa depois da recompensa da quarta onda da Clareira, antes da animação de surgimento em gameplay. O Cemitério continua usando sua apresentação atual.
 
-As 16 imagens recebidas foram copiadas para `images/quadro_01.png` até `quadro_16.png`, na ordem dos anexos, preservando os arquivos. A sequência explícita em `sequencia.ini` possui 30 eventos, preservando os 24 enquadramentos anteriores e acrescentando seis permanências nas mesmas artes para leitura. São 17 legendas do narrador e nove falas originais. Algumas imagens reaparecem durante o diálogo.
+Os 16 quadros usados na sequência ficam em `images/abertura/`. As versões anteriores estão na raiz de `images/`, na ordem dos anexos. A sequência explícita em `sequencia.ini` possui 30 eventos, incluindo seis permanências nas mesmas artes para leitura. São 17 legendas do narrador e nove falas. Algumas imagens reaparecem durante o diálogo.
 
 ## Configuração
 
@@ -27,7 +27,7 @@ Cada bloco `[scene identificador]` representa um evento com enquadramento própr
 - `audio_event` procura `audio/<evento>.wav`, usando o volume de efeitos. O carregamento só ocorre se o arquivo existir.
 - `audio_at` define o instante de disparo do efeito em segundos após a entrada da cena. `audio_gain` ajusta sua intensidade de 0 a 1 antes do volume de efeitos das configurações. Pausar congela também o disparo de um efeito que ainda não começou.
 
-As imagens completas recebem pan e zoom discretos. O flashback usa transições claras. As camadas de poeira, folhas, névoa e luz são desenhadas separadamente. Os personagens e os cenários permanecem nas ilustrações originais.
+As imagens completas recebem pan e zoom discretos. O flashback usa transições claras. As camadas de poeira, folhas, névoa e luz são desenhadas sobre as ilustrações.
 
 ## Controles
 

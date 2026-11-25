@@ -55,10 +55,14 @@
 #define GUARDIAN_CURSE_TILE_HEIGHT 320
 #define GUARDIAN_MELEE_RANGE 118.0f
 #define GUARDIAN_MELEE_PRESSURE_RANGE 132.0f
-#define GUARDIAN_MELEE_COOLDOWN 1.15f
+#define GUARDIAN_MELEE_COOLDOWN 4.60f
+#define GUARDIAN_MELEE_ENRAGED_COOLDOWN 3.90f
+#define GUARDIAN_MELEE_WINDUP .68f
+#define GUARDIAN_MELEE_ARC_DOT .70710678f
 #define GUARDIAN_MELEE_FPS 10.0f
 #define GUARDIAN_MELEE_FRAMES 8
 #define GUARDIAN_MELEE_HIT_FRAME 4
+#define GUARDIAN_MELEE_DURATION (GUARDIAN_MELEE_WINDUP + (GUARDIAN_MELEE_FRAMES - GUARDIAN_MELEE_HIT_FRAME) / GUARDIAN_MELEE_FPS)
 
 static float GuardianDefeatPose(const Enemy *enemy) {
     if (enemy->state == ENEMY_FALLEN) return GUARDIAN_DEFEAT_FRAMES - 1;
@@ -155,8 +159,12 @@ static int ClearingEnemyFrame(const Enemy *enemy, bool boneland) {
 }
 
 static float GuardianBodyPose(const Enemy *enemy) {
-    if (enemy->state == ENEMY_ATTACK && enemy->guardianMelee)
-        return Clamp(enemy->stateTime * GUARDIAN_MELEE_FPS, 0, GUARDIAN_MELEE_FRAMES - 1);
+    if (enemy->state == ENEMY_ATTACK && enemy->guardianMelee) {
+        float time = enemy->stateTime;
+        float pose = time < GUARDIAN_MELEE_WINDUP ? time * GUARDIAN_MELEE_HIT_FRAME / GUARDIAN_MELEE_WINDUP :
+            GUARDIAN_MELEE_HIT_FRAME + (time - GUARDIAN_MELEE_WINDUP) * GUARDIAN_MELEE_FPS;
+        return Clamp(pose, 0, GUARDIAN_MELEE_FRAMES - 1);
+    }
     if (enemy->state == ENEMY_ATTACK && enemy->bossAttack == GUARDIAN_ROOTS)
         return Clamp(enemy->stateTime * 6, 0, 8);
     if (enemy->state == ENEMY_WALK) {
@@ -263,10 +271,10 @@ static const struct {
     int damage, art;
 } igrisSkills[IGRIS_SKILL_COUNT + 1] = {
     [IGRIS_MELEE]    = {.42f, .86f, 140, .34f, 20, IGRIS_MELEE_ART},
-    [IGRIS_ECLIPSE]  = {.62f, 1.19f, 225, .50f, 28, IGRIS_ECLIPSE_ART},
-    [IGRIS_ERUPTION] = {.79f, 1.64f, 120, -1, 33, IGRIS_ERUPTION_ART},
+    [IGRIS_ECLIPSE]  = {.96f, 1.53f, 225, .50f, 28, IGRIS_ECLIPSE_ART},
+    [IGRIS_ERUPTION] = {1.12f, 1.97f, 120, -1, 33, IGRIS_ERUPTION_ART},
     [IGRIS_SPEARS]   = {.59f, 1.26f, 520, -1, 25, IGRIS_SPEARS_ART},
-    [IGRIS_VORTEX]   = {.68f, 1.41f, 182, -1, 32, IGRIS_VORTEX_ART},
+    [IGRIS_VORTEX]   = {1.00f, 1.73f, 182, -1, 32, IGRIS_VORTEX_ART},
     [IGRIS_SKILL_COUNT] = {.37f, .79f, 178, .27f, 36, IGRIS_FINAL_MELEE},
 };
 #define IGRIS_FINAL_CLAW IGRIS_SKILL_COUNT
@@ -316,6 +324,8 @@ static void UnloadEnemyMapAssets(EnemyGroup *group) {
     UnloadTexIfLoaded(&group->coveiroFall);
     UnloadTexIfLoaded(&group->coveiroWalk);
     UnloadTexIfLoaded(&group->coveiroMelee);
+    for (int i = 0; i < 4; i++) UnloadTexIfLoaded(&group->coveiroMark[i]);
+    UnloadTexIfLoaded(&group->coveiroMarkShovel);
     UnloadTexIfLoaded(&group->cemeterySpell);
     UnloadTexIfLoaded(&group->sprites);
     UnloadTexIfLoaded(&group->backSprites);
@@ -441,6 +451,18 @@ static bool LoadCemeteryEnemyAssets(EnemyGroup *group) {
     group->coveiroEmerge = LoadTexture("assets/coveiro/fluido/coveiro_visual_emergencia.png");
     group->coveiroFall = LoadTexture("assets/coveiro/fluido/coveiro_visual_queda.png");
     group->coveiroMelee = LoadTexture("assets/coveiro/fluido/coveiro_ataque_pazada.png");
+    const char *markSheets[] = {
+        "assets/coveiro/pa_cravada/arremesso.png", "assets/coveiro/pa_cravada/mergulho.png",
+        "assets/coveiro/pa_cravada/reaparecer.png", "assets/coveiro/pa_cravada/investida.png"
+    };
+    for (int i = 0; i < 4; i++) {
+        group->coveiroMark[i] = LoadTexture(markSheets[i]);
+        if (!group->coveiroMark[i].id) return false;
+        SetTextureFilter(group->coveiroMark[i],TEXTURE_FILTER_POINT);
+    }
+    group->coveiroMarkShovel = LoadTexture("assets/coveiro/pa_cravada/pa.png");
+    if (!group->coveiroMarkShovel.id) return false;
+    SetTextureFilter(group->coveiroMarkShovel,TEXTURE_FILTER_POINT);
     group->cemeterySpell = LoadTexture("assets/zumbi_lanterna_projetil.png");
     group->boss[0] = LoadTexture("assets/coveiro/fluido/coveiro_ataque_raizes.png");
     group->boss[1] = LoadTexture("assets/coveiro/fluido/coveiro_ataque_arremesso.png");
@@ -509,10 +531,10 @@ static bool LoadBonelandEnemyAssets(EnemyGroup *group) {
         SetTextureFilter(group->boneShell[i], TEXTURE_FILTER_POINT);
     }
     const char *boneSheets[BONE_SHEET_COUNT] = {
-        "assets/rasga_ossos/idle.png", "assets/rasga_ossos/marcha.png",
-        "assets/rasga_ossos/garra.png", "assets/rasga_ossos/disparo.png",
-        "assets/rasga_ossos/chuva.png", "assets/rasga_ossos/chuva_fx.png",
-        "assets/rasga_ossos/dash.png", "assets/rasga_ossos/explosao.png",
+        "assets/rasga_ossos/fluido/idle.png", "assets/rasga_ossos/fluido/marcha.png",
+        "assets/rasga_ossos/fluido/garra.png", "assets/rasga_ossos/fluido/disparo.png",
+        "assets/rasga_ossos/fluido/chuva.png", "assets/rasga_ossos/chuva_fx.png",
+        "assets/rasga_ossos/fluido/dash.png", "assets/rasga_ossos/fluido/explosao.png",
         "assets/rasga_ossos/explosao_fx.png",
     };
     for (int i = 0; i < BONE_SHEET_COUNT; i++) {
@@ -533,7 +555,7 @@ static int IgrisPoseSamples(int art) {
     switch (art) {
         case IGRIS_IDLE_ART: case IGRIS_WALK_ART: case IGRIS_MELEE_ART:
         case IGRIS_ERUPTION_ART: case IGRIS_SPEARS_ART: case IGRIS_VORTEX_ART:
-        case IGRIS_FINAL_IDLE: case IGRIS_FINAL_WALK:
+        case IGRIS_FINAL_IDLE: case IGRIS_FINAL_WALK: case IGRIS_FINAL_FALL:
         case IGRIS_Z_DOWN: case IGRIS_Z_UP: case IGRIS_Z_LEFT: case IGRIS_Z_RIGHT:
         case IGRIS_GRAB_ART: case IGRIS_ECHO_ART:
         case IGRIS_ECLIPSE_FX: case IGRIS_ERUPTION_FX: case IGRIS_SPEARS_FX:
@@ -589,7 +611,8 @@ static bool LoadTemplarEnemyAssets(EnemyGroup *group) {
     static const char *const igrisFiles[IGRIS_ART_COUNT] = {
         "idle", "walk", "melee", "eclipse", "eclipse_fx", "eruption", "eruption_fx",
         "spears", "spears_fx", "vortex", "vortex_fx", "final_idle", "final_walk", "final_melee",
-        "z_down", "z_up", "z_left", "z_right", "abyss_grab", "abyss_grab_fx", "echoes", "echoes_fx"
+        "z_down", "z_up", "z_left", "z_right", "abyss_grab", "abyss_grab_fx", "echoes", "echoes_fx",
+        "final_fall"
     };
     for (int i = 0; i < IGRIS_ART_COUNT; i++) {
         const char *directory = IgrisPoseSamples(i) > 1 ? "assets/igris/fluido" : "assets/igris";
@@ -691,7 +714,7 @@ static Vector2 SpawnPosition(const Clearing *clearing, Vector2 player) {
     return fallback;
 }
 
-enum { CLEARING_ACTIVE_LIMIT=18, CEMETERY_ACTIVE_LIMIT=20, BONELAND_ACTIVE_LIMIT=22, NEAR_RESERVE=12 };
+enum { CLEARING_ACTIVE_LIMIT=24, CEMETERY_ACTIVE_LIMIT=27, BONELAND_ACTIVE_LIMIT=30, NEAR_RESERVE=12 };
 
 static Vector2 SpawnNearPlayer(const Clearing *map,const EnemyGroup *group,Vector2 player) {
     for(int attempt=0;attempt<32;attempt++) {
@@ -728,21 +751,25 @@ static void DeployWaveReserve(EnemyGroup *group,const Clearing *map,Vector2 play
         enemy->position=reserve<=NEAR_RESERVE && (reserve%4!=0 || active==0)
             ? SpawnNearPlayer(map,group,player) : SpawnPosition(map,player);
         enemy->state=ENEMY_SPAWNING;
-        enemy->stateTime=-.15f*deployed++;
+        enemy->stateTime=-.08f*deployed++;
         reserve--;
         active++;
     }
 }
 
 static float WaveSpawnDelay(int wave, int index) {
-    return index * (.22f - (wave - 1) * .02f);
+    return index * fmaxf(.08f, .12f - (wave - 1) * .02f);
+}
+
+static int SwarmEnemyHealth(int health) {
+    return (health * 4 + 4) / 5;
 }
 
 static void StartBonelandWave(EnemyGroup *group, const Clearing *map, int wave, Vector2 player) {
     static const struct {
         int total, cultists;
     } waves[BONELAND_WAVES] = {
-        {36, 7}, {38, 10}
+        {46, 7}, {48, 10}
     };
     int index = (int)Clamp((float)wave, 1, sizeof(waves) / sizeof(waves[0])) - 1;
     int total = waves[index].total;
@@ -752,31 +779,34 @@ static void StartBonelandWave(EnemyGroup *group, const Clearing *map, int wave, 
         if (i >= total) continue;
         bool cultist = (i + 1) * cultists / total > i * cultists / total;
         bool shell = !cultist && (i == 12 || (index == 1 && i == 24));
-        int health = shell ? 145 : cultist ? 36 : 40;
+        int health = SwarmEnemyHealth(shell ? 145 : cultist ? 36 : 40);
         bool deploy=i<BONELAND_ACTIVE_LIMIT;
         group->list[i] = (Enemy){
             .type = shell ? ENEMY_SPECIAL : cultist ? ENEMY_COMMON_RANGED : ENEMY_COMMON_MELEE,
             .position = deploy?SpawnPosition(map,player):(Vector2){0},
             .state = deploy?ENEMY_SPAWNING:ENEMY_QUEUED,
             .health = health, .maxHealth = health, .stateTime = -WaveSpawnDelay(index + 1, i),
-            .speed = shell ? 74 : cultist ? 80 : index > 0 ? 125 : 118,
+            .speed = NON_BOSS_SPEED_SCALE * (shell ? 74 : cultist ? 80 : index > 0 ? 125 : 118),
             .power = index > 0 ? 1.09f : 1.0f, .attackCooldown = .8f,
             .facing = 0, .lastKatanaSwing = -1
         };
     }
 }
 
-static void StartTemplarWave(EnemyGroup *group, int wave) {
+static void StartTemplarWave(EnemyGroup *group, const Clearing *map, int wave) {
     static const struct {
         TemplarRole role;
         Vector2 position;
-    } formations[][5] = {
+    } formations[][8] = {
         {{TEMPLAR_SHIELD, {750, 445}}, {TEMPLAR_SHIELD, {835, 470}},
          {TEMPLAR_SHIELD, {920, 445}}, {TEMPLAR_CROSSBOW, {470, 365}},
-         {TEMPLAR_CROSSBOW, {1200, 365}}},
+         {TEMPLAR_CROSSBOW, {1200, 365}}, {TEMPLAR_SHIELD, {575, 460}},
+         {TEMPLAR_SHIELD, {1100, 460}}, {TEMPLAR_CROSSBOW, {835, 340}}},
         {{TEMPLAR_EXECUTIONER, {670, 473}},
          {TEMPLAR_EXECUTIONER, {1000, 473}}, {TEMPLAR_SHIELD, {755, 402}},
-         {TEMPLAR_SHIELD, {915, 402}}, {TEMPLAR_CROSSBOW, {1090, 350}}},
+         {TEMPLAR_SHIELD, {915, 402}}, {TEMPLAR_CROSSBOW, {1090, 350}},
+         {TEMPLAR_SHIELD, {525, 445}}, {TEMPLAR_SHIELD, {1150, 445}},
+         {TEMPLAR_CROSSBOW, {580, 350}}},
     };
     static const struct {
         EnemyType type;
@@ -793,14 +823,16 @@ static void StartTemplarWave(EnemyGroup *group, int wave) {
         group->list[i] = (Enemy){.state = ENEMY_GONE};
         if (i >= count) continue;
         TemplarRole role = formations[formation][i].role;
+        Vector2 position = formations[formation][i].position;
+        if (IsMapActorBlocked(map, position)) FindFreeMapPosition(map, position, &position);
+        int health = SwarmEnemyHealth((int)ceilf(stats[role].health * .90f));
         group->list[i] = (Enemy){
             .templarRole = role, .type = stats[role].type, .state = ENEMY_SPAWNING,
-            .position = formations[formation][i].position,
-            .health = (int)ceilf(stats[role].health * .90f),
-            .maxHealth = (int)ceilf(stats[role].health * .90f),
-            .speed = stats[role].speed, .power = stats[role].power,
+            .position = position,
+            .health = health, .maxHealth = health,
+            .speed = NON_BOSS_SPEED_SCALE * stats[role].speed, .power = stats[role].power,
             .attackCooldown = role == TEMPLAR_CROSSBOW ? .65f + .1f * i : .8f,
-            .stateTime = -.12f * i, .lastKatanaSwing = -1
+            .stateTime = -.08f * i, .lastKatanaSwing = -1
         };
     }
 }
@@ -817,7 +849,7 @@ void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
     ClearEnemyAttacks(group);
     group->playerHitCooldown = 0;
     if (clearing->templarField) {
-        StartTemplarWave(group, wave);
+        StartTemplarWave(group, clearing, wave);
         return;
     }
     if (clearing->boneland) {
@@ -829,8 +861,8 @@ void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
         return;
     }
     bool clearingWave = ClearingMapId(clearing) == CLEARING_MAP;
-    static const int clearingCounts[CLEARING_WAVES] = {26,30};
-    static const int cemeteryCounts[CEMETERY_WAVES] = {32,36};
+    static const int clearingCounts[CLEARING_WAVES] = {34,40};
+    static const int cemeteryCounts[CEMETERY_WAVES] = {42,46};
     int total = clearing->cemetery ? cemeteryCounts[(int)Clamp(wave,1,CEMETERY_WAVES)-1] :
         clearingWave ? clearingCounts[(int)Clamp(wave,1,CLEARING_WAVES)-1] : 7 + (wave - 1) * 4;
     bool staggered=clearingWave || clearing->cemetery;
@@ -854,8 +886,9 @@ void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
         if (clearing->cemetery) enemy->maxHealth+=90;
         enemy->maxHealth = (int)ceilf(enemy->maxHealth * .90f);
         if(staggered) enemy->maxHealth=(enemy->maxHealth+1)/2;
+        enemy->maxHealth = SwarmEnemyHealth(enemy->maxHealth);
         enemy->health = enemy->maxHealth;
-        enemy->speed = ENEMY_SPEED * (1.0f + (wave-1)*.045f);
+        enemy->speed = NON_BOSS_SPEED_SCALE * ENEMY_SPEED * (1.0f + (wave-1)*.045f);
         enemy->power = 1.0f + (wave-1)*.09f;
         if (clearingWave || clearing->cemetery)
             enemy->damageScale = CLEARING_ENEMY_DAMAGE_SCALE * (clearing->cemetery ? 1.30f : 1.0f);
@@ -895,7 +928,7 @@ void StartArenaBoss(EnemyGroup *group, const Clearing *clearing, Vector2 player,
             (clearing->cemetery ? CEMETERY_BOSS_HEALTH_BONUS : 0),
         .speed = clearing->village || clearing->templarField ? 185 : (clearing->cemetery ? 160 : 100),
         .power = power, .attackCooldown = 1.25f, .lastKatanaSwing = -1,
-        .bossAttack = (clearing->cemetery ? COVEIRO_ATTACK_COUNT : GUARDIAN_ATTACK_COUNT) - 1};
+        .bossAttack = clearing->cemetery ? COVEIRO_CHARGE : GUARDIAN_ATTACK_COUNT - 1};
     boss->health = boss->maxHealth;
     if (clearing->boneland) {
         boss->bossAttack = BONE_BLAST;
@@ -919,7 +952,8 @@ float EnemyHurtRadius(const Enemy *enemy) {
 }
 
 bool EnemyCanBeHit(const Enemy *enemy) {
-    if (enemy->guardianPhase == GUARDIAN_PHASE_TRANSITION) return false;
+    if (enemy->guardianPhase == GUARDIAN_PHASE_TRANSITION ||
+        (enemy->state == ENEMY_ATTACK && enemy->coveiroBuried)) return false;
     return enemy->state != ENEMY_DIE && enemy->state != ENEMY_GONE &&
            enemy->state != ENEMY_SPAWNING && enemy->state != ENEMY_QUEUED &&
            enemy->state != ENEMY_FALLEN && enemy->health > 0;
@@ -1101,6 +1135,42 @@ static void PlaceGuardianRoot(EnemyGroup *group, Vector2 position, GuardianAttac
     }
 }
 
+Vector2 ReadBossPlayerVelocity(const Enemy *boss, Vector2 player, float dt) {
+    if (boss->hasPlayerPosition && dt > 0 && dt <= .12f) {
+        Vector2 velocity = Vector2Scale(Vector2Subtract(player,boss->previousPlayerPosition),1/dt);
+        if (Vector2LengthSqr(velocity) <= 850*850) return velocity;
+    }
+    return (Vector2){0};
+}
+
+Vector2 SampleBossPlayerVelocity(Enemy *boss, Vector2 player, float dt) {
+    Vector2 velocity = ReadBossPlayerVelocity(boss,player,dt);
+    boss->previousPlayerPosition = player;
+    boss->hasPlayerPosition = true;
+    return velocity;
+}
+
+Vector2 PredictBossTarget(const Clearing *map, Vector2 origin, Vector2 player,
+                          Vector2 velocity, float lead) {
+    Vector2 offset = Vector2Scale(velocity,lead);
+    if (Vector2LengthSqr(offset) <= .01f) return player;
+    offset = Vector2ClampValue(offset,0,105);
+    Vector2 target = Vector2Add(player,offset);
+    if (IsMapActorBlocked(map,target) || !MapHasClearPath(map,player,target) ||
+        !MapHasClearPath(map,origin,target)) return player;
+    return target;
+}
+
+static void AimBossAttack(Enemy *boss, Vector2 target) {
+    boss->attackTarget = target;
+    Vector2 offset = Vector2Subtract(target,boss->position);
+    if (Vector2LengthSqr(offset) <= .001f) return;
+    boss->attackDirection = Vector2Normalize(offset);
+    boss->facing = FacingToward(offset);
+}
+
+static void MoveEnemyStraight(const Clearing *map, Enemy *boss, float distance);
+
 static void StartGuardianCast(EnemyGroup *group, const Clearing *clearing,
                               Enemy *enemy, Vector2 player) {
     enemy->attackCooldown = GuardianEnraged(enemy) ? 1.55f : 2.25f;
@@ -1137,19 +1207,19 @@ static void StartGuardianCast(EnemyGroup *group, const Clearing *clearing,
 
 static void UpdateGuardianMelee(EnemyGroup *group, const Clearing *clearing, Enemy *enemy, Vector2 player,
                                 bool playerDodging, int *playerHealth) {
-    if (!enemy->attackConnected && EnemyAnimationFrame(enemy) >= GUARDIAN_MELEE_HIT_FRAME) {
+    if (!enemy->attackConnected && enemy->stateTime >= GUARDIAN_MELEE_WINDUP) {
         enemy->attackConnected = true;
         Vector2 offset = Vector2Subtract(player, enemy->position);
         float distance = Vector2Length(offset);
         if (!playerDodging && *playerHealth > 0 && group->playerHitCooldown <= 0 &&
             distance <= GUARDIAN_MELEE_RANGE &&
-            Vector2DotProduct(offset, enemy->attackDirection) >= distance * .48f &&
+            Vector2DotProduct(offset, enemy->attackDirection) >= distance * GUARDIAN_MELEE_ARC_DOT &&
             MapHasClearPath(clearing, enemy->position, player)) {
             *playerHealth = (int)fmaxf(0, *playerHealth - GUARDIAN_MELEE_DAMAGE * enemy->power);
             group->playerHitCooldown = .65f;
         }
     }
-    if (enemy->stateTime >= GUARDIAN_MELEE_FRAMES / GUARDIAN_MELEE_FPS) {
+    if (enemy->stateTime >= GUARDIAN_MELEE_DURATION) {
         enemy->state = ENEMY_IDLE;
         enemy->stateTime = 0;
         enemy->guardianMelee = false;
@@ -1177,6 +1247,90 @@ static const struct {
     [BONE_DASH]   = {440, .83f, 1.10f, 1.37f,  64, 32},
     [BONE_BLAST]  = {220, .72f, 1.03f, 1.40f, 220, 38},
 };
+
+void CollectEnemyLights(const EnemyGroup *group, SceneLights *scene) {
+    const Vector3 amber = {1.0f,.67f,.38f};
+    const Vector3 violet = {.63f,.36f,1.0f};
+    const Vector3 green = {.47f,1.0f,.34f};
+    const Enemy *boss = &group->list[0];
+    if (group->cemetery) CollectCoveiroLights(group, scene);
+    if (boss->type == ENEMY_BOSS && boss->state == ENEMY_ATTACK) {
+        if (group->boneland && boss->bossAttack == BONE_BLAST) {
+            float elapsed = boss->stateTime - boneAttacks[BONE_BLAST].windup;
+            if (elapsed >= 0 && elapsed < .38f) {
+                float tail = 1 - elapsed / .38f;
+                static const Vector2 forward[] = {{0,1},{0,-1},{-1,0},{1,0}};
+                // O clarão nasce à frente das patas, permitindo uma sombra atrás do corpo.
+                Vector2 origin = Vector2Add(boss->position, Vector2Scale(forward[boss->facing], 56));
+                AddSceneLight(scene,origin,224 + 120 * (1 - tail),tail*tail*.84f,amber);
+            }
+        } else if (boss->templarRole == TEMPLAR_MARSHAL) {
+            int skill = boss->bossAttack;
+            if (skill == IGRIS_ERUPTION || skill == IGRIS_VORTEX || skill == IGRIS_ECLIPSE) {
+                float elapsed = boss->stateTime - igrisSkills[skill].impact;
+                if (elapsed >= 0 && elapsed < .35f) {
+                    Vector2 impact = skill == IGRIS_ERUPTION ? boss->attackTarget : boss->position;
+                    AddSceneLight(scene,impact,195,.61f*(1-elapsed/.35f),violet);
+                }
+            }
+        }
+    }
+    for (int i = 0; i < ENEMY_ROOT_COUNT && scene->count < SCENE_LIGHT_LIMIT; i++) {
+        const EnemyRoot *root = &group->rootAttacks[i];
+        if (!root->active) continue;
+        float impact = group->cemetery ? .8f : guardianHazards[root->attack].hitStart;
+        float age = root->age - impact;
+        if (age >= 0 && age < .35f)
+            AddSceneLight(scene,root->position,145,.44f*(1-age/.35f),
+                          group->cemetery || root->attack == GUARDIAN_CURSE ? violet : amber);
+    }
+    for (int i = 0; i < NECROMANCER_SHOTS && scene->count < SCENE_LIGHT_LIMIT; i++) {
+        const NecromancerShot *shot = &group->necromancer.shots[i];
+        if (shot->life > 0)
+            AddSceneLight(scene,shot->position,110,.37f*fminf(1,shot->life/.15f),violet);
+    }
+    for (int i = 0; i < ENEMY_PROJECTILE_COUNT && scene->count < SCENE_LIGHT_LIMIT; i++) {
+        const EnemyProjectile *shot = &group->projectiles[i];
+        if (shot->remaining <= 0) continue;
+        float fade = fminf(1,shot->remaining/.15f);
+        if (shot->boneShot) AddSceneLight(scene,shot->position,105,.42f*fade,amber);
+        else if (shot->umbraSpear) AddSceneLight(scene,shot->position,115,.43f*fade,violet);
+        else if (group->cemetery) AddSceneLight(scene,shot->position,110,.39f*fade,green);
+        else if (group->boneland) AddSceneLight(scene,shot->position,95,.24f*fade,amber);
+    }
+}
+
+static bool BoneLordHidden(const Enemy *boss) {
+    return boss->state == ENEMY_ATTACK && boss->bossAttack == BONE_DASH &&
+           boss->stateTime >= BONE_DASH_HIDE && boss->stateTime < BONE_DASH_REAPPEAR;
+}
+
+void CollectActorShadows(const EnemyGroup *group, Vector2 player, float dodgeLift, SceneLights *scene) {
+    AddSceneCaster(scene,player,24 + 5*dodgeLift,91,.65f - .31f*dodgeLift,SCENE_MAIN_ACTOR);
+    for (int i = 0; i < ENEMY_COUNT; i++) {
+        const Enemy *enemy = &group->list[i];
+        if (enemy->state == ENEMY_GONE || enemy->state == ENEMY_QUEUED ||
+            enemy->state == ENEMY_DIE || enemy->state == ENEMY_FALLEN || enemy->necromancerWraith)
+            continue;
+        bool boss = enemy->type == ENEMY_BOSS;
+        if ((group->boneland && boss && BoneLordHidden(enemy)) ||
+            (enemy->state == ENEMY_ATTACK && enemy->coveiroBuried))
+            continue;
+        bool emerging = enemy->state == ENEMY_SPAWNING;
+        if (emerging && !boss && !group->village) continue;
+        float reveal = emerging ? Clamp(enemy->stateTime, 0, 1) : 1;
+        if (reveal <= 0) continue;
+        if (boss) {
+            float radius = group->boneland ? 46 : group->cemetery ? 37 :
+                           group->village ? 27 : enemy->necromancerForm ? 34 : 39;
+            AddSceneCaster(scene,enemy->position,radius,136,.55f*reveal,SCENE_MAIN_ACTOR);
+        } else {
+            bool heavy = enemy->type == ENEMY_SPECIAL || enemy->type == ENEMY_ELITE || enemy->villageBrute;
+            AddSceneCaster(scene,enemy->position,heavy?24:17,heavy?60:43,
+                           (heavy?.44f:.36f)*reveal,SCENE_MINION);
+        }
+    }
+}
 
 static void MoveEnemyStraight(const Clearing *map, Enemy *boss, float distance) {
     int steps = (int)ceilf(distance / 4.0f);
@@ -1222,6 +1376,7 @@ static Vector2 BoneDashFlank(const Clearing *map, Vector2 origin, Vector2 direct
 
 static void UpdateBoneLord(EnemyGroup *group, const Clearing *map, Enemy *boss,
                            Vector2 player, float dt, bool dodging, int *health) {
+    Vector2 velocity = SampleBossPlayerVelocity(boss,player,dt);
     Vector2 toPlayer = Vector2Subtract(player, boss->position);
     float distance = Vector2Length(toPlayer);
     if (boss->state != ENEMY_ATTACK) {
@@ -1256,8 +1411,17 @@ static void UpdateBoneLord(EnemyGroup *group, const Clearing *map, Enemy *boss,
             if (attack >= 0 && distance <= boneAttacks[attack].range) {
                 boss->bossAttack = attack;
                 boss->attackDirection = distance > .001f ? Vector2Normalize(toPlayer) : (Vector2){0, 1};
-                boss->attackTarget = attack == BONE_DASH ?
-                    BoneDashFlank(map, boss->position, boss->attackDirection, player) : player;
+                float lead = attack == BONE_RANGED ? .24f + fminf(.22f,distance/BONE_SHOT_SPEED) : .24f;
+                Vector2 target = PredictBossTarget(map,boss->position,player,velocity,lead);
+                if (attack != BONE_BLAST) AimBossAttack(boss,target);
+                if (attack == BONE_DASH) {
+                    Vector2 flank = BoneDashFlank(map,boss->position,boss->attackDirection,target);
+                    if (Vector2DistanceSqr(boss->position,flank) <= 1) {
+                        AimBossAttack(boss,player);
+                        flank = BoneDashFlank(map,boss->position,boss->attackDirection,player);
+                    }
+                    boss->attackTarget = flank;
+                }
                 boss->state = ENEMY_ATTACK;
                 boss->stateTime = 0;
                 boss->attackConnected = false;
@@ -1286,7 +1450,8 @@ static void UpdateBoneLord(EnemyGroup *group, const Clearing *map, Enemy *boss,
             MoveEnemy(map, boss, Vector2Scale(remaining, fraction));
         }
         if (previous < BONE_DASH_REAPPEAR && t >= BONE_DASH_REAPPEAR) {
-            Vector2 aim = Vector2Subtract(player, boss->position);
+            Vector2 target = PredictBossTarget(map,boss->position,player,velocity,.20f);
+            Vector2 aim = Vector2Subtract(target,boss->position);
             if (Vector2LengthSqr(aim) > .001f) boss->attackDirection = Vector2Normalize(aim);
             boss->facing = FacingToward(boss->attackDirection);
         }
@@ -1481,7 +1646,7 @@ static void UpdateIgrisZ(EnemyGroup *group, const Clearing *map, Enemy *boss,
     if (t >= igrisZFrames[12]) {
         boss->state = ENEMY_IDLE;
         boss->stateTime = 0;
-        boss->attackCooldown = .36f;
+        boss->attackCooldown = .14f;
     }
 }
 
@@ -1558,10 +1723,29 @@ static float IgrisEchoLaunch(int index) {
     return IGRIS_ECHO_PLANT + IGRIS_ECHO_WARNING + index*IGRIS_ECHO_GAP;
 }
 
+static Vector2 AimIgrisEcho(const Clearing *map, Vector2 start, Vector2 player, Vector2 fallback) {
+    Vector2 delta = Vector2Subtract(player,start);
+    float distance = Vector2Length(delta);
+    if (distance < .001f) return fallback;
+    Vector2 aim = Vector2Scale(delta,1/distance);
+    float reach = fminf(distance+96,360);
+    Vector2 end = start;
+    for (float traveled = 0; traveled < reach; ) {
+        traveled = fminf(traveled+8,reach);
+        Vector2 next = Vector2Add(start,Vector2Scale(aim,traveled));
+        if (IsMapActorBlocked(map,next) || !MapHasClearPath(map,end,next)) break;
+        end = next;
+    }
+    return end;
+}
+
 static void UpdateIgrisEchoes(EnemyGroup *group, const Clearing *map, Enemy *boss,
                               Vector2 player, float dt, bool dodging, int *health) {
     for (int i = 0; i < 3; i++) {
         float launch = IgrisEchoLaunch(i);
+        float warning = IGRIS_ECHO_PLANT + i*IGRIS_ECHO_GAP;
+        if (boss->stateTime >= warning && boss->stateTime-dt < warning)
+            boss->igrisEchoTo[i] = AimIgrisEcho(map,boss->igrisEchoFrom[i],player,boss->igrisEchoTo[i]);
         float age = boss->stateTime-launch;
         unsigned hit = 1u << i;
         if (age < 0 || age-dt >= IGRIS_ECHO_TRAVEL || (boss->igrisEchoHits & hit)) continue;
@@ -1586,6 +1770,7 @@ static void UpdateIgrisEchoes(EnemyGroup *group, const Clearing *map, Enemy *bos
 
 static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vector2 player,
                         float dt, bool dodging, int *health) {
+    Vector2 velocity = SampleBossPlayerVelocity(boss,player,dt);
     Vector2 delta = Vector2Subtract(player,boss->position);
     float distance = Vector2Length(delta);
     Vector2 direction = distance > .001f ? Vector2Scale(delta,1/distance) : (Vector2){0,1};
@@ -1597,18 +1782,22 @@ static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
         if (boss->attackCooldown <= 0 && MapHasClearPath(map,boss->position,player)) {
             int skill = -1;
             if (boss->igrisFinalForm) {
+                Vector2 target = PredictBossTarget(map,boss->position,player,velocity,.24f);
                 skill = IGRIS_FINAL_CLAW;
-                if (boss->attackBurst == 3 && distance <= 420 && PlanIgrisEchoes(map,boss,player,direction))
+                if (boss->attackBurst == 3 && distance <= 420 && PlanIgrisEchoes(map,boss,target,direction))
                     skill = IGRIS_ECLIPSE_ECHOES;
+                else if (distance > 178 && distance <= IGRIS_GRAB_REACH && boss->bossAttack != IGRIS_ABYSS_GRAB)
+                    skill = IGRIS_ABYSS_GRAB;
                 else if (boss->attackBurst == 2 && distance <= IGRIS_GRAB_REACH)
                     skill = IGRIS_ABYSS_GRAB;
                 else if (boss->bossAttack != IGRIS_Z_RIP && (boss->attackBurst == 1 || distance > 178) &&
-                    distance <= 340 && PlanIgrisZ(map,boss,player))
+                    distance <= 340 && (PlanIgrisZ(map,boss,target) ||
+                    (Vector2DistanceSqr(target,player) > .01f && PlanIgrisZ(map,boss,player))))
                     skill = IGRIS_Z_RIP;
                 else if (distance > 178 && distance <= IGRIS_GRAB_REACH)
                     skill = IGRIS_ABYSS_GRAB;
                 else if (distance > IGRIS_GRAB_REACH && distance <= 420 &&
-                         boss->bossAttack != IGRIS_ECLIPSE_ECHOES && PlanIgrisEchoes(map,boss,player,direction))
+                         boss->bossAttack != IGRIS_ECLIPSE_ECHOES && PlanIgrisEchoes(map,boss,target,direction))
                     skill = IGRIS_ECLIPSE_ECHOES;
                 float reach = skill == IGRIS_ECLIPSE_ECHOES ? 420 : skill == IGRIS_ABYSS_GRAB ? IGRIS_GRAB_REACH :
                     skill == IGRIS_Z_RIP ? 340 : igrisSkills[skill].reach;
@@ -1627,6 +1816,10 @@ static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
                         candidate == IGRIS_ERUPTION ? 18+(distance>180?12:0)+(distance>225?10:0) :
                         15+(distance>270?25:0)+(distance>320?5:0);
                     if (candidate == boss->bossAttack) score -= 20;
+                    if (distance > 180 &&
+                        ((boss->bossAttack == IGRIS_SPEARS && candidate == IGRIS_ERUPTION) ||
+                         (boss->bossAttack == IGRIS_ERUPTION && candidate == IGRIS_SPEARS)))
+                        score += enraged ? 16 : 8;
                     if (boss->attackBurst == 0 && candidate == IGRIS_ECLIPSE) score += 15;
                     if (score > bestScore) {skill=candidate;bestScore=score;}
                 }
@@ -1636,6 +1829,10 @@ static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
                 boss->bossAttack = skill;
                 boss->attackDirection = direction;
                 boss->attackTarget = player;
+                if (skill != IGRIS_Z_RIP && skill != IGRIS_ECLIPSE_ECHOES && skill != IGRIS_VORTEX) {
+                    float lead = skill == IGRIS_SPEARS ? .24f + fminf(.22f,distance/UMBRA_SPEAR_SPEED) : .24f;
+                    AimBossAttack(boss,PredictBossTarget(map,boss->position,player,velocity,lead));
+                }
                 boss->state = ENEMY_ATTACK;
                 boss->stateTime = 0;
                 boss->attackConnected = false;
@@ -1645,6 +1842,8 @@ static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
         if (distance > 90) {
             Vector2 start = boss->position;
             float speedScale = boss->igrisFinalForm ? 1.30f : enraged ? 1.13f : 1;
+            if (!boss->igrisFinalForm && distance > 180)
+                speedScale = enraged ? 1.26f : 1.12f;
             MoveEnemyTactically(group,map,boss,player,boss->speed*dt*speedScale);
             Vector2 step = Vector2Subtract(boss->position,start);
             float traveled = Vector2Length(step);
@@ -1660,6 +1859,17 @@ static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
     }
 
     int skill = boss->bossAttack;
+    float time = boss->stateTime;
+    if (skill == IGRIS_ECLIPSE || skill == IGRIS_ERUPTION || skill == IGRIS_SPEARS ||
+        skill == IGRIS_ABYSS_GRAB) {
+        float impact = skill == IGRIS_ABYSS_GRAB ? IGRIS_GRAB_IMPACT : igrisSkills[skill].impact;
+        float lockedWarning = skill == IGRIS_ECLIPSE || skill == IGRIS_ERUPTION ? .58f : .24f;
+        if (time <= impact - lockedWarning) {
+            float lead = fminf(.32f,fmaxf(.24f,impact-time));
+            if (skill == IGRIS_SPEARS) lead += fminf(.22f,distance/UMBRA_SPEAR_SPEED);
+            AimBossAttack(boss,PredictBossTarget(map,boss->position,player,velocity,lead));
+        }
+    }
     if (skill == IGRIS_Z_RIP) {
         UpdateIgrisZ(group,map,boss,player,dt,dodging,health);
         return;
@@ -1672,8 +1882,21 @@ static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
         UpdateIgrisEchoes(group,map,boss,player,dt,dodging,health);
         return;
     }
-    float time = boss->stateTime;
-    if (!boss->attackConnected && time >= igrisSkills[skill].impact) {
+    if (skill == IGRIS_ECLIPSE) {
+        float impact = igrisSkills[skill].impact;
+        float active = fmaxf(0,fminf(time,impact+.12f)-fmaxf(time-dt,impact-.12f));
+        float remaining = Vector2DotProduct(Vector2Subtract(boss->attackTarget,boss->position),boss->attackDirection)-72;
+        if (active > 0 && remaining > 0) MoveEnemyStraight(map,boss,fminf(remaining,active*520));
+        Vector2 offset = Vector2Subtract(player,boss->position);
+        float reach = Vector2Length(offset);
+        if (!boss->attackConnected && !dodging && time >= impact && time-dt < impact+.12f &&
+            reach <= igrisSkills[skill].reach &&
+            Vector2DotProduct(offset,boss->attackDirection) >= reach*igrisSkills[skill].arcDot &&
+            MapHasClearPath(map,boss->position,player)) {
+            boss->attackConnected = true;
+            HurtByTemplar(group,player,health,false,IgrisHitDamage(boss,igrisSkills[skill].damage));
+        }
+    } else if (!boss->attackConnected && time >= igrisSkills[skill].impact) {
         boss->attackConnected = true;
         int damage = IgrisHitDamage(boss,igrisSkills[skill].damage);
         if (skill == IGRIS_SPEARS) {
@@ -1689,7 +1912,11 @@ static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
     if (time >= igrisSkills[skill].duration) {
         boss->state = ENEMY_IDLE;
         boss->stateTime = 0;
-        boss->attackCooldown = boss->igrisFinalForm ? .16f : enraged ? .22f : .43f;
+        if (boss->igrisFinalForm) boss->attackCooldown = .16f;
+        else if (skill == IGRIS_ECLIPSE || skill == IGRIS_ERUPTION || skill == IGRIS_VORTEX)
+            boss->attackCooldown = .60f;
+        else if (distance > 180) boss->attackCooldown = enraged ? .12f : .24f;
+        else boss->attackCooldown = enraged ? .18f : .35f;
     }
 }
 
@@ -1733,8 +1960,11 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 enemy->bossAttack = enemy->templarRole == TEMPLAR_MARSHAL ? IGRIS_MELEE :
                     group->boneland ? BONE_CLAW : group->cemetery ? COVEIRO_SHOVEL : GUARDIAN_ROOT_WAVE;
                 enemy->coveiroPhaseOpening = group->cemetery;
+                enemy->coveiroCombo = COVEIRO_COMBO_NONE;
                 enemy->attackCooldown = .20f;
-                enemy->guardianMeleeCooldown = .90f;
+                bool clearingGuardian = enemy->type == ENEMY_BOSS && enemy->templarRole == TEMPLAR_NONE &&
+                                        !group->cemetery && !group->boneland && !group->village;
+                enemy->guardianMeleeCooldown = clearingGuardian ? fmaxf(.90f, enemy->guardianMeleeCooldown) : .90f;
             }
             continue;
         }
@@ -1757,7 +1987,9 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             if (enemy->type == ENEMY_BOSS) ClearEnemyAttacks(group);
             bool humanBoss = enemy->type == ENEMY_BOSS &&
                              (group->village || enemy->templarRole == TEMPLAR_MARSHAL);
-            float dieDuration = humanBoss ? 1.35f : ENEMY_DEFEAT_DURATION;
+            float dieDuration = group->cemetery && enemy->type == ENEMY_BOSS ? COVEIRO_DEFEAT_DURATION :
+                group->boneland && enemy->type == ENEMY_BOSS ? BONE_LORD_DEFEAT_DURATION :
+                humanBoss ? 1.35f : ENEMY_DEFEAT_DURATION;
             if (enemy->stateTime >= dieDuration) {
                 bool requiresSeal = enemy->type == ENEMY_BOSS ||
                     (enemy->templarRole == TEMPLAR_NONE && enemy->type == ENEMY_SPECIAL);
@@ -1793,6 +2025,8 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             VillageUpdateBoss(group, clearing, enemy, player, dt, playerDodging, playerHealth);
             continue;
         }
+        Vector2 guardianVelocity = enemy->type == ENEMY_BOSS ?
+            SampleBossPlayerVelocity(enemy,player,dt) : (Vector2){0};
         if (enemy->templarRole == TEMPLAR_STANDARD) continue; /* Estabelece a posição ao pé da escadaria. */
         if (enemy->state == ENEMY_ATTACK) {
             if (enemy->templarRole == TEMPLAR_EXECUTIONER) {
@@ -1815,7 +2049,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             }
             if (enemy->type == ENEMY_BOSS) {
                 if (enemy->guardianMelee) {
-                    UpdateGuardianMelee(group, clearing, enemy, player, playerDodging, playerHealth);
+                    UpdateGuardianMelee(group,clearing,enemy,player,playerDodging,playerHealth);
                     continue;
                 }
                 bool roots = enemy->bossAttack == GUARDIAN_ROOTS;
@@ -1938,12 +2172,13 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 enemy->attackConnected = false;
                 enemy->attackDirection = distance > .01f ? Vector2Normalize(toPlayer) : (Vector2){0,1};
                 if (melee) {
-                    const Vector2 directions[] = {{0,1}, {0,-1}, {-1,0}, {1,0}};
                     enemy->guardianMelee = true;
-                    enemy->guardianMeleeCooldown = GuardianEnraged(enemy) ? 1.0f : GUARDIAN_MELEE_COOLDOWN;
-                    enemy->attackDirection = directions[enemy->facing];
+                    enemy->guardianMeleeCooldown = GuardianEnraged(enemy) ?
+                        GUARDIAN_MELEE_ENRAGED_COOLDOWN : GUARDIAN_MELEE_COOLDOWN;
                 } else if (enemy->type == ENEMY_BOSS) {
-                    StartGuardianCast(group, clearing, enemy, player);
+                    Vector2 target = PredictBossTarget(clearing,enemy->position,player,guardianVelocity,.24f);
+                    AimBossAttack(enemy,target);
+                    StartGuardianCast(group,clearing,enemy,target);
                 } else {
                     if (enemy->templarRole == TEMPLAR_EXECUTIONER) enemy->attackTarget = player;
                     enemy->attackCooldown = enemy->templarRole == TEMPLAR_EXECUTIONER ? 1.78f :
@@ -2415,7 +2650,7 @@ static void DrawIgrisBody(Texture2D tex, int art, int columns, int rows, float p
         [IGRIS_SPEARS_ART] = {195,264}, [IGRIS_VORTEX_ART] = {208,264},
         [IGRIS_FINAL_IDLE] = {232,280}, [IGRIS_FINAL_WALK] = {232,280},
         [IGRIS_FINAL_MELEE] = {234,280}, [IGRIS_GRAB_ART] = {188,267},
-        [IGRIS_ECHO_ART] = {190,252},
+        [IGRIS_ECHO_ART] = {190,252}, [IGRIS_FINAL_FALL] = {178,212},
         [IGRIS_Z_DOWN] = {237,312}, [IGRIS_Z_UP] = {250,322},
         [IGRIS_Z_LEFT] = {208,303}, [IGRIS_Z_RIGHT] = {222,304},
     };
@@ -2460,6 +2695,17 @@ static void DrawTemplarSprite(const EnemyGroup *group, const Enemy *enemy,
                               Vector2 position, int facing, int frame, float tilt, Color tint);
 
 static void DrawIgris(const EnemyGroup *group, const Enemy *enemy) {
+    if (enemy->igrisFinalForm && (enemy->state == ENEMY_DIE || enemy->state == ENEMY_FALLEN)) {
+        const float moments[] = {0,.16f,.33f,.53f,.73f,.96f,IGRIS_DEFEAT_DURATION};
+        bool fallen = enemy->state == ENEMY_FALLEN;
+        float pose = fallen ? 5 : IgrisTimedPose(enemy->stateTime,moments,6);
+        Vector2 feet = enemy->position;
+        if (fallen) DrawBossGroundSeal(group->sealMarker,feet);
+        DrawIgrisBody(group->igrisArt[IGRIS_FINAL_FALL],IGRIS_FINAL_FALL,6,4,pose,IgrisRow(enemy->facing),
+                      feet,false,0,WHITE);
+        if (fallen) DrawGameText("E: selar",(int)feet.x-30,(int)feet.y+12,18,GOLD);
+        return;
+    }
     int art = IGRIS_IDLE_ART, columns = 8, facing = enemy->facing;
     if (enemy->igrisFinalForm) {
         art = IGRIS_FINAL_IDLE;
@@ -2716,7 +2962,7 @@ static void DrawIgrisEchoes(const EnemyGroup *group, const Enemy *boss) {
     DrawIgrisEffect(art,6,0,t < IGRIS_ECHO_FADE ? 1 : 5,boss->position,155,.65f,0,Fade(WHITE,fade));
     for (int i = 0; i < 3; i++) {
         float age = t-IgrisEchoLaunch(i);
-        if (age < -IGRIS_ECHO_WARNING) continue;
+        if (t < IGRIS_ECHO_PLANT + i*IGRIS_ECHO_GAP) continue;
         Vector2 from = boss->igrisEchoFrom[i], to = boss->igrisEchoTo[i];
         Vector2 direction = Vector2Subtract(to,from);
         int row = IgrisRow(FacingToward(direction));
@@ -2814,6 +3060,10 @@ static void DrawIgrisWarning(const EnemyGroup *group, const Enemy *boss) {
             float heading = atan2f(boss->attackDirection.y,boss->attackDirection.x)*RAD2DEG;
             float spread = acosf(igrisSkills[skill].arcDot)*RAD2DEG;
             DrawCircleSector(center,radius,heading-spread,heading+spread,30,Fade(PURPLE,opacity));
+            if (skill == IGRIS_ECLIPSE) {
+                float travel = Clamp(Vector2Distance(center,boss->attackTarget)-72,0,125);
+                DrawLineEx(center,Vector2Add(center,Vector2Scale(boss->attackDirection,travel)),4,Fade(VIOLET,.75f));
+            }
         }
         return;
     }
@@ -2992,8 +3242,9 @@ static void DrawBoneLordWarning(const EnemyGroup *group, const Enemy *boss) {
         bool rain = attack == BONE_RAIN;
         Vector2 center = rain ? boss->attackTarget : boss->position;
         if (t < windup) {
-            DrawCircleV(center, radius, Fade(RED, strength * .19f));
-            DrawRing(center, radius - 3, radius, 0, 360, 64, Fade(ORANGE, strength));
+            Color ivory = {255, 226, 175, 255};
+            DrawCircleV(center, radius, Fade(RED, strength * .14f));
+            DrawRing(center, radius - 3, radius, 0, 360, 64, Fade(ivory, strength));
         }
         int frame;
         if (rain) {
@@ -3027,81 +3278,126 @@ static void DrawBoneLordWarning(const EnemyGroup *group, const Enemy *boss) {
     }
 }
 
+enum { BONE_BODY_SAMPLES = 3, BONE_BODY_BOTTOM_PAD = 68 };
+
+static float BoneBodyPoseAt(float time, float start, float end, int count) {
+    return Clamp((time - start) / (end - start) * count, 0, count - 1.0f / BONE_BODY_SAMPLES);
+}
+
+static Rectangle BoneBodyFrame(Texture2D texture, int columns, int rows, int row, float pose) {
+    int sample = (int)(pose * BONE_BODY_SAMPLES);
+    return BoneFrame(texture, columns, rows * BONE_BODY_SAMPLES,
+                     sample / BONE_BODY_SAMPLES, row + sample % BONE_BODY_SAMPLES * rows);
+}
+
+static void DrawBoneLordCollapse(const EnemyGroup *group, const Enemy *boss, int row) {
+    bool fallen = boss->state == ENEMY_FALLEN;
+    float t = fallen ? BONE_LORD_DEFEAT_DURATION : boss->stateTime;
+    float buckle = Clamp((t-.12f)/.30f,0,1);
+    float fall = Clamp((t-.42f)/.34f,0,1);
+    float settle = Clamp((t-.76f)/.34f,0,1);
+    float tilt = boss->facing == 2 ? -1 : 1;
+    float recoil = sinf(PI*Clamp(t/.22f,0,1));
+    float collapse = fall*fall;
+    Vector2 feet = boss->position;
+    float widthScale = .62f/.75f*(1+.09f*collapse);
+    float heightScale = .62f/.75f*(1-.17f*buckle-.41f*collapse+.05f*settle);
+    if (fallen) DrawBossGroundSeal(group->sealMarker,feet);
+    DrawEllipse((int)feet.x,(int)feet.y-9,54+16*collapse,19+5*collapse,Fade(BLACK,.42f));
+    Texture2D art = group->boneLordSheets[BONE_IDLE_SHEET];
+    Rectangle source = BoneBodyFrame(art,6,4,row,fminf(3,t*6));
+    Color tint = ColorLerp(WHITE,(Color){211,171,163,255},settle);
+    DrawTexturePro(art,source,
+        (Rectangle){feet.x-tilt*9*collapse,feet.y+4*collapse-5*recoil,
+                    source.width*widthScale,source.height*heightScale},
+        (Vector2){source.width*widthScale*.5f,(source.height-BONE_BODY_BOTTOM_PAD*.75f)*heightScale},
+        tilt*(-7*recoil+9*buckle+7*collapse-4*settle),tint);
+    if (!fallen && t >= .76f && t < 1.14f) {
+        float age = (t-.76f)/.38f;
+        for (int i=0; i<12; i++) {
+            float angle = i*(2*PI/12);
+            float spread = 28+age*(51+5*(i%4));
+            Vector2 dust = {feet.x+cosf(angle)*spread,feet.y+sinf(angle)*spread*.30f-18*sinf(PI*age)};
+            DrawCircleV(dust,(5+i%3)*(1+.7f*age),Fade((Color){162,110,97,255},.56f*(1-age)));
+        }
+    }
+}
+
 static void DrawBoneLord(const EnemyGroup *group, const Enemy *boss) {
     static const int rowForFacing[] = {0, 2, 3, 1};
-    static const int idleGround[] = {236, 477, 763, 983};
-    static const int walkGround[] = {242, 486, 752, 998};
-    static const int clawGround[] = {223, 463, 719, 956};
     int row = rowForFacing[boss->facing];
-    int sheet = boss->state == ENEMY_WALK ? BONE_WALK_SHEET : BONE_IDLE_SHEET;
+    if (boss->state == ENEMY_DIE || boss->state == ENEMY_FALLEN) {
+        DrawBoneLordCollapse(group,boss,row);
+        return;
+    }
+    bool walking = boss->state == ENEMY_WALK;
+    int sheet = walking ? BONE_WALK_SHEET : BONE_IDLE_SHEET;
     float t = boss->stateTime;
-    int frame = (int)fmaxf(0, (boss->state == ENEMY_WALK ? boss->walkTime : t) *
-                                  (boss->state == ENEMY_WALK ? 10 : 5)) % 6;
+    float pose = fmodf(fmaxf(0, (walking ? boss->walkTime : t) * (walking ? 10 : 5)), 6);
     int columns = 6, rows = 4;
-    int ground = (sheet == BONE_WALK_SHEET ? walkGround : idleGround)[row];
     bool lateral = false;
 
     if (boss->state == ENEMY_ATTACK) {
         int attack = boss->bossAttack;
         float windup = boneAttacks[attack].windup;
         float duration = boneAttacks[attack].duration;
+        columns = 8;
         if (attack == BONE_CLAW) {
             sheet = BONE_CLAW_SHEET;
-            columns = 8;
-            ground = clawGround[row];
-            frame = t < windup ? BoneFrameAt(t, 0, windup, 4) :
-                4 + BoneFrameAt(t, windup, duration, 4);
+            pose = t < windup ? BoneBodyPoseAt(t, 0, windup, 4) :
+                4 + BoneBodyPoseAt(t, windup, duration, 4);
         } else {
             lateral = true;
-            columns = 8;
-            rows = 3;
+            rows = attack == BONE_RAIN ? 2 : 3;
             if (attack == BONE_RANGED) {
                 sheet = BONE_RANGED_SHEET;
-                frame = t < windup ? BoneFrameAt(t, 0, windup, 13) :
-                    t < windup + .10f ? 13 : 16 + BoneFrameAt(t, windup + .10f, duration, 8);
-                ground = (int[]){225,464,705}[frame / 8];
+                pose = t < windup ? BoneBodyPoseAt(t, 0, windup, 13) :
+                    t < windup + .10f ? 13 : 16 + BoneBodyPoseAt(t, windup + .10f, duration, 8);
             } else if (attack == BONE_RAIN) {
                 sheet = BONE_RAIN_SHEET;
-                rows = 2;
-                frame = t < windup ? BoneFrameAt(t, 0, windup, 8) :
-                    8 + BoneFrameAt(t, windup, duration, 8);
-                ground = (int[]){349,711}[frame / 8];
+                pose = t < windup ? BoneBodyPoseAt(t, 0, windup, 8) :
+                    8 + BoneBodyPoseAt(t, windup, duration, 8);
             } else if (attack == BONE_BLAST) {
                 sheet = BONE_BLAST_SHEET;
-                frame = t < windup ? BoneFrameAt(t, 0, windup, 8) :
-                    8 + BoneFrameAt(t, windup, duration, 16);
-                ground = (int[]){240,481,685}[frame / 8];
+                pose = t < windup ? BoneBodyPoseAt(t, 0, windup, 8) :
+                    8 + BoneBodyPoseAt(t, windup, duration, 16);
             } else {
                 sheet = BONE_DASH_SHEET;
+                columns = 6;
                 if (t < BONE_DASH_HIDE) {
-                    columns = 6;
-                    frame = BoneFrameAt(t, 0, BONE_DASH_HIDE, 4);
-                    ground = 222;
-                } else if (t < BONE_DASH_REAPPEAR) {
+                    pose = BoneBodyPoseAt(t, 0, BONE_DASH_HIDE, 4);
+                } else if (BoneLordHidden(boss)) {
                     return;
                 } else {
-                    columns = 5;
-                    bool charging = t >= windup;
-                    frame = charging ? 10 + BoneFrameAt(t, windup, duration, 5) :
-                        6 + BoneFrameAt(t, BONE_DASH_REAPPEAR, windup, 4);
-                    ground = charging ? 692 : 462;
+                    pose = t < windup ? 7 + BoneBodyPoseAt(t, BONE_DASH_REAPPEAR, windup, 4) :
+                        12 + BoneBodyPoseAt(t, windup, duration, 5);
                 }
             }
-            row = frame / columns;
-            frame %= columns;
+            row = (int)pose / columns;
+            pose -= row * columns;
         }
     }
 
     Texture2D texture = group->boneLordSheets[sheet];
-    Rectangle source = BoneFrame(texture, columns, rows, frame, row);
-    float collapse = boss->state == ENEMY_FALLEN ? 1 :
-        boss->state == ENEMY_DIE ? Clamp(t / ENEMY_DEFEAT_DURATION, 0, 1) : 0;
+    Rectangle source = BoneBodyFrame(texture, columns, rows, row, pose);
     float reveal = boss->state == ENEMY_SPAWNING ? Clamp(t, 0, 1) : 1;
-    const float scale = .62f;
-    float heightScale = scale * (1 - .48f * collapse);
+    // Calibra pelo corpo dos quadros neutros, sem usar o tamanho dos efeitos.
+    // Um fator por folha preserva o agachamento e a extensão naturais do golpe.
+    static const float bodySize[BONE_SHEET_COUNT] = {
+        [BONE_IDLE_SHEET] = 1.0f,  [BONE_WALK_SHEET] = 1.0f,
+        [BONE_CLAW_SHEET] = 1.25f, [BONE_RANGED_SHEET] = 1.04f,
+        [BONE_RAIN_SHEET] = 1.13f, [BONE_DASH_SHEET] = 1.04f,
+        [BONE_BLAST_SHEET] = 1.19f,
+    };
+    float scale = (.62f / .75f) * bodySize[sheet];
+    float ground = source.height - BONE_BODY_BOTTOM_PAD * .75f;
+    if (sheet == BONE_BLAST_SHEET) {
+        // O chão da explosão varia entre preparação, impacto e recuperação.
+        static const float blastGround[] = {160, 165, 195};
+        ground = blastGround[row];
+    }
     float width = source.width * scale;
-    Color tint = Fade(collapse > 0 ? (Color){211, 171, 163, 255} : WHITE, reveal);
-    if (boss->state == ENEMY_FALLEN) DrawBossGroundSeal(group->sealMarker, boss->position);
+    Color tint = Fade(WHITE, reveal);
     DrawEllipse((int)boss->position.x, (int)boss->position.y - 9, 54, 19, Fade(BLACK, .38f * reveal));
     if (boss->guardianPhase == GUARDIAN_PHASE_TRANSITION) {
         float flare = Clamp(t / GUARDIAN_PHASE_TRANSITION_TIME, 0, 1);
@@ -3112,9 +3408,9 @@ static void DrawBoneLord(const EnemyGroup *group, const Enemy *boss) {
     }
     if (lateral && boss->facing == 2) source.width = -source.width;
     DrawTexturePro(texture, source,
-        (Rectangle){boss->position.x, boss->position.y + 28 * (1 - reveal), width, source.height * heightScale},
-        (Vector2){width * .5f, (ground - source.y) * heightScale},
-        (boss->facing == 2 ? -1 : 1) * 14 * collapse, tint);
+        (Rectangle){boss->position.x, boss->position.y + 28 * (1 - reveal), width, source.height * scale},
+        (Vector2){width * .5f, ground * scale},
+        0, tint);
 }
 
 void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
@@ -3140,6 +3436,20 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
         if (group->boneland) {
             DrawBoneLordWarning(group, &group->list[0]);
             DrawBoneShellGround(group);
+        } else {
+            const Enemy *guardian = &group->list[0];
+            if (guardian->type == ENEMY_BOSS && guardian->templarRole == TEMPLAR_NONE && guardian->state == ENEMY_ATTACK &&
+                guardian->guardianMelee && guardian->stateTime < GUARDIAN_MELEE_WINDUP) {
+                float heading = atan2f(guardian->attackDirection.y, guardian->attackDirection.x) * RAD2DEG;
+                float halfAngle = acosf(GUARDIAN_MELEE_ARC_DOT) * RAD2DEG;
+                float start = heading - halfAngle;
+                float end = heading + halfAngle;
+                float readiness = Clamp(guardian->stateTime / GUARDIAN_MELEE_WINDUP, 0, 1);
+                DrawCircleSector(guardian->position, GUARDIAN_MELEE_RANGE, start, end, 24,
+                                 Fade(ORANGE, .16f + .20f * readiness));
+                DrawRing(guardian->position, GUARDIAN_MELEE_RANGE - 3, GUARDIAN_MELEE_RANGE,
+                         start, end, 24, Fade(GOLD, .55f + .35f * readiness));
+            }
         }
     }
     if (!foreground) for (int i=0; i<ENEMY_ROOT_COUNT; i++) {

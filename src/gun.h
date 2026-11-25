@@ -8,6 +8,7 @@
 #define GUN_MAX_IMPACTS 16
 #define GUN_POSE_DURATION 0.32f
 #define GUN_POSE_FRAMES 8
+#define GUN_WALK_FRAMES 8
 #define GUN_BASE_SHOT_INTERVAL 0.20f
 #define GUN_L1_SHOT_INTERVAL 0.14f
 #define GUN_BASE_SHOT_SPEED 760.0f
@@ -59,6 +60,7 @@ void UpdateGun(Gun *gun, const Clearing *clearing, Vector2 player,
 void DrawGun(const Gun *gun);
 Rectangle GunBodyDestination(const Gun *gun, Rectangle source, Vector2 player,
                              int facing, bool walking, bool firing);
+float GunAdvanceWalkPose(float pose, Vector2 traveled, Vector2 facing);
 int GunHitEnemyCircle(Gun *gun, int enemyIndex, Vector2 enemy, float enemyRadius);
 int GunHitCircle(Gun *gun, Vector2 enemy, float enemyRadius);
 #endif

@@ -10,6 +10,18 @@ enum { PAUSE_SCENE = 0, PAUSE_PLATE = 2, PAUSE_ICON = 3, PAUSE_FRAME = 4, MENU_B
 
 static const Color buttonText = {255, 226, 181, 255};
 
+enum MainMenuButton { MAIN_START, MAIN_CONTINUE, MAIN_SETTINGS, MAIN_CREDITS, MAIN_QUIT, MAIN_BUTTON_COUNT };
+static const float menuIntroDuration = 3.8f;
+static const float menuDepartureDuration = 0.68f;
+
+static const Rectangle mainButtonSprites[MAIN_BUTTON_COUNT] = {
+    {409, 48, 720, 186},
+    {409, 243, 720, 166},
+    {409, 416, 720, 165},
+    {409, 590, 720, 167},
+    {409, 764, 720, 166}
+};
+
 static const char *SavePath(void) {
     static char path[1024];
     snprintf(path, sizeof(path), "%s/partida_pif.sav", GetApplicationDirectory());
@@ -23,11 +35,29 @@ static Rectangle MenuButtonBounds(int i, float centerX, float centerY, float w) 
     return (Rectangle){centerX - w/2, top + i*(h+gap), w, h};
 }
 
-static Rectangle ButtonBounds(int i) {
-    float w = fminf(GetScreenWidth() * 0.22f, 370.0f);
-    float groupHeight = 4*w*.30f + 3*fmaxf(8.0f, w*.30f*.04f);
-    float centerY = GetScreenHeight() * 0.65f;
-    return MenuButtonBounds(i, GetScreenWidth()/2.0f, centerY, w);
+static Rectangle MainMenuBackdropSource(Texture2D background) {
+    // Frame the illustration around the title's sword while keeping its aspect ratio.
+    float scale = 1635.0f / 1672.0f;
+    float height = background.height * scale;
+    return (Rectangle){0, (background.height - height) / 2, background.width * scale, height};
+}
+
+static Rectangle MainMenuCanvas(const Menu *m) {
+    float width = (float)GetScreenWidth();
+    float height = (float)GetScreenHeight();
+    float scale = fminf(width / m->background.width, height / m->background.height);
+    float artWidth = m->background.width * scale;
+    float artHeight = m->background.height * scale;
+    return (Rectangle){(width - artWidth) / 2, (height - artHeight) / 2, artWidth, artHeight};
+}
+
+static Rectangle MainButtonBounds(const Menu *m, int index) {
+    Rectangle canvas = MainMenuCanvas(m);
+    float top = canvas.y + canvas.height * 0.315f;
+    float bottom = fminf(canvas.y + canvas.height * 0.96f, GetScreenHeight() - 70.0f);
+    float rowHeight = fmaxf(1.0f, (bottom - top) / MAIN_BUTTON_COUNT);
+    float width = fminf(canvas.width * 0.37f, 4.15f * rowHeight);
+    return (Rectangle){(GetScreenWidth() - width) / 2, top + index * rowHeight, width, rowHeight};
 }
 
 static Rectangle TestButtonBounds(void) {
@@ -63,6 +93,46 @@ static void DrawMenuPanel(Rectangle bounds) {
 static float SmoothRange(float start, float end, float value) {
     float t = fminf(1.0f, fmaxf(0.0f, (value-start)/(end-start)));
     return t*t*(3.0f - 2.0f*t);
+}
+
+static bool PadPressed(int button) {
+    return IsGamepadAvailable(0) && IsGamepadButtonPressed(0, button);
+}
+
+static Texture2D LoadMainButtons(void) {
+    Image atlas = LoadImage("assets/menu_principal_botoes.png");
+    if (!atlas.data) return (Texture2D){0};
+    for (int i = 0; i < MAIN_BUTTON_COUNT; i++) {
+        Rectangle sprite = mainButtonSprites[i];
+        if (sprite.x + sprite.width > atlas.width || sprite.y + sprite.height > atlas.height) {
+            UnloadImage(atlas);
+            return (Texture2D){0};
+        }
+    }
+
+    Color *pixels = LoadImageColors(atlas);
+    Texture2D texture = {0};
+    if (pixels) {
+        // Fade the soft shadows at each crop boundary so they blend into the artwork.
+        for (int i = 0; i < MAIN_BUTTON_COUNT; i++) {
+            Rectangle sprite = mainButtonSprites[i];
+            for (int y = 0; y < (int)sprite.height; y++) {
+                float vertical = SmoothRange(0, 18, fminf(y, sprite.height - 1 - y));
+                Color *row = pixels + ((int)sprite.y + y) * atlas.width + (int)sprite.x;
+                for (int x = 0; x < (int)sprite.width; x++) {
+                    float horizontal = SmoothRange(0, 24, fminf(x, sprite.width - 1 - x));
+                    float brightness = fmaxf(row[x].r, fmaxf(row[x].g, row[x].b));
+                    float opacity = 0.42f + 0.58f * SmoothRange(6, 105, brightness);
+                    row[x].a = (unsigned char)(row[x].a * vertical * horizontal * opacity);
+                }
+            }
+        }
+        Image prepared = {pixels, atlas.width, atlas.height, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8};
+        texture = LoadTextureFromImage(prepared);
+        UnloadImageColors(pixels);
+    }
+    UnloadImage(atlas);
+    return texture;
 }
 
 static Texture2D LoadPauseFrame(void) {
@@ -268,31 +338,22 @@ int LoadMenuCheckpointWeapon(void) {
 
 bool InitMenu(Menu *m) {
     *m = (Menu){0};
-    m->background = LoadTexture("assets/menu_cenario.png");
-    m->logo = LoadTexture("assets/menu_logo.png");
-    m->moon = LoadTexture("assets/menu_lua.png");
-    m->seal = LoadTexture("assets/menu_selo.png");
-    m->necromancer = LoadTexture("assets/menu_necromante.png");
-    m->fog = LoadTexture("assets/menu_nevoa.png");
-    m->fogTexture = LoadTexture("assets/menu_nevoa_textura.png");
-    for (int i=0; i<10; i++) {
-        char path[64];
-        snprintf(path, sizeof(path), "assets/menu_capa_%02d.png", i);
-        m->hero[i] = LoadTexture(path);
+    m->background = LoadTexture("assets/menu_principal_arte.png");
+    m->mainButtons = LoadMainButtons();
+    if (!m->background.id || !m->mainButtons.id) { UnloadMenu(m); return false; }
+    SetTextureFilter(m->background, TEXTURE_FILTER_POINT);
+    SetTextureFilter(m->mainButtons, TEXTURE_FILTER_POINT);
+    m->scene = LoadMenuScene();
+    if (m->scene) {
+        m->buttonGlow = LoadTexture("assets/menu/buttons/brilho.png");
+        if (m->buttonGlow.id) SetTextureFilter(m->buttonGlow, TEXTURE_FILTER_POINT);
     }
+    if (!m->scene || GetVideoSettings()->reduceMenuMotion) m->introTime = menuIntroDuration;
+    m->fogTexture = LoadTexture("assets/menu_nevoa_textura.png");
+    if (!m->fogTexture.id) { UnloadMenu(m); return false; }
+    SetTextureFilter(m->fogTexture, TEXTURE_FILTER_BILINEAR);
     const char *paths[4] = {"assets/menu_iniciar.png", "assets/menu_continuar.png",
                             "assets/menu_config.png", "assets/menu_creditos.png"};
-    if (!m->background.id || !m->moon.id || !m->seal.id || !m->necromancer.id || !m->fog.id || !m->fogTexture.id) {
-        UnloadMenu(m); return false;
-    }
-    for (int i=0; i<10; i++) if (!m->hero[i].id) { UnloadMenu(m); return false; }
-    SetTextureFilter(m->background, TEXTURE_FILTER_POINT);
-    SetTextureFilter(m->moon, TEXTURE_FILTER_POINT);
-    SetTextureFilter(m->seal, TEXTURE_FILTER_POINT);
-    SetTextureFilter(m->necromancer, TEXTURE_FILTER_POINT);
-    SetTextureFilter(m->fog, TEXTURE_FILTER_POINT);
-    SetTextureFilter(m->fogTexture, TEXTURE_FILTER_BILINEAR);
-    for (int i=0; i<10; i++) SetTextureFilter(m->hero[i], TEXTURE_FILTER_POINT);
     for (int i=0; i<4; i++) {
         m->buttons[i] = LoadTexture(paths[i]);
         if (!m->buttons[i].id) { UnloadMenu(m); return false; }
@@ -319,21 +380,6 @@ bool InitMenu(Menu *m) {
     } else m->pause.shader = (Shader){0};
     if (m->pause.background.id) SetTextureFilter(m->pause.background, TEXTURE_FILTER_BILINEAR);
     if (m->pause.frame.id) SetTextureFilter(m->pause.frame, TEXTURE_FILTER_BILINEAR);
-    int width, height;
-    m->video = OpenMenuVideo("assets/videos/Menu_Principal.mp4", &width, &height, &m->videoInterval);
-    if (m->video) {
-        const unsigned char *pixels = ReadMenuVideo(m->video);
-        if (pixels) {
-            Image firstFrame = {(void *)pixels, width, height, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8};
-            m->videoFrame = LoadTextureFromImage(firstFrame);
-        }
-        if (m->videoFrame.id) SetTextureFilter(m->videoFrame, TEXTURE_FILTER_BILINEAR);
-        else {
-            CloseMenuVideo(m->video);
-            m->video = NULL;
-        }
-    }
-    if (!m->video) TraceLog(LOG_WARNING, "Video do menu indisponivel; usando o fundo animado");
     InitGameAudio(&m->audio);
     return true;
 }
@@ -345,17 +391,12 @@ void UnloadMenu(Menu *m) {
     if (m->pause.labels.id) UnloadTexture(m->pause.labels);
     if (m->pause.frame.id) UnloadTexture(m->pause.frame);
     if (m->pause.background.id) UnloadTexture(m->pause.background);
-    if (m->videoFrame.id) UnloadTexture(m->videoFrame);
-    CloseMenuVideo(m->video);
     for (int i=0; i<4; i++) if (m->buttons[i].id) UnloadTexture(m->buttons[i]);
     for (int i=0; i<4; i++) if (m->creditPhotos[i].id) UnloadTexture(m->creditPhotos[i]);
-    for (int i=0; i<10; i++) if (m->hero[i].id) UnloadTexture(m->hero[i]);
-    if (m->fog.id) UnloadTexture(m->fog);
     if (m->fogTexture.id) UnloadTexture(m->fogTexture);
-    if (m->necromancer.id) UnloadTexture(m->necromancer);
-    if (m->seal.id) UnloadTexture(m->seal);
-    if (m->moon.id) UnloadTexture(m->moon);
-    if (m->logo.id) UnloadTexture(m->logo);
+    if (m->mainButtons.id) UnloadTexture(m->mainButtons);
+    if (m->buttonGlow.id) UnloadTexture(m->buttonGlow);
+    UnloadMenuScene(m->scene);
     if (m->background.id) UnloadTexture(m->background);
     *m = (Menu){0};
 }
@@ -382,10 +423,10 @@ static Vector2 SettingsMouse(Rectangle canvas) {
 
 /* Abas das Configurações e linhas da aba Vídeo, em coordenadas da arte (1672x941). */
 static const Rectangle settingsTabs[2] = {{566, 288, 260, 56}, {846, 288, 260, 56}};
-enum { VIDEO_ROW_FULLSCREEN, VIDEO_ROW_RENDER, VIDEO_ROW_FPS, VIDEO_ROW_COUNTER, VIDEO_ROWS };
+enum { VIDEO_ROW_FULLSCREEN, VIDEO_ROW_RENDER, VIDEO_ROW_FPS, VIDEO_ROW_COUNTER, VIDEO_ROW_LIGHTING, VIDEO_ROW_MENU_MOTION, VIDEO_ROWS };
 
 static Rectangle VideoRow(int row) {
-    return (Rectangle){455, 382 + row*62.0f, 762, 50};
+    return (Rectangle){455, 377 + row*47.0f, 762, 43};
 }
 
 static Rectangle VideoValue(int row) {
@@ -403,17 +444,20 @@ static void ChangeVideoOption(int row, int direction) {
             SetTargetFPS(video->fpsLimit);
             break;
         case VIDEO_ROW_COUNTER: video->showFps = !video->showFps; break;
+        case VIDEO_ROW_LIGHTING: video->dynamicLighting = !video->dynamicLighting; break;
+        case VIDEO_ROW_MENU_MOTION: video->reduceMenuMotion = !video->reduceMenuMotion; break;
     }
     SaveVideoSettings(video);
 }
 
 static void UpdateVideoSettings(Menu *menu, Vector2 mouse, bool click) {
-    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W))
+    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W) || PadPressed(GAMEPAD_BUTTON_LEFT_FACE_UP))
         menu->videoFocus = (menu->videoFocus + VIDEO_ROWS - 1) % VIDEO_ROWS;
-    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S))
+    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S) || PadPressed(GAMEPAD_BUTTON_LEFT_FACE_DOWN))
         menu->videoFocus = (menu->videoFocus + 1) % VIDEO_ROWS;
-    int direction = (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D) || IsKeyPressed(KEY_ENTER)) ? 1 :
-                    (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) ? -1 : 0;
+    int direction = (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D) || IsKeyPressed(KEY_ENTER) ||
+                    PadPressed(GAMEPAD_BUTTON_LEFT_FACE_RIGHT) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN)) ? 1 :
+                    (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A) || PadPressed(GAMEPAD_BUTTON_LEFT_FACE_LEFT)) ? -1 : 0;
     if (direction) ChangeVideoOption(menu->videoFocus, direction);
     if (!click) return;
     for (int row = 0; row < VIDEO_ROWS; row++) {
@@ -427,9 +471,10 @@ static void UpdateVideoSettings(Menu *menu, Vector2 mouse, bool click) {
 static bool UpdateSettings(Menu *menu) {
     Vector2 mouse = SettingsMouse(PauseCanvas());
     bool click = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
-    bool back = IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_BACKSPACE) ||
+    bool back = IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_BACKSPACE) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_RIGHT) ||
                 (click && CheckCollisionPointRec(mouse, pauseBack));
-    if (IsKeyPressed(KEY_TAB) || IsKeyPressed(KEY_Q) || IsKeyPressed(KEY_E))
+    if (IsKeyPressed(KEY_TAB) || IsKeyPressed(KEY_Q) || IsKeyPressed(KEY_E) ||
+        PadPressed(GAMEPAD_BUTTON_LEFT_TRIGGER_1) || PadPressed(GAMEPAD_BUTTON_RIGHT_TRIGGER_1))
         menu->settingsTab = 1 - menu->settingsTab;
     for (int tab = 0; tab < 2; tab++)
         if (click && CheckCollisionPointRec(mouse, settingsTabs[tab])) menu->settingsTab = tab;
@@ -640,7 +685,7 @@ static void DrawSettingsTabs(const Menu *menu, Rectangle canvas) {
 
 static void DrawVideoSettings(const Menu *menu, Rectangle canvas) {
     static const char *labels[VIDEO_ROWS] = {
-        "Tela cheia", "Renderização", "Limite de FPS", "Contador de FPS"
+        "Tela cheia", "Renderização", "Limite de FPS", "Contador de FPS", "Iluminação dinâmica", "Movimento do menu"
     };
     const VideoSettings *video = GetVideoSettings();
     float scale = canvas.width/1672.0f;
@@ -660,6 +705,8 @@ static void DrawVideoSettings(const Menu *menu, Rectangle canvas) {
                 break;
             case VIDEO_ROW_FPS: value = TextFormat("%d FPS", video->fpsLimit); break;
             case VIDEO_ROW_COUNTER: value = video->showFps ? "Ligado" : "Desligado"; break;
+            case VIDEO_ROW_LIGHTING: value = video->dynamicLighting ? "Ligada" : "Desligada"; break;
+            case VIDEO_ROW_MENU_MOTION: value = video->reduceMenuMotion ? "Reduzido" : "Completo"; break;
         }
         DrawGameTextIn(TextFormat("<   %s   >", value), PauseRect(canvas, VideoValue(row)),
                        31*scale, focused ? GOLD : RAYWHITE, GAME_TEXT_BODY);
@@ -667,6 +714,10 @@ static void DrawVideoSettings(const Menu *menu, Rectangle canvas) {
     const char *hint = "Setas ou clique alteram  ·  Tab troca de aba";
     if (menu->videoFocus == VIDEO_ROW_RENDER)
         hint = "Abaixo de 100%, a imagem fica menos nítida e mais leve";
+    if (menu->videoFocus == VIDEO_ROW_LIGHTING)
+        hint = "Luzes do cenário e dos ataques";
+    if (menu->videoFocus == VIDEO_ROW_MENU_MOTION)
+        hint = "Reduzido congela o cenário e pula as transições animadas";
     DrawPauseText(canvas, hint, 660, 27, LIGHTGRAY);
 }
 
@@ -752,33 +803,48 @@ void DrawPauseMenu(const Menu *menu) {
     DrawPauseText(canvas, "E  ·  Interagir e selar", 538, 37, RAYWHITE);
 }
 
+static MenuAction BeginMenuDeparture(Menu *m) {
+    if (!m->scene || GetVideoSettings()->reduceMenuMotion) return MENU_START;
+    m->departureTime = 0;
+    m->starting = true;
+    return MENU_NONE;
+}
+
+bool MenuControlsVisible(const Menu *m) {
+    return m->introTime >= menuIntroDuration && !m->starting;
+}
+
 MenuAction UpdateMenu(Menu *m) {
-    float dt = GetFrameTime();
-    m->effectTime += dt;
-    if (m->video) {
-        m->videoElapsed = fmin(m->videoElapsed + dt, 3 * m->videoInterval);
-        const unsigned char *pixels = NULL;
-        while (m->videoElapsed >= m->videoInterval) {
-            m->videoElapsed -= m->videoInterval;
-            pixels = ReadMenuVideo(m->video);
-            if (!pixels) {
-                TraceLog(LOG_WARNING, "Falha ao ler o video do menu; usando o fundo animado");
-                CloseMenuVideo(m->video);
-                m->video = NULL;
-                break;
-            }
+    const bool reduced = GetVideoSettings()->reduceMenuMotion;
+    const float dt = fminf(GetFrameTime(), .1f);
+    if (!reduced) m->sceneTime += dt;
+    if (!m->scene || reduced) m->introTime = menuIntroDuration;
+    if (m->starting) {
+        m->departureTime += dt;
+        if (!reduced && m->departureTime < menuDepartureDuration) return MENU_NONE;
+        m->starting = false;
+        return MENU_START;
+    }
+    if (m->introTime < menuIntroDuration) {
+        m->introTime = fminf(menuIntroDuration, m->introTime + dt);
+        if (GetKeyPressed() || IsMouseButtonPressed(MOUSE_BUTTON_LEFT) ||
+            (IsGamepadAvailable(0) && GetGamepadButtonPressed())) {
+            m->introTime = menuIntroDuration;
+            return MENU_NONE;
         }
-        if (pixels) UpdateTexture(m->videoFrame, pixels);
+        if (m->introTime < menuIntroDuration) return MENU_NONE;
     }
     m->hasSave = LoadMenuCheckpointWeapon() >= 0;
+    bool back = IsKeyPressed(KEY_ESCAPE) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_RIGHT);
+    bool confirm = IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
     if (m->page == 4) {
-        if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_BACKSPACE) || IsKeyPressed(KEY_L)) m->page=0;
+        if (back || IsKeyPressed(KEY_BACKSPACE) || IsKeyPressed(KEY_L) || PadPressed(GAMEPAD_BUTTON_MIDDLE_LEFT)) m->page=0;
         return MENU_NONE;
     }
-    if (m->page == 0 && IsKeyPressed(KEY_L)) { m->page=4; return MENU_NONE; }
+    if (m->page == 0 && (IsKeyPressed(KEY_L) || PadPressed(GAMEPAD_BUTTON_MIDDLE_LEFT))) { m->page=4; return MENU_NONE; }
     if (m->page == 3) {
-        if (IsKeyPressed(KEY_ESCAPE)) m->page = 0;
-        if (IsKeyPressed(KEY_ENTER)) { m->page = 0; return MENU_START; }
+        if (back) m->page = 0;
+        else if (confirm) { m->page = 0; return BeginMenuDeparture(m); }
         return MENU_NONE;
     }
     if (m->page == 1) {
@@ -786,17 +852,21 @@ MenuAction UpdateMenu(Menu *m) {
         return MENU_NONE;
     }
     if (m->page == 2) {
-        if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_BACKSPACE) || IsKeyPressed(KEY_ENTER)) m->page = 0;
+        if (back || IsKeyPressed(KEY_BACKSPACE) || confirm) m->page = 0;
         return MENU_NONE;
     }
     if (IsKeyPressed(KEY_ESCAPE)) return MENU_QUIT;
-    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) m->selected = (m->selected+1)%4;
-    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) m->selected = (m->selected+3)%4;
+    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S) || PadPressed(GAMEPAD_BUTTON_LEFT_FACE_DOWN))
+        m->selected = (m->selected + 1) % MAIN_BUTTON_COUNT;
+    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W) || PadPressed(GAMEPAD_BUTTON_LEFT_FACE_UP))
+        m->selected = (m->selected + MAIN_BUTTON_COUNT - 1) % MAIN_BUTTON_COUNT;
+    bool click = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     Vector2 mouse = GetMousePosition();
     Vector2 mouseDelta = GetMouseDelta();
-    if (mouseDelta.x != 0.0f || mouseDelta.y != 0.0f)
-        for (int i=0; i<4; i++) if (CheckCollisionPointRec(mouse, ButtonBounds(i))) m->selected = i;
-    bool click = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+    if (click || mouseDelta.x != 0.0f || mouseDelta.y != 0.0f) {
+        for (int i = 0; i < MAIN_BUTTON_COUNT; i++)
+            if (CheckCollisionPointRec(mouse, MainButtonBounds(m, i))) m->selected = i;
+    }
     if (click && CheckCollisionPointRec(mouse, TestButtonBounds())) {
         PlayAudioFeedback(&m->audio);
         return MENU_TEST_VILLA;
@@ -809,69 +879,78 @@ MenuAction UpdateMenu(Menu *m) {
         PlayAudioFeedback(&m->audio);
         return MENU_TEST_INVERTED_CHAPEL;
     }
-    UpdateButtonFocus(m->buttonFocus, m->selected == 1 && !m->hasSave ? -1 : m->selected, dt);
-    if (!click && !IsKeyPressed(KEY_ENTER) && !IsKeyPressed(KEY_SPACE)) return MENU_NONE;
-    if (click && !CheckCollisionPointRec(mouse, ButtonBounds(m->selected))) return MENU_NONE;
-    if (m->selected != 1 || m->hasSave) PlayAudioFeedback(&m->audio);
+    if (!click && !confirm) return MENU_NONE;
+    if (click && !CheckCollisionPointRec(mouse, MainButtonBounds(m, m->selected))) return MENU_NONE;
+    if (m->selected != MAIN_CONTINUE || m->hasSave) PlayAudioFeedback(&m->audio);
     switch (m->selected) {
-        case 0: if (m->hasSave) { m->page = 3; return MENU_NONE; } return MENU_START;
-        case 1: return m->hasSave ? MENU_CONTINUE : MENU_NONE;
-        case 2: m->page = 1; return MENU_NONE;
-        default: m->page = 2; return MENU_NONE;
+        case MAIN_START: if (m->hasSave) { m->page = 3; return MENU_NONE; } return BeginMenuDeparture(m);
+        case MAIN_CONTINUE: return m->hasSave ? MENU_CONTINUE : MENU_NONE;
+        case MAIN_SETTINGS: m->page = 1; return MENU_NONE;
+        case MAIN_CREDITS: m->page = 2; return MENU_NONE;
+        case MAIN_QUIT: return MENU_QUIT;
+        default: return MENU_NONE;
     }
 }
 
-static void DrawMenuBackground(const Menu *m) {
-    Texture2D background = m->video ? m->videoFrame : m->background;
-    float s = fmaxf((float)GetScreenWidth()/background.width,
-                    (float)GetScreenHeight()/background.height);
-    Rectangle dst = {(GetScreenWidth()-background.width*s)/2,
-                     (GetScreenHeight()-background.height*s)/2,
-                     background.width*s, background.height*s};
-    DrawTexturePro(background, (Rectangle){0,0,(float)background.width,(float)background.height},
-                   dst, (Vector2){0}, 0, WHITE);
-    if (m->video) return;
-    float t = m->effectTime;
-    float pulse = 1.0f + 0.025f*sinf(t*1.5f);
-    Rectangle moon = {dst.x+(1230.0f-235.0f*pulse)*s, dst.y+(155.0f-235.0f*pulse)*s,
-                      470.0f*pulse*s, 470.0f*pulse*s};
-    DrawTexturePro(m->moon, (Rectangle){0,0,(float)m->moon.width,(float)m->moon.height},
-                   moon, (Vector2){0}, 0, Fade(WHITE,0.90f));
-    Rectangle seal = {dst.x+1200*s,dst.y+275*s,330*s,330*s};
-    DrawTexturePro(m->seal, (Rectangle){0,0,(float)m->seal.width,(float)m->seal.height},
-                   seal, (Vector2){165*s,165*s}, t*10.0f, Fade(WHITE,0.72f));
-    Rectangle necro = {dst.x+1020*s,dst.y+225*s,390*s,260*s};
-    DrawTexturePro(m->necromancer,(Rectangle){0,0,(float)m->necromancer.width,(float)m->necromancer.height},
-                   necro,(Vector2){0},0,WHITE);
-    static const int capeLoop[] = {0,1,2,3,4,5,6,7,8,9,8,7,6,5,4,3,2,1};
-    int frame = capeLoop[((int)(t*10.0f))%(int)(sizeof(capeLoop)/sizeof(capeLoop[0]))];
-    Texture2D hero = m->hero[frame];
-    Rectangle protagonist = {dst.x+50*s,dst.y+345*s,620*s,568*s};
-    DrawTexturePro(hero,(Rectangle){0,0,(float)hero.width,(float)hero.height},
-                   protagonist,(Vector2){0},0,WHITE);
-    float drift = fmodf(t*19.0f, 160.0f);
-    for (int i=0; i<2; i++) {
-        Rectangle fog = {dst.x+(-120.0f+drift+i*1450.0f)*s,dst.y+520*s,1672*s,420*s};
-        DrawTexturePro(m->fog,(Rectangle){0,360,(float)m->fog.width,580},
-                       fog,(Vector2){0},0,Fade(WHITE,0.38f));
+static void DrawMainButton(const Menu *m, int index) {
+    Rectangle bounds = MainButtonBounds(m, index);
+    Rectangle sprite = mainButtonSprites[index];
+    bool selected = index == m->selected;
+    bool disabled = index == MAIN_CONTINUE && !m->hasSave;
+    bool reduced = GetVideoSettings()->reduceMenuMotion;
+    bool hovered = CheckCollisionPointRec(GetMousePosition(), bounds);
+    bool pressed = !disabled && ((m->starting && selected) ||
+                   (hovered && IsMouseButtonDown(MOUSE_BUTTON_LEFT)));
+    float opacity = SmoothRange(2.03f + index*.22f, 2.60f + index*.22f, m->introTime);
+    if (m->starting && !selected) opacity *= 1-SmoothRange(0, .25f, m->departureTime);
+    if (opacity <= 0) return;
+    float scale = fminf(bounds.width / sprite.width, bounds.height / sprite.height);
+    if (!selected && !hovered) scale *= 0.96f;
+    if (pressed) scale *= .97f;
+    Rectangle dest = {
+        bounds.x + (bounds.width - sprite.width * scale) / 2,
+        bounds.y + (bounds.height - sprite.height * scale) / 2,
+        sprite.width * scale, sprite.height * scale
+    };
+    Color tint = pressed ? (Color){255, 236, 189, 255} :
+                 (selected || hovered) ? WHITE : (Color){223, 218, 215, 255};
+    tint = Fade(tint, opacity*(disabled ? .50f : 1));
+    DrawTexturePro(m->mainButtons, sprite, dest, (Vector2){0}, 0, tint);
+    if (m->buttonGlow.id && !disabled && (selected || hovered)) {
+        int pulse = reduced ? 5 : (int)(fmodf(m->sceneTime, 1.6f)*7.5f);
+        int frame = index*12 + pulse;
+        Rectangle glow = {(frame%6)*360, (frame/6)*93, 360, 93};
+        Color light = pressed ? (Color){255,225,146,255} : WHITE;
+        DrawTexturePro(m->buttonGlow, glow, dest, (Vector2){0}, 0, Fade(light, opacity*(selected ? 1 : .60f)));
     }
-    Rectangle distantFog = {dst.x-45*s+fmodf(t*7.0f,90.0f)*s,dst.y+120*s,
-                            dst.width,dst.height};
-    DrawTexturePro(m->fogTexture,(Rectangle){0,0,(float)m->fogTexture.width,(float)m->fogTexture.height},
-                   distantFog,(Vector2){0},0,Fade(WHITE,0.22f));
-    for (int i=0; i<48; i++) {
-        float phase = (float)i*37.7f;
-        float x = fmodf(phase*13.0f+17.0f*sinf(t*0.4f+phase),1672.0f);
-        float y = fmodf(phase*29.0f-t*(8.0f+(i%5)*3.0f)+9400.0f,941.0f);
-        float radius = (i%7==0 ? 2.2f : 1.2f)*s;
-        DrawCircleV((Vector2){dst.x+x*s,dst.y+y*s},radius,
-                    Fade((Color){255,64,78,255},0.35f+0.25f*sinf(t*1.3f+phase)*sinf(t*1.3f+phase)));
+    if (selected) {
+        float centerY = bounds.y + bounds.height / 2;
+        float radius = fmaxf(2, bounds.height * 0.045f);
+        Color marker = Fade(disabled ? buttonText : (Color){255, 106, 82, 255}, opacity*(disabled ? .5f : 1));
+        DrawPoly((Vector2){bounds.x + radius, centerY}, 4, radius, 0, marker);
+        DrawPoly((Vector2){bounds.x + bounds.width - radius, centerY}, 4, radius, 0, marker);
     }
+}
+
+static void DrawMainMenuShortcut(const char *label, Rectangle bounds) {
+    bool hovered = CheckCollisionPointRec(GetMousePosition(), bounds);
+    Color border = Fade(buttonText, hovered ? 0.75f : 0.32f);
+    DrawRectangleRounded(bounds, 0.20f, 8, Fade((Color){30, 12, 24, 255}, hovered ? 0.88f : 0.70f));
+    DrawRectangleRoundedLinesEx(bounds, 0.20f, 8, 1, border);
+    DrawGameTextIn(label, bounds, 20, hovered ? RAYWHITE : buttonText, GAME_TEXT_TITLE);
 }
 
 void DrawMenu(const Menu *m) {
-    DrawMenuBackground(m);
-    DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,0.25f));
+    DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), (Color){22, 15, 22, 255});
+    Rectangle crop = MainMenuBackdropSource(m->background);
+    Rectangle canvas = MainMenuCanvas(m);
+    bool reduced = GetVideoSettings()->reduceMenuMotion;
+    float departure = m->starting ? m->departureTime / menuDepartureDuration : 0;
+    if (m->scene && !reduced)
+        DrawMenuScene(m->scene, canvas, crop, m->sceneTime, m->introTime, departure, false);
+    else
+        DrawTexturePro(m->background, crop, canvas, (Vector2){0}, 0, WHITE);
+    if (m->page != 0) DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), Fade(BLACK, 0.5f));
     if (m->page==4) {
         SpeedrunBoard board;
         SpeedrunLoad(&board);
@@ -898,41 +977,16 @@ void DrawMenu(const Menu *m) {
         return;
     }
     if (m->page == 0) {
-         if (m->logo.id) {
-            float maxW = GetScreenWidth() * 0.75f;
-            float maxH = GetScreenHeight() * 0.38f;
-
-            float scale = fminf(maxW / m->logo.width,
-                                maxH / m->logo.height);
-
-            float logoW = m->logo.width * scale;
-            float logoH = m->logo.height * scale;
-
-            Rectangle source = {
-                0, 0,
-                (float)m->logo.width,
-                (float)m->logo.height
-            };
-
-            Rectangle dest = {
-                (GetScreenWidth() - logoW) / 2.0f,
-                GetScreenHeight() * 0.035f,
-                logoW,
-                logoH
-            };
-
-            DrawTexturePro(m->logo, source, dest,
-                           (Vector2){0, 0}, 0.0f, WHITE);
-        }
-        static const char *labels[] = {"Iniciar Jogo", "Continuar", "Configurações", "Créditos"};
-        for (int i=0; i<4; i++) {
-            Rectangle b = ButtonBounds(i);
-            bool disabled = i==1 && !m->hasSave;
-            DrawLabeledButton(m, i, labels[i], b, MenuButtonTint(b, m->buttonFocus[i], disabled));
+        for (int i = 0; i < MAIN_BUTTON_COUNT; i++) DrawMainButton(m, i);
+        if (!MenuControlsVisible(m)) {
+            float darkness = m->starting ? SmoothRange(.25f, 1, departure) : 1-SmoothRange(0, 1.1f, m->introTime);
+            if (m->starting) DrawRectangleRec(canvas, Fade((Color){143, 12, 54, 255}, .13f*departure));
+            DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), Fade(BLACK, darkness));
+            return;
         }
         if (!m->hasSave) {
             const char *hint = "Continuar disponível\napós iniciar uma partida";
-            Rectangle button = ButtonBounds(1);
+            Rectangle button = MainButtonBounds(m, MAIN_CONTINUE);
             float x = button.x + button.width + 12;
             float width = fminf(224, GetScreenWidth()-x-12);
             Rectangle notice = {x, button.y + (button.height-54)/2, width, 54};
@@ -940,23 +994,11 @@ void DrawMenu(const Menu *m) {
             DrawGameTextIn(hint, (Rectangle){notice.x+8,notice.y+4,notice.width-16,notice.height-8},
                            18, RAYWHITE, GAME_TEXT_BODY);
         }
-        Rectangle testBox = TestButtonBounds();
-        DrawGameTextIn("L: Ranking de speedrun",(Rectangle){16,GetScreenHeight()-48,280,30},
-                       19,GOLD,GAME_TEXT_BODY);
-        bool testHover = CheckCollisionPointRec(GetMousePosition(), testBox);
-        DrawRectangleRounded(testBox, .25f, 8, testHover ? (Color){92, 34, 40, 235} : (Color){38, 18, 24, 220});
-        DrawRectangleRoundedLinesEx(testBox, .25f, 8, 2, testHover ? GOLD : (Color){184, 145, 76, 220});
-        DrawGameTextIn("Teste", testBox, 24, testHover ? GOLD : RAYWHITE, GAME_TEXT_TITLE);
-        Rectangle chapelBox = TestChapelButtonBounds();
-        bool chapelHover = CheckCollisionPointRec(GetMousePosition(), chapelBox);
-        DrawRectangleRounded(chapelBox, .25f, 8, chapelHover ? (Color){44, 52, 86, 235} : (Color){24, 28, 44, 220});
-        DrawRectangleRoundedLinesEx(chapelBox, .25f, 8, 2, chapelHover ? GOLD : (Color){184, 145, 76, 220});
-        DrawGameTextIn("Capela", chapelBox, 24, chapelHover ? GOLD : RAYWHITE, GAME_TEXT_TITLE);
-        Rectangle invertedBox = TestInvertedChapelButtonBounds();
-        bool invertedHover = CheckCollisionPointRec(GetMousePosition(), invertedBox);
-        DrawRectangleRounded(invertedBox, .25f, 8, invertedHover ? (Color){44, 52, 86, 235} : (Color){24, 28, 44, 220});
-        DrawRectangleRoundedLinesEx(invertedBox, .25f, 8, 2, invertedHover ? GOLD : (Color){184, 145, 76, 220});
-        DrawGameTextIn("Capela Invertida", invertedBox, 24, invertedHover ? GOLD : RAYWHITE, GAME_TEXT_TITLE);
+        DrawGameTextIn("L: Ranking de speedrun", (Rectangle){16, GetScreenHeight()-48, 230, 30},
+                       18, buttonText, GAME_TEXT_BODY);
+        DrawMainMenuShortcut("Capela Invertida", TestInvertedChapelButtonBounds());
+        DrawMainMenuShortcut("Capela", TestChapelButtonBounds());
+        DrawMainMenuShortcut("Teste", TestButtonBounds());
         return;
     }
     if (m->page==1) {
