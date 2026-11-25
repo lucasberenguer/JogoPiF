@@ -10,6 +10,85 @@
 #include <stdio.h>
 #include <string.h>
 
+static void CheckMapGuide(void) {
+    EnemyGroup group={0};
+    Encounter e={.phase=ENCOUNTER_CLEAR,.progress={.stage=CLEARING_COMPLETE_STAGE}};
+    Clearing map={.pedestal={500,100},.background={.width=1000,.height=800},.exit={700,20,100,60}};
+    assert(!UpdateEncounterGuide(&e,&map,&group,9)); /* The clearing altar is locked. */
+    e.progress.guardianAftermath=GUARDIAN_ALTAR_READY;
+    assert(!UpdateEncounterGuide(&e,&map,&group,7));
+    e.presentation.remaining=1;
+    assert(!UpdateEncounterGuide(&e,&map,&group,9));
+    e.presentation.remaining=0;
+    assert(UpdateEncounterGuide(&e,&map,&group,1));
+    assert(e.guideTarget.x==500 && e.guideTarget.y==100);
+
+    const Clearing exits[]={
+        {.cemetery=true}, {.village=true}, {.chapel=true},
+        {.basement=true}, {.invertedChapel=true}, {.boneland=true}
+    };
+    for (unsigned i=0;i<sizeof(exits)/sizeof(*exits);i++) {
+        Clearing area=exits[i];
+        area.exit=map.exit;
+        Encounter walk={.phase=ENCOUNTER_CLEAR,
+            .progress={.map=(int)i+1,.stage=CLEARING_COMPLETE_STAGE},
+            .chapelAltarDone=true,.basementComplete=true};
+        assert(!UpdateEncounterGuide(&walk,&area,&group,7));
+        assert(UpdateEncounterGuide(&walk,&area,&group,1));
+        assert(walk.guideTarget.x==750 && walk.guideTarget.y==50);
+    }
+
+    e=(Encounter){.phase=ENCOUNTER_FIGHT,.progress={.map=CHAPEL_MAP}};
+    map.chapel=true;
+    assert(UpdateEncounterGuide(&e,&map,&group,8));
+    assert(e.guideTarget.x==500 && e.guideTarget.y==100);
+    e.chapelAltarDone=true;
+    assert(!UpdateEncounterGuide(&e,&map,&group,1));
+    assert(UpdateEncounterGuide(&e,&map,&group,7));
+    assert(e.guideTarget.x==750 && e.guideTarget.y==50);
+
+    e=(Encounter){.phase=ENCOUNTER_FIGHT,.progress={.map=4}};
+    map.chapel=false;
+    map.basement=true;
+    assert(UpdateEncounterGuide(&e,&map,&group,8));
+    assert(fabsf(e.guideTarget.x-218)<.01f && fabsf(e.guideTarget.y-316)<.01f);
+    e.basementSolved[0]=true;
+    assert(!UpdateEncounterGuide(&e,&map,&group,1));
+    assert(fabsf(e.guideTarget.x-782)<.01f);
+
+    e=(Encounter){.phase=ENCOUNTER_VILLAGE_LETTER_READY,.progress={.map=VILLAGE_MAP}};
+    map.basement=false;
+    map.village=true;
+    group.list[0].position=(Vector2){300,400};
+    assert(UpdateEncounterGuide(&e,&map,&group,8));
+    assert(e.guideTarget.x==300 && e.guideTarget.y==400);
+
+    e=(Encounter){.phase=ENCOUNTER_IGRIS_APPROACH,.progress={.map=TEMPLAR_FIELD_MAP}};
+    map.village=false;
+    map.templarField=true;
+    map.exitLocked=true;
+    assert(UpdateEncounterGuide(&e,&map,&group,8));
+    assert(e.guideTarget.x==750 && e.guideTarget.y==140);
+    e.phase=ENCOUNTER_CLEAR;
+    e.progress.stage=CLEARING_COMPLETE_STAGE;
+    map.exitLocked=false;
+    assert(!UpdateEncounterGuide(&e,&map,&group,1));
+    assert(UpdateEncounterGuide(&e,&map,&group,7));
+    assert(e.guideTarget.x==835 && e.guideTarget.y==75);
+
+    e=(Encounter){.phase=ENCOUNTER_FIGHT,.progress={.map=NECROMANCER_MAP,.stage=CLEARING_BOSS_STAGE}};
+    map.templarField=false;
+    map.necromancerArena=true;
+    group.list[0]=(Enemy){.type=ENEMY_BOSS,.state=ENEMY_ATTACK,.health=100,.position={300,400}};
+    assert(!UpdateEncounterGuide(&e,&map,&group,9));
+    group.list[0].state=ENEMY_FALLEN;
+    group.list[0].health=0;
+    assert(UpdateEncounterGuide(&e,&map,&group,8));
+    assert(e.guideTarget.x==300 && e.guideTarget.y==400);
+    e.phase=ENCOUNTER_SEAL;
+    assert(!UpdateEncounterGuide(&e,&map,&group,9));
+}
+
 static void CheckGunBodyScale(void) {
     const Vector2 aimRight = {1,0};
     float stepDistance = PLAYER_BASE_SPEED / 10.0f;
@@ -923,6 +1002,7 @@ static void CheckSealDifficultyTableAndGlyphFallback(Encounter *e, EnemyGroup *e
 }
 
 int main(void) {
+    CheckMapGuide();
     SetTraceLogLevel(LOG_WARNING);
     SetConfigFlags(FLAG_WINDOW_HIDDEN);
     InitWindow(1280,720,"Encounter audit");

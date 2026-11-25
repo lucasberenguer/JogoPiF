@@ -38,6 +38,33 @@ static Camera2D FitClearing(const Clearing *clearing) {
     return camera;
 }
 
+static void DrawMapGuideArrow(Camera2D camera, Vector2 player, Vector2 target) {
+    Vector2 actor=GetWorldToScreen2D(Vector2Subtract(player,(Vector2){0,35}),camera);
+    Vector2 goal=GetWorldToScreen2D(target,camera);
+    Vector2 direction=Vector2Normalize(Vector2Subtract(goal,actor));
+    Vector2 tip=Vector2Add(actor,Vector2Scale(direction,46));
+    if (Vector2DistanceSqr(actor,goal)<46*46) {
+        tip=Vector2Subtract(actor,(Vector2){0,30});
+        direction=Vector2Normalize(Vector2Subtract(goal,tip));
+        if (Vector2LengthSqr(direction)<.01f) direction=(Vector2){0,1};
+    }
+    tip.x=Clamp(tip.x,19,GetScreenWidth()-19);
+    tip.y=Clamp(tip.y,19,GetScreenHeight()-19);
+    Vector2 side={-direction.y,direction.x};
+    Vector2 base=Vector2Subtract(tip,Vector2Scale(direction,10));
+    Vector2 tail=Vector2Subtract(tip,Vector2Scale(direction,18));
+    Vector2 edge=Vector2Scale(side,5);
+    Vector2 outlineBase=Vector2Subtract(base,Vector2Scale(direction,2));
+    Vector2 outlineEdge=Vector2Scale(side,8);
+    Color outline={29,19,27,230};
+    Color gold={248,205,109,242};
+    DrawLineEx(tail,base,6,outline);
+    DrawTriangle(Vector2Add(tip,Vector2Scale(direction,3)),
+                 Vector2Subtract(outlineBase,outlineEdge),Vector2Add(outlineBase,outlineEdge),outline);
+    DrawLineEx(tail,base,2,gold);
+    DrawTriangle(tip,Vector2Subtract(base,edge),Vector2Add(base,edge),gold);
+}
+
 static Vector2 FacingVector(int facing) {
     switch (facing) {
         case 1: return (Vector2) { 0.0f, -1.0f };
@@ -1052,11 +1079,9 @@ int main(void) {
             PlaySfx(SFX_DOOR);
             continue;
         }
-        bool toBoneland = clearing.invertedChapel && !EncounterPaused(&encounter) &&
-            CheckCollisionPointRec(player, clearing.exit);
+        bool toBoneland = CanEnterBoneland(&encounter,&clearing,player);
         bool toTemplarField = CanEnterTemplarField(&encounter, &clearing, player);
-        bool toNecromancer = clearing.templarField && !clearing.exitLocked &&
-                            CheckCollisionPointRec(player,(Rectangle){700,0,270,150});
+        bool toNecromancer = CanEnterNecromancer(&clearing,player);
         if (!entering && playerHealth > 0 &&
             (toNecromancer || toTemplarField || toBoneland || CanEnterVillage(&encounter, &clearing, player, interactPressed) ||
              CanEnterChapel(&encounter, &clearing, player, interactPressed) ||
@@ -1376,6 +1401,8 @@ int main(void) {
             if (villageHorde && (initialEmergence || enemies.villageSpawnRemaining<remainingVillagers))
                 PlayVillageEmergence(&menu.audio,initialEmergence);
         }
+        bool showMapGuide=playerHealth>0 && !entering &&
+            UpdateEncounterGuide(&encounter,&clearing,&enemies,deltaTime);
         int frame = walking ? 1 + (int) (walkTime * 7.0f) % 4 : 0;
         if (!entering && nearPedestal && interactPressed) pedestalMessageTime = 3.0f;
         if (pedestalMessageTime > 0.0f) pedestalMessageTime -= deltaTime;
@@ -1613,6 +1640,7 @@ int main(void) {
                          24, 176, 18, RAYWHITE);
             if (currentWeapon == WEAPON_GUN)
                 DrawGameText("Clique esquerdo: disparar (um tiro por clique)", 24, 176, 18, RAYWHITE);
+            if (showMapGuide) DrawMapGuideArrow(camera,player,encounter.guideTarget);
             DrawEncounter(&encounter,&enemies);
             DrawAtmospherePanel(&clearing);
             if (encounter.practice) {

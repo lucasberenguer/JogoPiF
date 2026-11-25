@@ -1,5 +1,15 @@
 # Jogo PIF — continuidade entre computadores e chats
 
+## Ajuda de navegação (25/11/2026)
+
+- Uma seta dourada aparece perto do jogador após 8 segundos de jogo com o mesmo próximo objetivo disponível. Usa os gatilhos das passagens e ajuda a encontrar o altar, os pilares, a carta, a escadaria de Igris e os chefes caídos que ainda aguardam selamento. Na arena final, leva ao selamento do Necromante. A contagem para durante as telas de diálogo, apresentações e pausa e reinicia quando muda o objetivo.
+- A build Release em `out/review` passou nos testes de conectividade, encontro e campanha. A auditoria de desenho confirmou a seta na direção do alvo.
+
+## Balanceamento do Necromante (25/11/2026)
+
+- Dano à distância multiplicado por 0,90 nas três formas, incluindo feitiços de área marcados no chão, Raio da Morte, Explosão Cadavérica, espadas espectrais e disparos automáticos ou das caveiras. O cálculo conserva o arredondamento para baixo no dano final. Combo de espada, corte após a tração das correntes, contato do rasante e impacto da aterrissagem conservam os valores anteriores.
+- A build Release compilou em `out/review`. `enemy_audit` e `clearing_encounter` passaram.
+
 ## Efeitos sonoros (25/11/2026)
 
 - As três gravações enviadas foram adicionadas em `assets/audio/sfx/` para o disparo da pistola, a ativação da Bíblia e o corte da Katana. A Katana conserva a confirmação de acerto separada do corte. As fontes e licenças estão em `assets/audio/CREDITS.md` e os autores aparecem nos créditos do jogo.

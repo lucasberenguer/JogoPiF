@@ -56,6 +56,8 @@ typedef struct Encounter {
     bool practice; /* Temporary test entry must not overwrite the normal run. */
     bool guardianIntroPending;
     char notice[120];
+    Vector2 guideTarget;
+    float guideWait;
 } Encounter;
 
 void BeginEncounter(Encounter *encounter, EnemyGroup *enemies, const Clearing *clearing,
@@ -93,6 +95,10 @@ bool CanEnterInvertedChapel(const Encounter *encounter, const Clearing *clearing
                             Vector2 player);
 bool CanEnterTemplarField(const Encounter *encounter, const Clearing *clearing,
                           Vector2 player);
+bool CanEnterBoneland(const Encounter *encounter, const Clearing *clearing, Vector2 player);
+bool CanEnterNecromancer(const Clearing *clearing, Vector2 player);
+bool UpdateEncounterGuide(Encounter *encounter, const Clearing *map,
+                          const EnemyGroup *enemies, float dt);
 bool EncounterBossVisible(const Encounter *encounter, const EnemyGroup *enemies);
 float EncounterDamage(const Encounter *encounter);
 bool RerollEncounterReward(Encounter *encounter, int slot);

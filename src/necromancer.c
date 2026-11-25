@@ -108,11 +108,15 @@ static int Facing(Vector2 direction) {
     return direction.y<0?1:0;
 }
 
-static void Hurt(EnemyGroup *g,const Enemy *boss,bool dodging,int *health,int damage) {
+static void Hurt(EnemyGroup *g,const Enemy *boss,bool dodging,int *health,float damage) {
     if (dodging || g->practiceInvincible || g->playerHitCooldown>0 || *health<=0) return;
     int amount=(int)(damage*boss->power);
     *health=amount<*health ? *health-amount : 0;
     g->playerHitCooldown=.27f;
+}
+
+static void HurtAtRange(EnemyGroup *g,const Enemy *boss,bool dodging,int *health,int damage) {
+    Hurt(g,boss,dodging,health,damage*.90f);
 }
 
 static void Shot(EnemyGroup *g,Vector2 origin,Vector2 direction,float speed,int damage,bool sword) {
@@ -317,7 +321,7 @@ static void UpdateSkill(EnemyGroup *g,const Clearing *map,Enemy *boss,Vector2 pl
            !dodging && !g->practiceInvincible && g->playerHitCooldown<=0 &&
            MapHasClearPath(map,boss->position,player)) {
             boss->attackConnected=true;
-            Hurt(g,boss,false,health,damage);
+            HurtAtRange(g,boss,false,health,damage);
         }
     } else if(skill==CHAINS) {
         if(Crossed(before,t,windup)) EmitSfx(SFX_CHAINS,boss->position,1,1);
@@ -345,7 +349,7 @@ static void UpdateSkill(EnemyGroup *g,const Clearing *map,Enemy *boss,Vector2 pl
                 wraith->stateTime=0;
                 boss->attackConnected=true;
                 if(Vector2Distance(player,fight->marks[0])<=corpseRadius)
-                    Hurt(g,boss,dodging,health,damage);
+                    HurtAtRange(g,boss,dodging,health,damage);
             }
         }
     } else if (skill==SEPULCHER) {
@@ -356,7 +360,7 @@ static void UpdateSkill(EnemyGroup *g,const Clearing *map,Enemy *boss,Vector2 pl
     } else if (skill==CIRCLES) {
         for(int i=0;i<3;i++) if(Crossed(before,t,windup+i*circleCadence)) {
             EmitSfx(SFX_AREA,fight->marks[i],1,.87f+i*.07f);
-            if (Vector2Distance(player,fight->marks[i])<=93) Hurt(g,boss,dodging,health,damage);
+            if (Vector2Distance(player,fight->marks[i])<=93) HurtAtRange(g,boss,dodging,health,damage);
         }
     } else if (skill==STAFF && Crossed(before,t,windup)) {
         SummonWraiths(g,map,player);
@@ -387,7 +391,7 @@ static void UpdateSkill(EnemyGroup *g,const Clearing *map,Enemy *boss,Vector2 pl
             float ring=radius*age/runeTravel;
             float oldRing=radius*fmaxf(0,age-dt)/runeTravel;
             if (distance>=oldRing-14 && distance<=ring+14)
-                Hurt(g,boss,dodging,health,damage);
+                HurtAtRange(g,boss,dodging,health,damage);
         }
     } else if (skill==BLADE) {
         for(int i=0;i<3;i++) {
@@ -525,7 +529,7 @@ void UpdateNecromancer(EnemyGroup *g,const Clearing *map,Vector2 player,float dt
             } else if(Vector2Distance(shot->position,player)<=28) {
                 EmitSfx(SFX_PROJECTILE_HIT,shot->position,1,.83f);
                 shot->life=0;
-                Hurt(g,boss,dodging,health,shot->damage);
+                HurtAtRange(g,boss,dodging,health,shot->damage);
             }
         }
     }

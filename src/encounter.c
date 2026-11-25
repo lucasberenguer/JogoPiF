@@ -508,6 +508,92 @@ bool CanEnterTemplarField(const Encounter *e, const Clearing *clearing, Vector2 
            CheckCollisionPointRec(player, clearing->exit);
 }
 
+bool CanEnterBoneland(const Encounter *e, const Clearing *map, Vector2 player) {
+    return map->invertedChapel && !EncounterPaused(e) && CheckCollisionPointRec(player,map->exit);
+}
+
+static const Rectangle palaceEntrance={700,0,270,150};
+
+bool CanEnterNecromancer(const Clearing *map, Vector2 player) {
+    return map->templarField && !map->exitLocked && CheckCollisionPointRec(player,palaceEntrance);
+}
+
+static Rectangle IgrisStairFoot(const Clearing *map) {
+    return (Rectangle){map->exit.x,map->exit.y+map->exit.height,map->exit.width,120};
+}
+
+static Vector2 BasementPillar(const Clearing *map, int index) {
+    static const Vector2 positions[]={{.218f,.395f},{.782f,.395f},{.218f,.795f},{.782f,.795f}};
+    return (Vector2){map->background.width*positions[index].x,map->background.height*positions[index].y};
+}
+
+static Vector2 RectangleCenter(Rectangle rect) {
+    return (Vector2){rect.x+rect.width*.5f,rect.y+rect.height*.5f};
+}
+
+static bool EncounterGuideTarget(const Encounter *e, const Clearing *map,
+                                 const EnemyGroup *enemies, Vector2 *target) {
+    if (map->village && e->phase==ENCOUNTER_VILLAGE_LETTER_READY) {
+        *target=enemies->list[0].position;
+        return true;
+    }
+    if (map->templarField && e->phase==ENCOUNTER_IGRIS_APPROACH) {
+        *target=RectangleCenter(IgrisStairFoot(map));
+        return true;
+    }
+    if (e->phase!=ENCOUNTER_CLEAR && e->phase!=ENCOUNTER_FIGHT) return false;
+    if (e->progress.guardianAftermath==GUARDIAN_ALTAR_READY &&
+        CanEnterCemetery(e,map,map->pedestal,true)) {
+        *target=map->pedestal;
+        return true;
+    }
+    if (map->chapel && !e->chapelAltarDone) {
+        *target=map->pedestal;
+        return true;
+    }
+    if (map->basement && !e->basementComplete) {
+        for (int i=0;i<4;i++) {
+            if (e->basementSolved[i]) continue;
+            *target=BasementPillar(map,i);
+            return true;
+        }
+    }
+    Vector2 exit=RectangleCenter(map->exit);
+    if (CanEnterVillage(e,map,exit,false) || CanEnterChapel(e,map,exit,false) ||
+        CanEnterBasement(e,map,exit,false) || CanEnterInvertedChapel(e,map,exit) ||
+        CanEnterBoneland(e,map,exit) || CanEnterTemplarField(e,map,exit)) {
+        *target=exit;
+        return true;
+    }
+    Vector2 palace=RectangleCenter(palaceEntrance);
+    if (e->progress.stage==CLEARING_COMPLETE_STAGE && CanEnterNecromancer(map,palace)) {
+        *target=palace;
+        return true;
+    }
+    const Enemy *boss=&enemies->list[0];
+    if (e->phase==ENCOUNTER_FIGHT && boss->type==ENEMY_BOSS && boss->state==ENEMY_FALLEN) {
+        *target=boss->position;
+        return true;
+    }
+    return false;
+}
+
+bool UpdateEncounterGuide(Encounter *e, const Clearing *map, const EnemyGroup *enemies, float dt) {
+    const float delay=8.0f;
+    Vector2 target;
+    if (EncounterPaused(e) || dt<=0) return false;
+    if (!EncounterGuideTarget(e,map,enemies,&target)) {
+        e->guideWait=0;
+        return false;
+    }
+    if (Vector2DistanceSqr(target,e->guideTarget)>.01f) {
+        e->guideWait=0;
+        e->guideTarget=target;
+    }
+    e->guideWait=fminf(delay,e->guideWait+dt);
+    return e->guideWait>=delay;
+}
+
 float EncounterDamage(const Encounter *e) {
     int weapon = e->progress.weapon;
     int level = (weapon >= 0 && weapon < 3) ? e->progress.weaponLevel[weapon] : 0;
@@ -945,9 +1031,7 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
     if (e->guardianIntroPending || GuardianLiberationPending(e) || GuardianPassagePending(e) ||
         e->presentation.remaining>0) return false;
     if (e->phase == ENCOUNTER_IGRIS_APPROACH) {
-        Rectangle stairFoot = {clearing->exit.x, clearing->exit.y + clearing->exit.height,
-                               clearing->exit.width, 120};
-        if (CheckCollisionPointRec(player, stairFoot)) e->phase = ENCOUNTER_IGRIS_CINEMATIC;
+        if (CheckCollisionPointRec(player,IgrisStairFoot(clearing))) e->phase = ENCOUNTER_IGRIS_CINEMATIC;
         return false;
     }
     if (e->phase == ENCOUNTER_IGRIS_CINEMATIC || e->phase == ENCOUNTER_IGRIS_AFTERMATH ||
@@ -962,7 +1046,7 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
         }
         if (IsKeyPressed(KEY_E)) {
             float w = (float)clearing->background.width, h = (float)clearing->background.height;
-            if (Vector2Distance(player, (Vector2){w * 0.50f, h * 0.44f}) <= 125.0f) {
+            if (Vector2Distance(player, clearing->pedestal) <= 125.0f) {
                 if (!e->chapelAltarDone) e->phase=ENCOUNTER_ANGEL_CINEMATIC;
             } else if (Vector2Distance(player, (Vector2){w * 0.365f, h * 0.26f}) <= 95.0f) {
                 e->chapelTextId = 1; e->phase = ENCOUNTER_CHAPEL_TEXT;
@@ -1022,12 +1106,9 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
                     return false;
                 }
             }
-            static const float pillarPos[4][2] = {
-                {0.218f, 0.395f}, {0.782f, 0.395f}, {0.218f, 0.795f}, {0.782f, 0.795f}
-            };
             for (int i = 0; i < 4; i++) {
                 if (!e->basementSolved[i] &&
-                    Vector2Distance(player, (Vector2){w * pillarPos[i][0], h * pillarPos[i][1]}) <= 115.0f) {
+                    Vector2Distance(player,BasementPillar(clearing,i)) <= 115.0f) {
                     e->basementTarget = i;
                     e->phase = ENCOUNTER_BASEMENT_PILLAR;
                     return false;

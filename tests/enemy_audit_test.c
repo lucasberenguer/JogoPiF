@@ -774,6 +774,14 @@ static void CheckNecromancerPressure(void) {
     assert(boss->state==ENEMY_ATTACK);
     assert(group.necromancer.automaticVolley==1);
     assert(CountNecromancerShots(&group)==7);
+
+    StartNecromancer(&group,1.5f);
+    boss->state=ENEMY_IDLE;
+    boss->attackCooldown=2;
+    group.necromancer.shots[0]=(NecromancerShot){.position=player,.life=1,.damage=43};
+    health=100;
+    UpdateNecromancer(&group,&map,player,.01f,false,&health);
+    assert(health==42); /* 43 x 0.90 x 1.5, then truncated. */
 }
 
 static void StartNecromancerAuditSkill(EnemyGroup *group,int form,int rotation) {
@@ -797,7 +805,7 @@ static void CheckNecromancerCombos(void) {
     UpdateNecromancer(&group,&map,target,.45f,false,&health);
     assert(health==100);
     UpdateNecromancer(&group,&map,target,.02f,false,&health);
-    assert(health==66);
+    assert(health==70);
 
     health=100;
     StartNecromancerAuditSkill(&group,1,3);
@@ -807,6 +815,7 @@ static void CheckNecromancerCombos(void) {
     UpdateNecromancer(&group,&map,target,.04f,false,&health);
     assert(group.necromancer.shots[0].life>0 && group.necromancer.shots[0].sword);
 
+    health=100;
     StartNecromancerAuditSkill(&group,2,4);
     UpdateNecromancer(&group,&map,target,.01f,false,&health);
     UpdateNecromancer(&group,&map,target,1.03f,false,&health);
@@ -822,7 +831,7 @@ static void CheckNecromancerCombos(void) {
     MoveNecromancerPlayer(&group,&map,&player,(Vector2){0,100});
     assert(player.y<target.y+116);
     UpdateNecromancer(&group,&map,target,.53f,false,&health);
-    assert(health==18);
+    assert(health==27);
     UpdateNecromancer(&group,&map,target,.70f,true,&health);
     player=target;
     MoveNecromancerPlayer(&group,&map,&player,(Vector2){155,0});
@@ -839,6 +848,14 @@ static void CheckNecromancerCombos(void) {
     UpdateNecromancer(&group,&map,target,.34f,false,&health);
     assert(health==100);
 
+    StartNecromancerAuditSkill(&group,2,3);
+    group.list[1]=(Enemy){.necromancerWraith=true,.health=230,.maxHealth=230,
+                         .state=ENEMY_IDLE,.position=target,.attackCooldown=.1f};
+    UpdateNecromancer(&group,&map,target,.01f,false,&health);
+    UpdateNecromancer(&group,&map,target,.92f,false,&health);
+    assert(health==38);
+
+    health=100;
     StartNecromancerAuditSkill(&group,3,2);
     player=target;
     UpdateNecromancer(&group,&map,player,.01f,false,&health);
