@@ -157,23 +157,23 @@ void ConfigureCemeteryBoundary(Clearing *map) {
         map->boundary[i]=(Vector2){outline[i].x/1668.0f*map->background.width,
             outline[i].y/906.0f*map->background.height};
     const MapObstacle shapes[] = {
-        {.vertices={{229,215},{242,205},{263,209},{272,218},{271,242},{281,261},{267,269},{253,277},{232,271},{237,249}},.count=10},
-        {.vertices={{304,190},{310,169},{330,166},{346,173},{348,204},{360,222},{355,230},{325,240},{303,233}},.count=9},
-        {.vertices={{382,215},{402,213},{410,236},{397,248},{379,242}},.count=5},
-        {.vertices={{137,363},{151,353},{175,357},{188,371},{192,402},{198,421},{181,433},{156,433},{128,418}},.count=9},
-        {.vertices={{264,317},{289,314},{307,322},{313,359},{287,368},{265,374},{261,352}},.count=7},
-        {.vertices={{170,450},{203,428},{229,435},{277,468},{251,480},{219,491},{197,477}},.count=7},
-        {.vertices={{121,525},{138,519},{157,532},{158,553},{173,579},{147,590},{117,597}},.count=7},
-        {.vertices={{280,542},{299,532},{313,535},{320,550},{321,586},{277,592}},.count=6},
-        {.vertices={{137,627},{159,613},{181,623},{229,651},{232,665},{214,679},{194,675},{162,660}},.count=8},
-        {.vertices={{279,710},{289,691},{313,682},{331,692},{334,724},{330,750},{311,763},{281,770}},.count=8},
-        {.vertices={{381,735},{402,719},{419,725},{429,750},{418,773},{384,768}},.count=6},
-        {.vertices={{316,768},{345,748},{381,756},{421,782},{433,797},{410,823},{383,827},{352,812},{327,793}},.count=9},
-        {.vertices={{939,785},{969,769},{993,774},{995,740},{1005,711},{1023,708},{1037,721},{1039,755},{1046,777},{1041,797},{1011,820},{995,827},{970,818},{943,799}},.count=14},
-        {.vertices={{1064,795},{1086,773},{1089,751},{1082,746},{1085,735},{1103,738},{1114,727},{1124,735},{1125,746},{1108,764},{1100,786},{1089,798}},.count=12},
-        {.vertices={{1144,818},{1187,804},{1234,781},{1240,747},{1248,734},{1265,741},{1287,756},{1286,807},{1279,820},{1248,835},{1219,848},{1188,839},{1144,838}},.count=13},
-        {.vertices={{1107,614},{1128,604},{1144,613},{1151,634},{1152,664},{1105,660}},.count=6},
-        {.vertices={{1244,642},{1255,629},{1267,635},{1279,620},{1290,631},{1287,645},{1297,654},{1291,667},{1274,667},{1268,684},{1247,686},{1251,663},{1243,652}},.count=13},
+        {.vertices={{229,257},{254,245},{269,237},{275,250},{252,263}},.count=5},
+        {.vertices={{299,208},{309,201},{333,199},{352,204},{358,213},{341,225},{319,229},{306,221}},.count=8},
+        {.vertices={{378,220},{386,214},{401,216},{409,225},{404,238},{393,240},{380,235}},.count=7},
+        {.vertices={{132,399},{142,390},{176,381},{188,388},{193,401},{174,411},{148,418}},.count=7},
+        {.vertices={{252,350},{264,338},{289,331},{302,332},{312,342},{295,352},{275,360},{260,357}},.count=8},
+        {.vertices={{169,442},{188,428},{216,414},{239,427},{267,443},{255,457},{230,467},{199,456}},.count=8},
+        {.vertices={{115,564},{129,555},{156,547},{165,556},{167,566},{142,576},{127,578},{116,573}},.count=8},
+        {.vertices={{272,564},{289,557},{311,552},{319,560},{301,570},{284,576}},.count=6},
+        {.vertices={{135,613},{153,596},{167,595},{221,627},{214,635},{188,639},{163,629}},.count=7},
+        {.vertices={{275,735},{286,724},{319,717},{332,722},{324,736},{293,749},{281,745}},.count=7},
+        {.vertices={{378,740},{401,729},{413,732},{420,742},{405,752},{391,754}},.count=6},
+        {.vertices={{316,750},{337,734},{354,726},{384,741},{403,758},{397,769},{376,783},{346,768}},.count=8},
+        {.vertices={{939,769},{959,752},{990,735},{995,722},{1020,724},{1037,731},{1038,768},{1017,783},{1000,789},{962,783}},.count=10},
+        {.vertices={{1078,756},{1086,727},{1101,727},{1105,740},{1094,760},{1085,765}},.count=6},
+        {.vertices={{1171,789},{1210,770},{1238,754},{1241,735},{1261,739},{1280,746},{1288,765},{1264,783},{1233,799},{1212,810},{1195,804}},.count=11},
+        {.vertices={{1105,619},{1118,612},{1135,617},{1153,624},{1148,643},{1126,646},{1105,643}},.count=7},
+        {.vertices={{1244,652},{1256,628},{1272,633},{1265,657},{1256,663}},.count=5},
         {.vertices={{1227,296},{1242,289},{1253,298},{1258,334},{1226,337}},.count=5},
         {.vertices={{1274,263},{1291,253},{1314,255},{1322,272},{1324,319},{1314,333},{1288,326},{1267,316}},.count=8},
         {.vertices={{1322,302},{1340,295},{1351,305},{1352,335},{1320,337}},.count=5},
@@ -190,6 +190,40 @@ void ConfigureCemeteryBoundary(Clearing *map) {
     }
 }
 
+static bool LoadMapForeground(Clearing *clearing, const char *backgroundPath,
+                              const char *maskPath) {
+    Image foregroundImage = LoadImage(backgroundPath);
+    Image foregroundMask = LoadImage(maskPath);
+    if (foregroundImage.data == NULL || foregroundMask.data == NULL ||
+        foregroundMask.width != clearing->background.width ||
+        foregroundMask.height != clearing->background.height) {
+        TraceLog(LOG_ERROR, "Mascara de primeiro plano ausente ou com tamanho diferente do mapa");
+        if (foregroundImage.data != NULL) UnloadImage(foregroundImage);
+        if (foregroundMask.data != NULL) UnloadImage(foregroundMask);
+        return false;
+    }
+    ImageFormat(&foregroundImage, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+    Color *maskPixels = LoadImageColors(foregroundMask);
+    UnloadImage(foregroundMask);
+    if (maskPixels == NULL) {
+        UnloadImage(foregroundImage);
+        return false;
+    }
+    Color *foregroundPixels = (Color *) foregroundImage.data;
+    int count = foregroundImage.width * foregroundImage.height;
+    for (int index = 0; index < count; index++) {
+        foregroundPixels[index].a = maskPixels[index].a;
+    }
+    UnloadImageColors(maskPixels);
+    clearing->foreground = LoadTextureFromImage(foregroundImage);
+    UnloadImage(foregroundImage);
+    if (clearing->foreground.id == 0) {
+        return false;
+    }
+    SetTextureFilter(clearing->foreground, TEXTURE_FILTER_POINT);
+    return true;
+}
+
 bool InitCemetery(Clearing *map) {
     *map = (Clearing){0};
     map->background = LoadTexture("assets/cemiterio.png");
@@ -202,6 +236,11 @@ bool InitCemetery(Clearing *map) {
     map->pedestal = (Vector2){-1000,-1000};
     map->exit = (Rectangle){w*.90f,h*.46f,w*.05f,h*.12f};
     ConfigureCemeteryBoundary(map);
+    if (!LoadMapForeground(map, "assets/cemiterio.png",
+                           "assets/cemiterio_foreground_mask.png")) {
+        UnloadClearing(map);
+        return false;
+    }
     return true;
 }
 
@@ -247,6 +286,10 @@ static bool LoadMapWithCollision(Clearing *map, const char *bgPath, const char *
 
 bool InitVillage(Clearing *map) {
     if (!LoadMapWithCollision(map, "assets/vila.png", "assets/vila_collision.png")) return false;
+    if (!LoadMapForeground(map, "assets/vila.png", "assets/vila_foreground_mask.png")) {
+        UnloadClearing(map);
+        return false;
+    }
     map->village = true;
     float w = (float)map->background.width, h = (float)map->background.height;
     map->spawn = (Vector2){w * 0.08f, h * 0.465f};
@@ -257,6 +300,10 @@ bool InitVillage(Clearing *map) {
 
 bool InitChapel(Clearing *map) {
     if (!LoadMapWithCollision(map, "assets/capela.png", "assets/capela_collision.png")) return false;
+    if (!LoadMapForeground(map, "assets/capela.png", "assets/capela_foreground_mask.png")) {
+        UnloadClearing(map);
+        return false;
+    }
     map->chapel = true;
     float w = (float)map->background.width, h = (float)map->background.height;
     map->spawn = (Vector2){w * 0.50f, h * 0.90f};
@@ -267,6 +314,10 @@ bool InitChapel(Clearing *map) {
 
 bool InitChapelBasement(Clearing *map) {
     if (!LoadMapWithCollision(map, "assets/capela_porao.png", "assets/capela_porao_collision.png")) return false;
+    if (!LoadMapForeground(map, "assets/capela_porao.png", "assets/capela_porao_foreground_mask.png")) {
+        UnloadClearing(map);
+        return false;
+    }
     map->basement = true;
     float w = (float)map->background.width, h = (float)map->background.height;
     map->spawn = (Vector2){w * 0.50f, h * 0.28f};
@@ -277,6 +328,10 @@ bool InitChapelBasement(Clearing *map) {
 
 bool InitInvertedChapel(Clearing *map) {
     if (!LoadMapWithCollision(map, "assets/capela_invertida.png", "assets/capela_collision.png")) return false;
+    if (!LoadMapForeground(map, "assets/capela_invertida.png", "assets/capela_foreground_mask.png")) {
+        UnloadClearing(map);
+        return false;
+    }
     map->invertedChapel = true;
     float w = (float)map->background.width, h = (float)map->background.height;
     map->spawn = (Vector2){w * 0.50f, h * 0.62f};
@@ -288,6 +343,11 @@ bool InitInvertedChapel(Clearing *map) {
 bool InitBoneland(Clearing *map) {
     if (!LoadMapWithCollision(map, "assets/terra_dos_ossos.png",
                              "assets/terra_dos_ossos_collision.png")) return false;
+    if (!LoadMapForeground(map, "assets/terra_dos_ossos.png",
+                           "assets/terra_dos_ossos_foreground_mask.png")) {
+        UnloadClearing(map);
+        return false;
+    }
     map->boneland = true;
     map->spawn = (Vector2){835, 842};
     map->pedestal = (Vector2){-1000, -1000};
@@ -342,177 +402,40 @@ int ClearingMapId(const Clearing *map) {
 }
 
 void ConfigureClearingBoundary(Clearing *map) {
+    /* Outline traced from the 1280 by 720 markup. */
     const Vector2 outline[] = {
-        {190,238},
-        {213,214},
-        {234,209},
-        {281,216},
-        {312,211},
-        {335,201},
-        {331,169},
-        {344,151},
-        {379,139},
-        {414,145},
-        {448,139},
-        {484,135},
-        {512,126},
-        {538,129},
-        {563,139},
-        {588,137},
-        {609,129},
-        {631,130},
-        {661,129},
-        {694,132},
-        {731,134},
-        {769,134},
-        {806,135},
-        {843,146},
-        {870,144},
-        {884,155},
-        {904,151},
-        {940,167},
-        {965,162},
-        {980,176},
-        {1016,181},
-        {1030,178},
-        {1049,166},
-        {1057,171},
-        {1052,184},
-        {1070,199},
-        {1087,198},
-        {1104,190},
-        {1122,191},
-        {1136,201},
-        {1138,213},
-        {1158,205},
-        {1175,212},
-        {1194,208},
-        {1198,200},
-        {1214,208},
-        {1240,201},
-        {1253,193},
-        {1267,213},
-        {1280,235},
-        {1263,238},
-        {1253,264},
-        {1244,297},
-        {1248,329},
-        {1265,345},
-        {1290,353},
-        {1329,355},
-        {1319,381},
-        {1310,405},
-        {1302,416},
-        {1289,407},
-        {1274,403},
-        {1258,414},
-        {1245,436},
-        {1250,448},
-        {1288,454},
-        {1273,471},
-        {1272,491},
-        {1281,508},
-        {1307,507},
-        {1340,496},
-        {1368,471},
-        {1380,478},
-        {1375,501},
-        {1364,522},
-        {1393,532},
-        {1400,552},
-        {1397,587},
-        {1386,619},
-        {1356,630},
-        {1317,634},
-        {1283,635},
-        {1259,622},
-        {1237,604},
-        {1232,591},
-        {1211,583},
-        {1185,577},
-        {1160,582},
-        {1154,599},
-        {1138,605},
-        {1128,626},
-        {1122,651},
-        {1123,675},
-        {1132,688},
-        {1128,697},
-        {1103,701},
-        {1080,719},
-        {1053,738},
-        {1024,743},
-        {1001,754},
-        {985,773},
-        {958,778},
-        {942,774},
-        {916,782},
-        {885,788},
-        {872,783},
-        {867,767},
-        {848,757},
-        {827,750},
-        {810,754},
-        {801,776},
-        {801,803},
-        {505,803},
-        {505,782},
-        {491,780},
-        {482,755},
-        {464,743},
-        {448,738},
-        {429,746},
-        {416,742},
-        {409,717},
-        {400,687},
-        {383,674},
-        {352,663},
-        {330,662},
-        {317,679},
-        {301,679},
-        {297,639},
-        {290,602},
-        {272,587},
-        {251,583},
-        {240,596},
-        {236,631},
-        {234,653},
-        {225,664},
-        {196,668},
-        {171,666},
-        {148,657},
-        {116,651},
-        {94,640},
-        {81,626},
-        {64,613},
-        {49,591},
-        {36,558},
-        {31,529},
-        {40,503},
-        {40,480},
-        {31,456},
-        {38,440},
-        {62,432},
-        {84,440},
-        {107,430},
-        {119,414},
-        {112,390},
-        {133,390},
-        {141,380},
-        {146,355},
-        {160,339},
-        {180,336},
-        {193,340},
-        {202,319},
-        {211,301},
-        {219,281},
-        {218,263},
-        {206,251}
+        {173,214}, {194,197}, {220,190}, {259,193}, {283,187}, {302,178},
+        {302,153}, {310,137}, {331,130}, {355,125}, {382,130}, {416,125},
+        {443,119}, {469,113}, {491,117}, {513,125}, {534,122}, {556,115},
+        {593,115}, {628,117}, {691,118}, {729,120}, {753,128}, {785,134},
+        {816,136}, {855,149}, {876,148}, {891,157}, {925,162}, {948,154},
+        {959,158}, {952,169}, {975,178}, {997,178}, {1014,171}, {1027,176},
+        {1034,190}, {1053,189}, {1074,185}, {1096,195}, {1110,206}, {1121,218},
+        {1134,225}, {1154,209}, {1144,221}, {1138,230}, {1132,247},
+        {1133,266}, {1140,291}, {1155,307}, {1175,314}, {1201,318}, {1193,342},
+        {1183,364}, {1174,372}, {1158,365}, {1144,369}, {1138,382}, {1141,395},
+        {1164,406}, {1161,419}, {1158,431}, {1168,440}, {1190,446}, {1212,444},
+        {1239,424}, {1248,429}, {1245,446}, {1236,468}, {1258,478}, {1267,491},
+        {1268,510}, {1261,535}, {1255,553}, {1229,563}, {1202,565}, {1163,566},
+        {1146,564}, {1130,549}, {1119,532}, {1100,524}, {1075,518}, {1052,522},
+        {1045,535}, {1031,544}, {1021,566}, {1017,591}, {1022,610}, {1022,622},
+        {1003,627}, {979,641}, {954,658}, {928,665}, {906,674}, {898,689},
+        {884,694}, {859,696}, {833,702}, {794,706}, {784,702}, {781,688},
+        {771,681}, {747,674}, {733,677}, {726,696}, {725,719}, {457,719},
+        {454,701}, {444,697}, {435,676}, {423,668}, {404,661}, {389,665},
+        {373,669}, {368,653}, {362,631}, {354,614}, {330,603}, {299,594},
+        {286,610}, {274,607}, {270,581}, {266,550}, {256,533}, {243,526},
+        {228,524}, {218,534}, {215,560}, {212,584}, {201,595}, {171,602},
+        {145,602}, {118,593}, {94,582}, {74,567}, {57,549}, {44,530},
+        {34,500}, {30,474}, {35,451}, {36,431}, {27,416}, {23,402},
+        {37,394}, {58,389}, {75,394}, {89,391}, {100,382}, {96,367},
+        {103,350}, {121,347}, {128,336}, {131,321}, {142,308}, {159,303},
+        {177,297}, {187,278}, {195,258}, {198,241}, {186,226}, {176,224}
     };
-    map->boundaryCount=(int)(sizeof(outline)/sizeof(outline[0]));
-    for (int i=0;i<map->boundaryCount;i++)
-        map->boundary[i]=(Vector2){outline[i].x/1413.0f*map->background.width,
-            outline[i].y/804.0f*map->background.height};
+    map->boundaryCount = sizeof(outline)/sizeof(outline[0]);
+    for (int i = 0; i < map->boundaryCount; i++)
+        map->boundary[i] = (Vector2){outline[i].x/1280.0f*map->background.width,
+            outline[i].y/720.0f*map->background.height};
     map->spawn=(Vector2){map->background.width*.5f,map->background.height*.5f};
 }
 
@@ -545,37 +468,11 @@ bool InitClearing(Clearing *clearing) {
     }
     SetTextureFilter(clearing->collisionGuide, TEXTURE_FILTER_POINT);
 
-    Image foregroundImage = LoadImage("assets/clareira.png");
-    Image foregroundMask = LoadImage("assets/clareira_foreground_mask.png");
-    if (foregroundImage.data == NULL || foregroundMask.data == NULL ||
-        foregroundMask.width != clearing->background.width ||
-        foregroundMask.height != clearing->background.height) {
-        TraceLog(LOG_ERROR, "Mascara dos galhos ausente ou com tamanho diferente do mapa");
-        if (foregroundImage.data != NULL) UnloadImage(foregroundImage);
-        if (foregroundMask.data != NULL) UnloadImage(foregroundMask);
+    if (!LoadMapForeground(clearing, "assets/clareira.png",
+                           "assets/clareira_foreground_mask.png")) {
         UnloadClearing(clearing);
         return false;
     }
-    ImageFormat(&foregroundImage, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
-    clearing->foregroundMaskPixels = LoadImageColors(foregroundMask);
-    UnloadImage(foregroundMask);
-    if (clearing->foregroundMaskPixels == NULL) {
-        UnloadImage(foregroundImage);
-        UnloadClearing(clearing);
-        return false;
-    }
-    Color *foregroundPixels = (Color *) foregroundImage.data;
-    int count = foregroundImage.width * foregroundImage.height;
-    for (int index = 0; index < count; index++) {
-        foregroundPixels[index].a = clearing->foregroundMaskPixels[index].a;
-    }
-    clearing->foreground = LoadTextureFromImage(foregroundImage);
-    UnloadImage(foregroundImage);
-    if (clearing->foreground.id == 0) {
-        UnloadClearing(clearing);
-        return false;
-    }
-    SetTextureFilter(clearing->foreground, TEXTURE_FILTER_POINT);
 
     // A mascara bloqueia as marcas vermelhas; este retangulo fecha o resto da borda.
     clearing->playableBounds = (Rectangle) {
@@ -603,28 +500,77 @@ void DrawClearingAltarGlow(const Clearing *clearing, float time) {
                 43.0f, 11.0f, Fade(cyan, 0.16f + 0.10f*pulse));
 }
 
-void DrawClearingForeground(const Clearing *clearing, Vector2 player) {
-    if (!clearing->foregroundMaskPixels) return;
-    int x = (int) player.x;
-    int y = (int) player.y;
-    bool behindBranch = x >= 0 && y >= 0 &&
-        x < clearing->background.width && y < clearing->background.height &&
-        clearing->foregroundMaskPixels[y * clearing->background.width + x].a > 0;
-    int middle = clearing->background.width / 2;
-    DrawTextureRec(clearing->foreground,
-        (Rectangle) { 0, 0, (float) middle, (float) clearing->background.height },
-        (Vector2) { 0, 0 },
-        behindBranch && x < middle ? Fade(WHITE, 0.7f) : WHITE);
-    DrawTextureRec(clearing->foreground,
-        (Rectangle) { (float) middle, 0,
-                      (float) (clearing->background.width - middle),
-                      (float) clearing->background.height },
-        (Vector2) { (float) middle, 0 },
-        behindBranch && x >= middle ? Fade(WHITE, 0.7f) : WHITE);
+/* Screen-space source rectangles and foot depth in the same reference
+   coordinates as the silhouette mask. Each object has its own sort line. */
+static const Rectangle clearingOverhangs[] = {
+    {26, 392, 165, 69}, {53, 452, 188, 101}, {212, 519, 63, 90},
+    {730, 618, 176, 78}, {1014, 510, 145, 94}, {1071, 465, 139, 100}
+};
+
+static const Rectangle villageOverhangs[] = {
+    {210, 551, 222, 133}, {422, 606, 168, 59},
+    {725, 581, 128, 63}, {917, 550, 155, 86}
+};
+
+static const Rectangle chapelOverhangs[] = {
+    {158, 348, 48, 142}, {154, 490, 51, 151},
+    {363, 357, 51, 138}, {357, 492, 51, 150},
+    {869, 357, 51, 138}, {873, 492, 51, 151},
+    {1073, 348, 51, 143}, {1075, 491, 52, 151},
+    {580, 264, 121, 56}
+};
+
+static const Rectangle basementOverhangs[] = {
+    {249, 155, 61, 71}, {970, 155, 63, 71},
+    {248, 451, 63, 63}, {970, 451, 64, 63}
+};
+
+static const Rectangle bonelandOverhangs[] = {
+    {196, 214, 63, 87}, {1023, 179, 51, 106}, {1040, 390, 55, 90}
+};
+
+void DrawClearingForeground(const Clearing *clearing, Vector2 feet) {
+    if (!clearing->foreground.id) return;
+    if (clearing->cemetery) {
+        const float sx = clearing->background.width/1276.0f;
+        const float sy = clearing->background.height/720.0f;
+        if (feet.y >= 516*sy) return;
+        int x = (int)floorf((1058-2)*sx), y = (int)floorf(404*sy);
+        Rectangle source = {x, y, ceilf((1176-2)*sx)-x, ceilf(516*sy)-y};
+        DrawTextureRec(clearing->foreground, source, (Vector2){x,y}, WHITE);
+        return;
+    }
+    const float sx = clearing->background.width/1280.0f;
+    const float sy = clearing->background.height/720.0f;
+    const Rectangle *overhangs = clearing->village ? villageOverhangs : clearingOverhangs;
+    unsigned count = clearing->village
+        ? sizeof(villageOverhangs)/sizeof(villageOverhangs[0])
+        : sizeof(clearingOverhangs)/sizeof(clearingOverhangs[0]);
+    if (clearing->chapel || clearing->invertedChapel) {
+        overhangs = chapelOverhangs;
+        count = sizeof(chapelOverhangs)/sizeof(chapelOverhangs[0]);
+        /* The last rectangle is the altar, shared only by the normal chapel. */
+        if (clearing->invertedChapel) count--;
+    } else if (clearing->basement) {
+        overhangs = basementOverhangs;
+        count = sizeof(basementOverhangs)/sizeof(basementOverhangs[0]);
+    } else if (clearing->boneland) {
+        overhangs = bonelandOverhangs;
+        count = sizeof(bonelandOverhangs)/sizeof(bonelandOverhangs[0]);
+    }
+    for (unsigned i = 0; i < count; i++) {
+        Rectangle part = overhangs[i];
+        float depth = part.y + part.height;
+        if (feet.y >= depth*sy) continue;
+        int x = (int)floorf(part.x*sx), y = (int)floorf(part.y*sy);
+        Rectangle source = {x, y, ceilf((part.x+part.width)*sx)-x, ceilf(depth*sy)-y};
+        DrawTextureRec(clearing->foreground, source, (Vector2){x,y}, WHITE);
+    }
 }
 
 void DrawClearingCollisionGuide(const Clearing *clearing) {
-    if (!clearing->boundaryCount && clearing->collisionGuide.id) DrawTexture(clearing->collisionGuide, 0, 0, WHITE);
+    if (!clearing->boundaryCount && clearing->collisionGuide.id)
+        DrawTexture(clearing->collisionGuide, 0, 0, Fade(WHITE, .55f));
     for (int i=0;i<clearing->boundaryCount;i++)
         DrawLineEx(clearing->boundary[i],clearing->boundary[(i+1)%clearing->boundaryCount],3,RED);
     for (int i=0;i<clearing->obstacleCount;i++)
@@ -634,11 +580,18 @@ void DrawClearingCollisionGuide(const Clearing *clearing) {
         for (int j=0;j<shape->count;j++)
             DrawLineEx(shape->vertices[j],shape->vertices[(j+1)%shape->count],2,RED);
     }
-    if (clearing->cemetery || clearing->village) DrawRectangleLinesEx(clearing->exit,2,GREEN);
+    if (clearing->exit.width > 0) DrawRectangleLinesEx(clearing->exit,3,GREEN);
+    if (clearing->templarField)
+        DrawRectangleLinesEx((Rectangle){700,0,270,150},3,LIME);
+    DrawCircleV(clearing->spawn,7,SKYBLUE);
+    DrawText("Spawn", (int)clearing->spawn.x+10,(int)clearing->spawn.y,20,SKYBLUE);
     if (!clearing->boundaryCount) DrawRectangleLinesEx(clearing->playableBounds, 3.0f, RED);
-    if (!clearing->cemetery && !clearing->village)
+    if (clearing->pedestal.x >= 0)
         DrawCircleLines((int) clearing->pedestal.x,
                         (int) clearing->pedestal.y, CLEARING_ALTAR_RADIUS, BLUE);
+    if (ClearingMapId(clearing) == 0)
+        DrawCircleLines((int)(clearing->background.width*.622f),
+                        (int)(clearing->background.height*.228f),22,RED);
 }
 
 bool IsClearingBlocked(const Clearing *clearing, Vector2 point) {
@@ -672,10 +625,6 @@ bool IsClearingBlocked(const Clearing *clearing, Vector2 point) {
 }
 
 void UnloadClearing(Clearing *clearing) {
-    if (clearing->foregroundMaskPixels != NULL) {
-        UnloadImageColors(clearing->foregroundMaskPixels);
-        clearing->foregroundMaskPixels = NULL;
-    }
     if (clearing->foreground.id != 0) {
         UnloadTexture(clearing->foreground);
         clearing->foreground.id = 0;

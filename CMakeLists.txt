@@ -21,6 +21,7 @@ set(SOURCES
     src/logica.c
     src/dev_tools.c
     src/clearing.c
+    src/atmosphere.c
     src/hud.c
     src/speedrun.c
     src/menu.c
@@ -48,6 +49,11 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(atmosphere_audit tests/atmosphere_audit.c src/clearing.c)
+    target_include_directories(atmosphere_audit PRIVATE src)
+    target_link_libraries(atmosphere_audit PRIVATE raylib)
+    add_test(NAME atmosphere_audit COMMAND atmosphere_audit)
+    set_tests_properties(atmosphere_audit PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}" TIMEOUT 120)
     add_executable(logica_test tests/logica_test.c src/logica.c)
     target_include_directories(logica_test PRIVATE src)
     add_test(NAME logica COMMAND logica_test)
@@ -95,6 +101,15 @@ if(BUILD_TESTING)
     set_target_properties(guardian_story_flow_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/audit/story_flow")
     add_test(NAME guardian_story_flow COMMAND guardian_story_flow_test)
     set_tests_properties(guardian_story_flow PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+    # Some legacy tests initialize their scenarios inside assert().
+    foreach(test atmosphere_audit logica_test speedrun_test enemy_audit_test map_connectivity_test
+                 player_collision_test encounter_test guardian_cutscene_test guardian_story_flow_test)
+        if(MSVC)
+            target_compile_options(${test} PRIVATE /UNDEBUG)
+        else()
+            target_compile_options(${test} PRIVATE -UNDEBUG)
+        endif()
+    endforeach()
 endif()
 
 # Mantem os assets atualizados no diretorio do binario a cada build.

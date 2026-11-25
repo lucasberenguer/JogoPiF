@@ -82,7 +82,7 @@ void BeginGameFrame(void) {
         if (frameTarget.id) UnloadRenderTexture(frameTarget);
         frameTarget = LoadRenderTexture(width, height);
         if (!frameTarget.id) return;
-        SetTextureFilter(frameTarget.texture, TEXTURE_FILTER_BILINEAR);
+        SetTextureFilter(frameTarget.texture, TEXTURE_FILTER_POINT);
     }
     BeginTextureMode(frameTarget);
     /* Mantém as coordenadas de tela: todo o desenho do jogo continua usando

@@ -18,7 +18,6 @@ typedef struct Clearing {
     Texture2D collisionGuide;
     Texture2D foreground;
     Color *collisionPixels;
-    Color *foregroundMaskPixels;
     Rectangle playableBounds;
     Vector2 boundary[192];
     int boundaryCount;

@@ -847,7 +847,8 @@ int main(void) {
     assert(!IsMapActorBlocked(&grave,(Vector2){835,210}));
     assert(!IsMapActorBlocked(&grave,(Vector2){835,500}));
     assert(IsClearingBlocked(&grave,(Vector2){1450,260}));
-    assert(IsClearingBlocked(&grave,(Vector2){300,560}));
+    assert(!IsClearingBlocked(&grave,(Vector2){300,560})); /* Above the headstone's footprint. */
+    assert(IsClearingBlocked(&grave,(Vector2){300,588}));
     assert(!IsMapActorBlocked(&grave,(Vector2){1560,490}));
     Enemy poseEnemy={.type=ENEMY_COMMON_MELEE,.state=ENEMY_WALK,.walkTime=.25f};
     const int zombieRows[]={0,2,3,1};

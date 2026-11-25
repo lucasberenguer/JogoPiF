@@ -14,6 +14,7 @@
 #include "guardian_cutscene.h"
 #include "dev_tools.h"
 #include "video_settings.h"
+#include "atmosphere.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -287,6 +288,7 @@ int main(void) {
     double completedRunTime=0;
     const float entryFadeDuration = 1.15f;
     float entryFadeRemaining = 0.0f;
+    InitAtmosphere();
 
     while (!WindowShouldClose()) {
         if ((screen==2 || screen==GUARDIAN_SCREEN || screen==OPENING_SCREEN) &&
@@ -829,15 +831,17 @@ int main(void) {
             EndGameFrame();
             continue;
         }
-        if (entryFadeRemaining<=0 && !encounter.guardianIntroPending)
+        Camera2D camera = FitClearing(&clearing);
+        bool atmosphereDebug = UpdateAtmosphere(&clearing, camera, fminf(GetFrameTime(),.05f));
+        if (!atmosphereDebug && entryFadeRemaining<=0 && !encounter.guardianIntroPending)
             UpdateStagePresentation(&encounter.presentation,fminf(GetFrameTime(),.05f));
-        if (entryFadeRemaining<=0 && encounter.phase==ENCOUNTER_VILLAGE_LETTER_READY &&
+        if (!atmosphereDebug && entryFadeRemaining<=0 && encounter.phase==ENCOUNTER_VILLAGE_LETTER_READY &&
             IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             Vector2 cursor=GetScreenToWorld2D(GetMousePosition(),FitClearing(&clearing));
             if (CheckCollisionPointCircle(cursor,enemies.list[0].position,31))
                 ReadVillageLetter(&encounter,&enemies,player);
         }
-        bool encounterChanged=entryFadeRemaining<=0 &&
+        bool encounterChanged=!atmosphereDebug && entryFadeRemaining<=0 &&
             UpdateEncounter(&encounter,&enemies,&clearing,player,&playerHealth);
         if (encounterChanged) {
             ResetGun(&gun);
@@ -970,6 +974,10 @@ int main(void) {
         if (deltaTime > 0.05f) deltaTime = 0.05f;
         bool entering = entryFadeRemaining > 0.0f || EncounterPaused(&encounter) || encounterChanged;
         if (entering) entryFadeRemaining = fmaxf(0.0f, entryFadeRemaining - fminf(GetFrameTime(),.05f));
+        if (atmosphereDebug) {
+            entering = true;
+            deltaTime = 0;
+        }
         if (!entering && IsKeyPressed(KEY_F3)) showCollisionGuide = !showCollisionGuide;
         if (!entering && IsKeyPressed(KEY_F6)) showSpriteDebug = !showSpriteDebug;
         if (clearing.templarField)
@@ -1081,7 +1089,6 @@ int main(void) {
             entering || grabbed ? 0.0f : (float) IsKeyDown(KEY_D) - (float) IsKeyDown(KEY_A),
             entering || grabbed ? 0.0f : (float) IsKeyDown(KEY_S) - (float) IsKeyDown(KEY_W)
         };
-        Camera2D camera = FitClearing(&clearing);
         if (!entering && !grabbed && currentWeapon == WEAPON_KATANA &&
             IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
             katanaAttackCooldown <= 0.0f && dodgeRemaining <= 0.0f) {
@@ -1278,7 +1285,8 @@ int main(void) {
         BeginGameFrame();
             ClearBackground(BLACK);
             BeginMode2D(camera);
-                DrawClearing(&clearing);
+                DrawAtmosphereBackground(&clearing, enemies.list[0].necromancerForm);
+                DrawAtmosphereBelow(&clearing);
                 if (clearing.templarField && clearing.exitLocked) {
                     Vector2 left = {clearing.exit.x, clearing.exit.y + clearing.exit.height};
                     Vector2 right = {left.x + clearing.exit.width, left.y};
@@ -1317,17 +1325,17 @@ int main(void) {
                         DrawCircleLines((int)stairs.x, (int)stairs.y, 34.0f * pulse, Fade(GOLD, 0.85f));
                     }
                 }
-                if (clearing.invertedChapel) {
-                    float t = (float)GetTime();
-                    float w = (float)clearing.background.width, h = (float)clearing.background.height;
-                    for (int i = 0; i < 18; i++) {
-                        float x = fmodf((float)(i * 97 + 43) + sinf(t * 0.6f + i) * 28.0f, w);
-                        float y = fmodf((float)(i * 67 + 29) + t * (10.0f + (i % 5) * 3.0f), h);
-                        DrawCircleV((Vector2){x, y}, 2.2f + (i % 2), Fade((Color){220, 45, 55, 255}, 0.45f));
-                    }
+                DrawAtmosphereShadow(&clearing, player, 23);
+                for (int i = 0; i < ENEMY_COUNT; i++) {
+                    const Enemy *enemy = &enemies.list[i];
+                    if (enemy->state != ENEMY_GONE && enemy->state != ENEMY_DIE &&
+                        enemy->state != ENEMY_SPAWNING && enemy->maxHealth > 0)
+                        DrawAtmosphereShadow(&clearing, enemy->position, EnemyHurtRadius(enemy));
                 }
                 if (currentWeapon == WEAPON_BIBLE) DrawBiblePools(&bible);
+                BeginAtmosphereActors(&clearing);
                 DrawEnemies(&enemies, player, false);
+                EndAtmosphereActors();
                 if (encounter.phase==ENCOUNTER_VILLAGE_LETTER_READY) {
                     Vector2 letter=enemies.list[0].position;
                     DrawCircleLinesV(letter,31,Fade(GOLD,.76f));
@@ -1338,6 +1346,7 @@ int main(void) {
                 }
                 if (currentWeapon == WEAPON_BIBLE) DrawBible(&bible, player, false);
                 if (currentWeapon == WEAPON_BIBLE) DrawBibleActivation(&bible, player);
+                BeginAtmosphereActors(&clearing);
                 if (dodging) {
                     DrawTexturePro(dodgeSprites,
                         PlayerSpriteSource(dodgePose,facing,112,80),
@@ -1409,6 +1418,7 @@ int main(void) {
                         bodyDestination,
                         (Vector2) { 0, 0 }, 0.0f, WHITE);
                 }
+                EndAtmosphereActors();
                 for (int s = 0; s < KATANA_MAX_SHOCKWAVES; s++) {
                     const KatanaShockwave *wave = &katanaShockwaves[s];
                     if (wave->life <= 0.0f) continue;
@@ -1421,9 +1431,13 @@ int main(void) {
                 }
                 if (currentWeapon == WEAPON_BIBLE) DrawBible(&bible, player, true);
                 if (currentWeapon == WEAPON_GUN) DrawGun(&gun);
+                BeginAtmosphereActors(&clearing);
                 DrawEnemies(&enemies, player, true);
+                EndAtmosphereActors();
                 DrawEnemyProjectiles(&enemies);
                 DrawClearingForeground(&clearing, player);
+                DrawAtmosphereAbove(&clearing);
+                DrawAtmosphereGuides(&clearing);
                 if (showCollisionGuide) {
                     DrawClearingCollisionGuide(&clearing);
                 }
@@ -1478,6 +1492,7 @@ int main(void) {
             if (currentWeapon == WEAPON_GUN)
                 DrawGameText("Clique esquerdo: disparar (um tiro por clique)", 24, 176, 18, RAYWHITE);
             DrawEncounter(&encounter,&enemies);
+            DrawAtmospherePanel(&clearing);
             if (encounter.practice) {
                 DrawRectangle(0,GetScreenHeight()-PRACTICE_FOOTER_HEIGHT,GetScreenWidth(),PRACTICE_FOOTER_HEIGHT,Fade(BLACK,.8f));
                 DrawGameTextIn(devTools.invincible ? "PRÁTICA · Invulnerável · F1 ferramentas" :
@@ -1506,6 +1521,7 @@ int main(void) {
     UnloadTexture(protagonist);
     UnloadClearing(&clearing);
     UnloadVideoFrame();
+    UnloadAtmosphere();
     UnloadEncounterRewardUi();
     UnloadGameFonts();
     CloseWindow();
