@@ -29,12 +29,19 @@ typedef struct GunImpact {
     Vector2 position;
     float remaining;
 } GunImpact;
+typedef struct GunBodyFrame {
+    unsigned char headWidth, top, bottom;
+} GunBodyFrame;
+typedef struct GunBodyAtlas {
+    GunBodyFrame frames[12][8];
+} GunBodyAtlas;
 typedef struct Gun {
     Texture2D projectile;
     Texture2D impact;
     Texture2D body;
     Texture2D idleBody;
     Texture2D walkBody;
+    GunBodyAtlas idleFit, walkFit, shotFit;
     GunShot shots[GUN_MAX_SHOTS];
     GunImpact impacts[GUN_MAX_IMPACTS];
     Vector2 muzzle;
@@ -50,6 +57,8 @@ void ResetGun(Gun *gun);
 void UpdateGun(Gun *gun, const Clearing *clearing, Vector2 player,
                Vector2 aimWorld, float deltaTime, bool triggerPressed, int level);
 void DrawGun(const Gun *gun);
+Rectangle GunBodyDestination(const Gun *gun, Rectangle source, Vector2 player,
+                             int facing, bool walking, bool firing);
 int GunHitEnemyCircle(Gun *gun, int enemyIndex, Vector2 enemy, float enemyRadius);
 int GunHitCircle(Gun *gun, Vector2 enemy, float enemyRadius);
 #endif

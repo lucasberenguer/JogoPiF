@@ -32,7 +32,8 @@
 #define GUARDIAN_DEFEAT_FRAMES 8
 #define GUARDIAN_SPAWN_DURATION 3.0f
 #define GUARDIAN_SPAWN_COLUMNS 6
-#define GUARDIAN_SPAWN_RECOIL_FRAME 13 /* Índice na folha, começando em zero. */
+#define GUARDIAN_SPAWN_FRAMES 23
+#define GUARDIAN_RENDER_SAMPLES 4
 #define GUARDIAN_SPAWN_SCALE .72f
 #define GUARDIAN_SPRITE_SCALE .65f
 #define GUARDIAN_PHASE_TRANSITION_TIME 1.0f
@@ -53,47 +54,16 @@
 #define GUARDIAN_CURSE_TILE_WIDTH 384
 #define GUARDIAN_CURSE_TILE_HEIGHT 320
 #define GUARDIAN_MELEE_RANGE 118.0f
-#define GUARDIAN_MELEE_COOLDOWN 1.65f
+#define GUARDIAN_MELEE_PRESSURE_RANGE 132.0f
+#define GUARDIAN_MELEE_COOLDOWN 1.15f
 #define GUARDIAN_MELEE_FPS 10.0f
 #define GUARDIAN_MELEE_FRAMES 8
 #define GUARDIAN_MELEE_HIT_FRAME 4
 
-/* As poses da folha têm larguras diferentes. O pivô acompanha o corpo e a
-   linha do chão de cada fileira, independente de folhas e raízes soltas. */
-static const struct {
-    int top, bottom, ground;
-    int edges[GUARDIAN_SPAWN_COLUMNS + 1];
-    int pivots[GUARDIAN_SPAWN_COLUMNS];
-} guardianSpawnRows[] = {
-    {0,   234, 221, {0, 224, 452, 674, 937, 1201, 1536}, {116, 343, 571, 819, 1078, 1348}},
-    {234, 474, 462, {0, 242, 481, 737, 984, 1236, 1536}, {118, 362, 619, 868, 1122, 1374}},
-    {474, 702, 692, {0, 254, 523, 788, 1055, 1288, 1536}, {140, 397, 674, 938, 1188, 1433}},
-    {702, 940, 924, {0, 273, 529, 784, 1049, 1278, 1536}, {155, 407, 680, 930, 1181, 1408}},
-};
-
-#define GUARDIAN_SPAWN_FRAMES ((int)(sizeof(guardianSpawnRows) / sizeof(guardianSpawnRows[0])) * GUARDIAN_SPAWN_COLUMNS - 1)
-
-/* Ordem das direções do inimigo: baixo, cima, esquerda e direita.
-   O primeiro recorte de cada linha começa depois da legenda da folha. */
-static const struct {
-    int top, bottom, ground;
-    int edges[GUARDIAN_DEFEAT_FRAMES + 1];
-    float scale;
-} guardianDefeatRows[] = {
-    {0,   267, 251, {74, 248, 420, 609, 795, 988, 1176, 1364, 1536}, .66f},
-    {267, 523, 508, {73, 248, 420, 608, 795, 988, 1178, 1364, 1536}, .72f},
-    {523, 779, 763, {94, 251, 420, 607, 793, 987, 1179, 1366, 1536}, .70f},
-    {779, 1024, 1005, {78, 250, 420, 607, 797, 990, 1181, 1363, 1536}, .71f},
-};
-
-static const int guardianDefeatPivots[GUARDIAN_DEFEAT_FRAMES] = {
-    158, 334, 510, 699, 891, 1084, 1271, 1454
-};
-
-static int GuardianDefeatFrame(const Enemy *enemy) {
+static float GuardianDefeatPose(const Enemy *enemy) {
     if (enemy->state == ENEMY_FALLEN) return GUARDIAN_DEFEAT_FRAMES - 1;
-    float progress = enemy->stateTime / ENEMY_DEFEAT_DURATION;
-    return (int)fminf(progress * GUARDIAN_DEFEAT_FRAMES, GUARDIAN_DEFEAT_FRAMES - 1);
+    return Clamp(enemy->stateTime * GUARDIAN_DEFEAT_FRAMES / ENEMY_DEFEAT_DURATION,
+                 0, GUARDIAN_DEFEAT_FRAMES - 1);
 }
 
 static bool IsGuardianSpawn(const EnemyGroup *group, const Enemy *enemy) {
@@ -101,9 +71,9 @@ static bool IsGuardianSpawn(const EnemyGroup *group, const Enemy *enemy) {
            enemy->type == ENEMY_BOSS && enemy->state == ENEMY_SPAWNING;
 }
 
-static int GuardianSpawnFrame(const Enemy *enemy) {
-    float progress = enemy->stateTime / GUARDIAN_SPAWN_DURATION;
-    return (int)Clamp(progress * GUARDIAN_SPAWN_FRAMES, 0, GUARDIAN_SPAWN_FRAMES - 1);
+static float GuardianSpawnPose(const Enemy *enemy) {
+    return Clamp(enemy->stateTime * GUARDIAN_SPAWN_FRAMES / GUARDIAN_SPAWN_DURATION,
+                 0, GUARDIAN_SPAWN_FRAMES - 1);
 }
 
 typedef struct GuardianHazard {
@@ -184,20 +154,23 @@ static int ClearingEnemyFrame(const Enemy *enemy, bool boneland) {
     }
 }
 
+static float GuardianBodyPose(const Enemy *enemy) {
+    if (enemy->state == ENEMY_ATTACK && enemy->guardianMelee)
+        return Clamp(enemy->stateTime * GUARDIAN_MELEE_FPS, 0, GUARDIAN_MELEE_FRAMES - 1);
+    if (enemy->state == ENEMY_ATTACK && enemy->bossAttack == GUARDIAN_ROOTS)
+        return Clamp(enemy->stateTime * 6, 0, 8);
+    if (enemy->state == ENEMY_WALK) {
+        float speed = enemy->speed * (GuardianEnraged(enemy) ? 1.5f : 1.0f);
+        return fmodf(enemy->walkTime * 4 * speed / 30, 8);
+    }
+    return fmodf(fmaxf(0, enemy->stateTime) * 7, 6);
+}
+
 int EnemyAnimationFrame(const Enemy *enemy) {
     if (enemy->type == ENEMY_BOSS) {
-        if (enemy->state == ENEMY_ATTACK && enemy->guardianMelee)
-            return (int)fminf(enemy->stateTime * GUARDIAN_MELEE_FPS, GUARDIAN_MELEE_FRAMES - 1);
-        if (enemy->state == ENEMY_ATTACK && enemy->bossAttack != GUARDIAN_ROOTS)
+        if (enemy->state == ENEMY_ATTACK && !enemy->guardianMelee && enemy->bossAttack != GUARDIAN_ROOTS)
             return 0;
-       if (enemy->state == ENEMY_WALK) {
-            float v = enemy->speed * (GuardianEnraged(enemy) ? 1.5f : 1.0f);
-            float fps = 4.0f * v / 30.0f;
-            return (int)(enemy->walkTime * fps) % 8;
-        }
-        int count = enemy->state == ENEMY_ATTACK ? 9 : 6;
-        int frame = (int)(enemy->stateTime * (enemy->state == ENEMY_ATTACK ? 6.0f : 7.0f));
-        return enemy->state == ENEMY_ATTACK ? (frame < count ? frame : count-1) : frame % count;
+        return (int)GuardianBodyPose(enemy);
     }
     int count = enemy->type == ENEMY_COMMON_RANGED ? 4 :
                 enemy->state == ENEMY_ATTACK || enemy->state == ENEMY_DIE ? 5 : 4;
@@ -403,16 +376,16 @@ static bool LoadClearingEnemyAssets(EnemyGroup *group) {
     group->clearingSpecial[1] = LoadClearingSpriteWithMatte("assets/clareira_especial_andar.png", matte);
     group->clearingSpecial[2] = LoadTexture("assets/clareira_especial_ataque.png");
     if (matte.id) UnloadShader(matte);
-    group->bossSprites = LoadTexture("assets/boss_clareira.png");
-    group->guardianSpawn = LoadTexture("assets/boss_clareira_spawn.png");
-    group->guardianDefeat = LoadTexture("assets/boss_clareira_derrota.png");
-    group->bossWalk = LoadTexture("assets/boss_clareira_andar.png");
+    group->bossSprites = LoadTexture("assets/guardiao/fluido/espera.png");
+    group->guardianSpawn = LoadTexture("assets/guardiao/fluido/emergencia.png");
+    group->guardianDefeat = LoadTexture("assets/guardiao/fluido/queda.png");
+    group->bossWalk = LoadTexture("assets/guardiao/fluido/marcha.png");
     group->bossPortrait = LoadTexture("assets/guardiao_intro_pixel_v2.png");
-    group->bossAttack = LoadTexture("assets/boss_clareira_especial_1.png");
-    group->roots = LoadTexture("assets/boss_clareira_raizes_area.png");
-    group->rootWave = LoadTexture("assets/boss_clareira_onda.png");
-    group->curse = LoadTexture("assets/boss_clareira_maldicao.png");
-    group->guardianMelee = LoadTexture("assets/boss_clareira_corpo_a_corpo.png");
+    group->bossAttack = LoadTexture("assets/guardiao/fluido/conjuracao.png");
+    group->roots = LoadTexture("assets/guardiao/fluido/raizes.png");
+    group->rootWave = LoadTexture("assets/guardiao/fluido/onda.png");
+    group->curse = LoadTexture("assets/guardiao/fluido/maldicao.png");
+    group->guardianMelee = LoadTexture("assets/guardiao/fluido/golpe.png");
     if (!group->sprites.id || !group->backSprites.id || !group->frontSprites.id ||
         !group->clearingMelee[0].id || !group->clearingMelee[1].id || !group->clearingMelee[2].id ||
         !group->clearingArcher[0].id || !group->clearingArcher[1].id || !group->clearingArcher[2].id ||
@@ -463,15 +436,15 @@ static bool LoadCemeteryEnemyAssets(EnemyGroup *group) {
         group->cemeterySpecial[i] = LoadTexture(specialSheets[i]);
         if (group->cemeterySpecial[i].id) SetTextureFilter(group->cemeterySpecial[i], TEXTURE_FILTER_POINT);
     }
-    group->coveiroIdle = LoadTexture("assets/coveiro_visual_espera.png");
-    group->coveiroWalk = LoadTexture("assets/coveiro_visual_corrida.png");
-    group->coveiroEmerge = LoadTexture("assets/coveiro_visual_emergencia.png");
-    group->coveiroFall = LoadTexture("assets/coveiro_visual_queda.png");
-    group->coveiroMelee = LoadTexture("assets/coveiro_ataque_pazada.png");
+    group->coveiroIdle = LoadTexture("assets/coveiro/fluido/coveiro_visual_espera.png");
+    group->coveiroWalk = LoadTexture("assets/coveiro/fluido/coveiro_visual_corrida.png");
+    group->coveiroEmerge = LoadTexture("assets/coveiro/fluido/coveiro_visual_emergencia.png");
+    group->coveiroFall = LoadTexture("assets/coveiro/fluido/coveiro_visual_queda.png");
+    group->coveiroMelee = LoadTexture("assets/coveiro/fluido/coveiro_ataque_pazada.png");
     group->cemeterySpell = LoadTexture("assets/zumbi_lanterna_projetil.png");
-    group->boss[0] = LoadTexture("assets/coveiro_ataque_raizes.png");
-    group->boss[1] = LoadTexture("assets/coveiro_ataque_arremesso.png");
-    group->boss[2] = LoadTexture("assets/coveiro_ataque_investida.png");
+    group->boss[0] = LoadTexture("assets/coveiro/fluido/coveiro_ataque_raizes.png");
+    group->boss[1] = LoadTexture("assets/coveiro/fluido/coveiro_ataque_arremesso.png");
+    group->boss[2] = LoadTexture("assets/coveiro/fluido/coveiro_ataque_investida.png");
     group->effects[0] = LoadTexture("assets/coveiro_novo_pull_effect.png");
     group->effects[1] = LoadTexture("assets/coveiro_pa_vento_v4.png");
     group->effects[2] = LoadTexture("assets/coveiro_efeito_investida.png");
@@ -556,6 +529,31 @@ static bool LoadBonelandEnemyAssets(EnemyGroup *group) {
     return true;
 }
 
+static int IgrisPoseSamples(int art) {
+    switch (art) {
+        case IGRIS_IDLE_ART: case IGRIS_WALK_ART: case IGRIS_MELEE_ART:
+        case IGRIS_ERUPTION_ART: case IGRIS_SPEARS_ART: case IGRIS_VORTEX_ART:
+        case IGRIS_FINAL_IDLE: case IGRIS_FINAL_WALK:
+        case IGRIS_Z_DOWN: case IGRIS_Z_UP: case IGRIS_Z_LEFT: case IGRIS_Z_RIGHT:
+        case IGRIS_GRAB_ART: case IGRIS_ECHO_ART:
+        case IGRIS_ECLIPSE_FX: case IGRIS_ERUPTION_FX: case IGRIS_SPEARS_FX:
+        case IGRIS_VORTEX_FX: case IGRIS_GRAB_FX: case IGRIS_ECHO_FX:
+            return 3;
+        case IGRIS_FINAL_MELEE:
+            return 4;
+        default:
+            return 1;
+    }
+}
+
+static Rectangle IgrisEffectSource(Texture2D art, int columns, int row, float pose) {
+    const int samples = 3, rows = 4;
+    int frame = (int)(Clamp(pose,0,columns-.001f)*samples);
+    float width = art.width/(float)columns;
+    float height = art.height/(float)(rows*samples);
+    return (Rectangle){(frame/samples)*width,(row+(frame%samples)*rows)*height,width,height};
+}
+
 static bool LoadTemplarEnemyAssets(EnemyGroup *group) {
     static const char *const idleFiles[TEMPLAR_MARSHAL] = {
         [TEMPLAR_SHIELD] = "assets/templarios/espadachim_idle.png",
@@ -594,7 +592,8 @@ static bool LoadTemplarEnemyAssets(EnemyGroup *group) {
         "z_down", "z_up", "z_left", "z_right", "abyss_grab", "abyss_grab_fx", "echoes", "echoes_fx"
     };
     for (int i = 0; i < IGRIS_ART_COUNT; i++) {
-        group->igrisArt[i] = LoadTexture(TextFormat("assets/igris/%s.png", igrisFiles[i]));
+        const char *directory = IgrisPoseSamples(i) > 1 ? "assets/igris/fluido" : "assets/igris";
+        group->igrisArt[i] = LoadTexture(TextFormat("%s/%s.png", directory, igrisFiles[i]));
         if (!group->igrisArt[i].id) return false;
         SetTextureFilter(group->igrisArt[i], TEXTURE_FILTER_POINT);
     }
@@ -1393,29 +1392,68 @@ static void FireUmbraSpears(EnemyGroup *group, const Enemy *boss, int damage) {
     }
 }
 
-static bool PlanIgrisZ(const Clearing *map, Enemy *boss, int facing, float distance) {
-    static const Vector2 directions[] = {{0,1},{0,-1},{-1,0},{1,0}};
-    Vector2 forward = directions[facing];
-    float side = facing < 2 ? -1 : 1;
-    Vector2 across = {-forward.y*side,forward.x*side};
-    Vector2 start = boss->position;
-    for (float scale = 1; scale >= .54f; scale -= .15f) {
-        Vector2 along = Vector2Scale(forward,Clamp(distance+55,190,305)*scale);
-        Vector2 offset = Vector2Scale(across,172*scale);
-        Vector2 points[] = {start,Vector2Add(start,along),Vector2Add(start,offset),
-                            Vector2Add(Vector2Add(start,offset),along)};
-        bool clear = true;
-        for (int i = 0; i < 3 && clear; i++) {
-            int steps = (int)ceilf(Vector2Distance(points[i],points[i+1])/4);
-            clear = MapHasClearPath(map,points[i],points[i+1]);
-            for (int j = 1; j <= steps && clear; j++)
-                clear = !IsMapActorBlocked(map,Vector2Lerp(points[i],points[i+1],(float)j/steps));
-        }
-        if (!clear) continue;
-        memcpy(boss->igrisZPath,points,sizeof(points));
-        return true;
+static Vector2 NearestOnIgrisLeg(Vector2 point, Vector2 from, Vector2 to) {
+    Vector2 leg = Vector2Subtract(to,from);
+    float length = Vector2LengthSqr(leg);
+    if (length <= 0) return from;
+    float along = Clamp(Vector2DotProduct(Vector2Subtract(point,from),leg)/length,0,1);
+    return Vector2Add(from,Vector2Scale(leg,along));
+}
+
+static bool IgrisZPathClear(const Clearing *map, const Vector2 points[4]) {
+    for (int i = 0; i < 3; i++) {
+        int steps = (int)ceilf(Vector2Distance(points[i],points[i+1])/4);
+        for (int j = 1; j <= steps; j++)
+            if (IsMapActorBlocked(map,Vector2Lerp(points[i],points[i+1],(float)j/steps)))
+                return false;
     }
-    return false;
+    return true;
+}
+
+static bool PlanIgrisZ(const Clearing *map, Enemy *boss, Vector2 player) {
+    static const Vector2 directions[] = {{0,1},{0,-1},{-1,0},{1,0}};
+    const float scales[] = {1,.85f,.70f,.55f};
+    const float widths[] = {172,116,220};
+    const Vector2 start = boss->position;
+    const Vector2 target = Vector2Subtract(player,start);
+    const float length = Clamp(Vector2Length(target)+55,190,305);
+    int bestFacing = -1;
+    float bestScore = 0;
+    for (int facing = 0; facing < 4; facing++) {
+        Vector2 forward = directions[facing];
+        if (Vector2DotProduct(forward,target) < 0) continue;
+        float preferredSide = facing < 2 ? -1 : 1;
+        for (int mirror = 0; mirror < 2; mirror++) {
+            float side = mirror ? -preferredSide : preferredSide;
+            Vector2 across = {-forward.y*side,forward.x*side};
+            for (int s = 0; s < 4; s++) {
+                Vector2 along = Vector2Scale(forward,length*scales[s]);
+                for (int w = 0; w < 3; w++) {
+                    Vector2 offset = Vector2Scale(across,widths[w]*scales[s]);
+                    Vector2 points[] = {start,Vector2Add(start,along),Vector2Add(start,offset),
+                                        Vector2Add(Vector2Add(start,offset),along)};
+                    float score = 0;
+                    for (int leg = 0; leg < 3; leg++) {
+                        Vector2 contact = NearestOnIgrisLeg(player,points[leg],points[leg+1]);
+                        float margin = IGRIS_Z_RADIUS-8-Vector2Distance(player,contact);
+                        if (margin > score && MapHasClearPath(map,contact,player)) score = margin;
+                    }
+                    float finish = (92-Vector2Distance(player,points[3]))*.55f;
+                    if (finish > score && MapHasClearPath(map,points[3],player)) score = finish;
+                    if (score <= 0) continue;
+                    if (facing == boss->facing) score += 3;
+                    score -= 3*s + (w != 0 ? 2 : 0);
+                    if (score <= bestScore || !IgrisZPathClear(map,points)) continue;
+                    bestScore = score;
+                    bestFacing = facing;
+                    memcpy(boss->igrisZPath,points,sizeof(points));
+                }
+            }
+        }
+    }
+    if (bestFacing < 0) return false;
+    boss->facing = bestFacing;
+    return true;
 }
 
 static void UpdateIgrisZ(EnemyGroup *group, const Clearing *map, Enemy *boss,
@@ -1428,10 +1466,7 @@ static void UpdateIgrisZ(EnemyGroup *group, const Clearing *map, Enemy *boss,
         Vector2 from = boss->position;
         Vector2 next = Vector2Lerp(boss->igrisZPath[leg],boss->igrisZPath[leg+1],fraction);
         MoveEnemy(map,boss,Vector2Subtract(next,from));
-        Vector2 traveled = Vector2Subtract(boss->position,from);
-        float length = Vector2LengthSqr(traveled);
-        float nearest = length > 0 ? Clamp(Vector2DotProduct(Vector2Subtract(player,from),traveled)/length,0,1) : 0;
-        Vector2 contact = Vector2Add(from,Vector2Scale(traveled,nearest));
+        Vector2 contact = NearestOnIgrisLeg(player,from,boss->position);
         if (!boss->attackConnected && !dodging && Vector2Distance(player,contact) <= IGRIS_Z_RADIUS &&
             MapHasClearPath(map,contact,player)) {
             boss->attackConnected = true;
@@ -1446,7 +1481,7 @@ static void UpdateIgrisZ(EnemyGroup *group, const Clearing *map, Enemy *boss,
     if (t >= igrisZFrames[12]) {
         boss->state = ENEMY_IDLE;
         boss->stateTime = 0;
-        boss->attackCooldown = .24f;
+        boss->attackCooldown = .36f;
     }
 }
 
@@ -1567,11 +1602,14 @@ static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
                     skill = IGRIS_ECLIPSE_ECHOES;
                 else if (boss->attackBurst == 2 && distance <= IGRIS_GRAB_REACH)
                     skill = IGRIS_ABYSS_GRAB;
-                else if ((boss->attackBurst == 1 || distance > 178) &&
-                    distance <= 340 && PlanIgrisZ(map,boss,boss->facing,distance))
+                else if (boss->bossAttack != IGRIS_Z_RIP && (boss->attackBurst == 1 || distance > 178) &&
+                    distance <= 340 && PlanIgrisZ(map,boss,player))
                     skill = IGRIS_Z_RIP;
                 else if (distance > 178 && distance <= IGRIS_GRAB_REACH)
                     skill = IGRIS_ABYSS_GRAB;
+                else if (distance > IGRIS_GRAB_REACH && distance <= 420 &&
+                         boss->bossAttack != IGRIS_ECLIPSE_ECHOES && PlanIgrisEchoes(map,boss,player,direction))
+                    skill = IGRIS_ECLIPSE_ECHOES;
                 float reach = skill == IGRIS_ECLIPSE_ECHOES ? 420 : skill == IGRIS_ABYSS_GRAB ? IGRIS_GRAB_REACH :
                     skill == IGRIS_Z_RIP ? 340 : igrisSkills[skill].reach;
                 if (distance > reach) skill = -1;
@@ -1607,7 +1645,7 @@ static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
         if (distance > 90) {
             Vector2 start = boss->position;
             float speedScale = boss->igrisFinalForm ? 1.30f : enraged ? 1.13f : 1;
-            MoveEnemy(map,boss,Vector2Scale(direction,boss->speed*dt*speedScale));
+            MoveEnemyTactically(group,map,boss,player,boss->speed*dt*speedScale);
             Vector2 step = Vector2Subtract(boss->position,start);
             float traveled = Vector2Length(step);
             boss->state = traveled > .01f ? ENEMY_WALK : ENEMY_IDLE;
@@ -1864,9 +1902,11 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         if (enemy->type == ENEMY_BOSS || enemy->type == ENEMY_SPECIAL) {
             float range = enemy->type == ENEMY_BOSS ? 560 : 280;
             bool guardian = enemy->type == ENEMY_BOSS;
-            bool melee = guardian && distance <= 105.0f &&
+            bool closePressure = guardian && distance <= GUARDIAN_MELEE_PRESSURE_RANGE &&
+                                 MapHasClearPath(clearing,enemy->position,player);
+            bool melee = closePressure && distance <= GUARDIAN_MELEE_RANGE &&
                          enemy->guardianMeleeCooldown <= 0;
-            if (guardian && (melee || enemy->attackCooldown <= 0))
+            if (guardian && (closePressure || enemy->attackCooldown <= 0))
                 enemy->guardianDodgeTime = 0;
             if (guardian && enemy->guardianDodgeTime > 0) {
                 enemy->guardianDodgeTime = fmaxf(0,enemy->guardianDodgeTime-dt);
@@ -1874,8 +1914,9 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 enemy->walkTime += dt;
                 MoveEnemy(clearing,enemy,Vector2Scale(enemy->guardianDodgeDirection,
                           enemy->speed*2.2f*dt));
-            } else if (guardian && !melee && enemy->guardianDodgeCooldown <= 0 &&
-                       enemy->attackCooldown > .35f && distance > 95 && distance < 215) {
+            } else if (guardian && enemy->guardianDodgeCooldown <= 0 &&
+                       enemy->attackCooldown > .35f &&
+                       distance > GUARDIAN_MELEE_PRESSURE_RANGE && distance < 215) {
                 Vector2 side = Vector2Normalize((Vector2){-toPlayer.y,toPlayer.x});
                 if (enemy->attackBurst++%2) side=Vector2Negate(side);
                 Vector2 destination=Vector2Add(enemy->position,Vector2Scale(side,48));
@@ -1889,7 +1930,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                     enemy->guardianDodgeTime=.22f;
                     enemy->state=ENEMY_WALK;
                 }
-            } else if (melee || (distance <= range && enemy->attackCooldown <= 0 &&
+            } else if (melee || (!closePressure && distance <= range && enemy->attackCooldown <= 0 &&
                        (enemy->templarRole != TEMPLAR_EXECUTIONER ||
                         (distance <= 245 && MapHasClearPath(clearing, enemy->position, player))))) {
                 enemy->state = ENEMY_ATTACK;
@@ -1899,7 +1940,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 if (melee) {
                     const Vector2 directions[] = {{0,1}, {0,-1}, {-1,0}, {1,0}};
                     enemy->guardianMelee = true;
-                    enemy->guardianMeleeCooldown = GuardianEnraged(enemy) ? 1.25f : GUARDIAN_MELEE_COOLDOWN;
+                    enemy->guardianMeleeCooldown = GuardianEnraged(enemy) ? 1.0f : GUARDIAN_MELEE_COOLDOWN;
                     enemy->attackDirection = directions[enemy->facing];
                 } else if (enemy->type == ENEMY_BOSS) {
                     StartGuardianCast(group, clearing, enemy, player);
@@ -1908,12 +1949,11 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                     enemy->attackCooldown = enemy->templarRole == TEMPLAR_EXECUTIONER ? 1.78f :
                         2.75f / fminf(enemy->power, 1.36f);
                 }
-            } else if (guardian && distance < 135.0f && !melee) {
+            } else if (closePressure && distance > GUARDIAN_MELEE_RANGE) {
                 enemy->state = ENEMY_WALK;
                 enemy->walkTime += dt;
-                Vector2 away=Vector2Negate(Vector2Normalize(toPlayer));
-                MoveEnemyTactically(group,clearing,enemy,
-                    Vector2Add(enemy->position,Vector2Scale(away,100)),enemy->speed*dt);
+                float step = fminf(enemy->speed*dt,distance-(GUARDIAN_MELEE_RANGE-6));
+                MoveEnemyTactically(group,clearing,enemy,player,step);
             } else if (distance > (guardian ? 230 : 100)) {
                 enemy->state = ENEMY_WALK;
                 enemy->walkTime += dt;
@@ -2009,17 +2049,26 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
     }
 }
 
+/* Cada amostra intermediária ocupa uma faixa de fileiras no atlas,
+   mantendo as dimensões abaixo do limite de textura. */
+static Rectangle GuardianSample(Texture2D texture, int columns, int rows, int row, float pose, bool flip) {
+    int sample = (int)(fmaxf(0, pose) * GUARDIAN_RENDER_SAMPLES);
+    float width = texture.width / columns;
+    float height = texture.height / (rows * GUARDIAN_RENDER_SAMPLES);
+    return (Rectangle){(sample / GUARDIAN_RENDER_SAMPLES) * width,
+                       (row + sample % GUARDIAN_RENDER_SAMPLES * rows) * height,
+                       flip ? -width : width, height};
+}
+
 static void DrawGuardianWaveFrame(Texture2D texture, Vector2 position, float elapsed,
                                   bool eruption, bool flip) {
-    int frame = (int)(elapsed * GUARDIAN_WAVE_FPS);
-    if (frame >= GUARDIAN_WAVE_FRAMES) return;
+    float pose = elapsed * GUARDIAN_WAVE_FPS;
+    if (pose >= GUARDIAN_WAVE_FRAMES || pose < 0) return;
     const float scale = .50f;
     const float width = GUARDIAN_WAVE_TILE_WIDTH * scale;
     const float height = GUARDIAN_WAVE_TILE_HEIGHT * scale;
     float ground = (eruption ? 217 : 252) * scale;
-    DrawTexturePro(texture,
-        (Rectangle){frame * GUARDIAN_WAVE_TILE_WIDTH, eruption ? GUARDIAN_WAVE_TILE_HEIGHT : 0,
-                    flip ? -GUARDIAN_WAVE_TILE_WIDTH : GUARDIAN_WAVE_TILE_WIDTH, GUARDIAN_WAVE_TILE_HEIGHT},
+    DrawTexturePro(texture, GuardianSample(texture, GUARDIAN_WAVE_FRAMES, 2, eruption, pose, flip),
         (Rectangle){position.x - width / 2, position.y - ground, width, height},
         (Vector2){0}, 0, WHITE);
 }
@@ -2034,12 +2083,9 @@ static void DrawGuardianCurse(Texture2D texture, const EnemyRoot *root, const Gu
     if (charging) elapsed += GUARDIAN_CURSE_CHARGE_FRAMES / GUARDIAN_CURSE_FPS;
     if (elapsed < 0) return;
     int count = charging ? GUARDIAN_CURSE_CHARGE_FRAMES : GUARDIAN_CURSE_IMPACT_FRAMES;
-    int frame = (int)(elapsed * GUARDIAN_CURSE_FPS);
-    if (frame >= count) frame = count - 1;
+    float pose = fminf(elapsed * GUARDIAN_CURSE_FPS, count - 1);
     const float scale = .80f;
-    DrawTexturePro(texture,
-        (Rectangle){frame * GUARDIAN_CURSE_TILE_WIDTH, charging ? 0 : GUARDIAN_CURSE_TILE_HEIGHT,
-                    GUARDIAN_CURSE_TILE_WIDTH, GUARDIAN_CURSE_TILE_HEIGHT},
+    DrawTexturePro(texture, GuardianSample(texture, GUARDIAN_CURSE_CHARGE_FRAMES, 2, charging ? 0 : 1, pose, false),
         (Rectangle){root->position.x - GUARDIAN_CURSE_TILE_WIDTH * scale / 2,
                     root->position.y - 250 * scale,
                     GUARDIAN_CURSE_TILE_WIDTH * scale, GUARDIAN_CURSE_TILE_HEIGHT * scale},
@@ -2094,11 +2140,14 @@ static void DrawRangedProjectiles(const EnemyGroup *group) {
         if (shot->umbraSpear) {
             Texture2D art = group->igrisArt[IGRIS_SPEARS_FX];
             float age = UMBRA_SPEAR_LIFETIME-shot->remaining;
-            int frame = age < .14f ? 1 : shot->remaining < .12f ? 5 : 2+(int)(age*16)%3;
-            float w = art.width/6.0f, h = art.height/4.0f;
+            float pose = age < .14f ? 1+age/.14f : shot->remaining < .12f ? 5 :
+                         2+fmodf((age-.14f)*16,3);
+            Rectangle source = IgrisEffectSource(art,6,1,pose);
+            source.y += source.height*.425f;
+            source.height *= .18f;
             float angle = atan2f(shot->direction.y,shot->direction.x)*RAD2DEG;
-            DrawTexturePro(art,(Rectangle){frame*w,h+h*.425f,w,h*.18f},
-                           (Rectangle){shot->position.x,shot->position.y,142,25},(Vector2){104,12.5f},angle,WHITE);
+            DrawTexturePro(art,source,(Rectangle){shot->position.x,shot->position.y,142,25},
+                           (Vector2){104,12.5f},angle,Fade(WHITE,fminf(1,shot->remaining/.12f)));
             continue;
         }
         if (shot->boneShot) {
@@ -2136,39 +2185,24 @@ static void DrawRangedProjectiles(const EnemyGroup *group) {
 }
 
 static void DrawGuardianSpawn(Texture2D texture, const Enemy *enemy) {
-    int frame = GuardianSpawnFrame(enemy);
-    // Pula a pose em que o Guardião afunda no meio da subida.
-    if (frame >= GUARDIAN_SPAWN_RECOIL_FRAME) frame++;
-    int row = frame / GUARDIAN_SPAWN_COLUMNS;
-    int column = frame % GUARDIAN_SPAWN_COLUMNS;
-    int left = guardianSpawnRows[row].edges[column];
-    int top = guardianSpawnRows[row].top;
-    Rectangle source = {left, top, guardianSpawnRows[row].edges[column + 1] - left,
-                        guardianSpawnRows[row].bottom - top};
-    Vector2 pivot = {(guardianSpawnRows[row].pivots[column] - left) * GUARDIAN_SPAWN_SCALE,
-                     (guardianSpawnRows[row].ground - top) * GUARDIAN_SPAWN_SCALE};
-    Rectangle destination = {enemy->position.x, enemy->position.y,
-                             source.width * GUARDIAN_SPAWN_SCALE, source.height * GUARDIAN_SPAWN_SCALE};
-    DrawTexturePro(texture, source, destination, pivot, 0, WHITE);
+    float pose = GuardianSpawnPose(enemy);
+    int row = (int)pose / GUARDIAN_SPAWN_COLUMNS;
+    Rectangle source = GuardianSample(texture, GUARDIAN_SPAWN_COLUMNS, 4, row,
+                                      pose - row * GUARDIAN_SPAWN_COLUMNS, false);
+    DrawTexturePro(texture, source,
+        (Rectangle){enemy->position.x, enemy->position.y, 384 * GUARDIAN_SPAWN_SCALE, 288 * GUARDIAN_SPAWN_SCALE},
+        (Vector2){192 * GUARDIAN_SPAWN_SCALE, 256 * GUARDIAN_SPAWN_SCALE}, 0, WHITE);
 }
 
 static void DrawGuardianDefeat(Texture2D texture, const Enemy *enemy) {
+    static const float scales[] = {.66f, .72f, .70f, .71f};
     int row = enemy->facing;
-    int frame = GuardianDefeatFrame(enemy);
-    int left = guardianDefeatRows[row].edges[frame];
-    int right = guardianDefeatRows[row].edges[frame + 1];
-    int top = guardianDefeatRows[row].top;
-    int ground = guardianDefeatRows[row].ground;
-    int width = right - left;
-    int height = guardianDefeatRows[row].bottom - top;
-    float scale = guardianDefeatRows[row].scale;
+    float scale = scales[row];
     // As duas linhas laterais da arte original estão voltadas para a esquerda.
-    bool flip = row == 3;
-    int anchor = guardianDefeatPivots[frame];
-    Rectangle source = {left, top, flip ? -width : width, height};
-    Vector2 pivot = {(flip ? right - anchor : anchor - left) * scale, (ground - top) * scale};
-    Rectangle destination = {enemy->position.x, enemy->position.y, width * scale, height * scale};
-    DrawTexturePro(texture, source, destination, pivot, 0, WHITE);
+    Rectangle source = GuardianSample(texture, GUARDIAN_DEFEAT_FRAMES, 4, row, GuardianDefeatPose(enemy), row == 3);
+    DrawTexturePro(texture, source,
+        (Rectangle){enemy->position.x, enemy->position.y, 224 * scale, 288 * scale},
+        (Vector2){112 * scale, 256 * scale}, 0, WHITE);
     if (enemy->state == ENEMY_FALLEN)
         DrawGameText("E: selar", (int)enemy->position.x - 30, (int)enemy->position.y + 10, 18, GOLD);
 }
@@ -2373,7 +2407,7 @@ static void DrawIgrisCell(Texture2D art, int columns, int rows, int col, int row
 // The body has a common standing height. Measure the resting pose in each sheet,
 // excluding detached effects, so larger cells and crouches do not change scale.
 #define IGRIS_BODY_HEIGHT 162.0f
-static void DrawIgrisBody(Texture2D tex, int art, int columns, int rows, int frame, int row,
+static void DrawIgrisBody(Texture2D tex, int art, int columns, int rows, float pose, int row,
                            Vector2 feet, bool flip, float tilt, Color tint) {
     static const struct { float body, ground; } fit[IGRIS_ART_COUNT] = {
         [IGRIS_IDLE_ART] = {218,239}, [IGRIS_WALK_ART] = {217,239},
@@ -2385,27 +2419,36 @@ static void DrawIgrisBody(Texture2D tex, int art, int columns, int rows, int fra
         [IGRIS_Z_DOWN] = {237,312}, [IGRIS_Z_UP] = {250,322},
         [IGRIS_Z_LEFT] = {208,303}, [IGRIS_Z_RIGHT] = {222,304},
     };
-    float cellHeight = tex.height/(float)rows;
-    DrawIgrisCell(tex,columns,rows,frame,row,feet,cellHeight*IGRIS_BODY_HEIGHT/fit[art].body,
-                  .5f,fit[art].ground/cellHeight,flip,tilt,tint);
+    int samples = IgrisPoseSamples(art);
+    int frame = (int)(pose * samples);
+    float cellHeight = tex.height/(float)(rows*samples);
+    const float atlasScale = .75f;
+    DrawIgrisCell(tex,columns,rows*samples,frame/samples,row + (frame%samples)*rows,
+                  feet,cellHeight*IGRIS_BODY_HEIGHT/(fit[art].body*atlasScale),
+                  .5f,fit[art].ground*atlasScale/cellHeight,flip,tilt,tint);
 }
 
-static void DrawIgrisEruption(Texture2D art, int frame, Vector2 center) {
-    static const int edges[4][7] = {
-        {0,224,448,686,925,1168,1451},
-        {0,231,459,695,936,1193,1536},
-        {0,242,477,716,956,1216,1536},
-        {0,283,525,776,1020,1280,1536},
-    };
-    static const int top[] = {0,224,501,740};
-    static const int ground[] = {214,490,729,970};
-    int row = frame/6, col = frame%6;
-    int left = edges[row][col], width = edges[row][col+1]-left;
-    int height = ground[row]+9-top[row];
-    const float scale = .88f;
-    DrawTexturePro(art,(Rectangle){left,top[row],width,height},
-                   (Rectangle){center.x,center.y,width*scale,height*scale},
-                   (Vector2){width*scale*.5f,(height-9)*scale},0,WHITE);
+static float IgrisTimedPose(float time, const float *boundaries, int count) {
+    int frame = 0;
+    while (frame < count-1 && time >= boundaries[frame+1]) frame++;
+    if (frame == count-1) return (float)frame;
+    return frame + Clamp((time-boundaries[frame])/(boundaries[frame+1]-boundaries[frame]),0,.999f);
+}
+
+static void DrawIgrisEruption(Texture2D art, float pose, Vector2 center) {
+    int row = (int)pose/6;
+    Rectangle source = IgrisEffectSource(art,6,row,pose-6*row);
+    const float scale = .88f/.75f;
+    DrawTexturePro(art,source,(Rectangle){center.x,center.y,source.width*scale,source.height*scale},
+                   (Vector2){source.width*scale*.5f,272*.88f},0,WHITE);
+}
+
+static void DrawIgrisEffect(Texture2D art, int columns, int row, float pose, Vector2 position,
+                            float height, float anchorY, float angle, Color tint) {
+    Rectangle source = IgrisEffectSource(art,columns,row,pose);
+    float width = height*source.width/source.height;
+    DrawTexturePro(art,source,(Rectangle){position.x,position.y,width,height},
+                   (Vector2){width*.5f,height*anchorY},angle,tint);
 }
 
 static int IgrisRow(int facing) {
@@ -2422,7 +2465,7 @@ static void DrawIgris(const EnemyGroup *group, const Enemy *enemy) {
         art = IGRIS_FINAL_IDLE;
         columns = 4;
     }
-    int frame = (int)(enemy->stateTime*7)%columns;
+    float pose = fmodf(fmaxf(0, enemy->stateTime)*7, columns);
     Vector2 feet = enemy->position;
     if (enemy->state == ENEMY_SPAWNING) {
         if (enemy->stateTime < 0) return;
@@ -2436,7 +2479,7 @@ static void DrawIgris(const EnemyGroup *group, const Enemy *enemy) {
         for (int side = -1; side <= 1; side += 2) {
             Vector2 escortFeet = {feet.x+side*(57+130*exit),feet.y+22+42*exit};
             DrawTemplarSprite(group,&escort,escortFeet,exit > 0 ? (side < 0 ? 2 : 3) : 0,
-                              (int)(enemy->stateTime*10)%6,0,Fade(WHITE,1-exit));
+                              (int)(enemy->stateTime*10)%4,0,Fade(WHITE,1-exit));
         }
         facing = 0;
     }
@@ -2444,30 +2487,29 @@ static void DrawIgris(const EnemyGroup *group, const Enemy *enemy) {
         art = enemy->igrisFinalForm ? IGRIS_FINAL_WALK : IGRIS_WALK_ART;
         columns = enemy->igrisFinalForm ? 4 : 7;
         float cadence = enemy->igrisFinalForm ? 8 : 10;
-        frame = (int)((enemy->state == ENEMY_WALK ? enemy->walkTime : enemy->stateTime)*cadence)%columns;
+        pose = fmodf((enemy->state == ENEMY_WALK ? enemy->walkTime : enemy->stateTime)*cadence,columns);
     }
     if (enemy->state == ENEMY_ATTACK) {
         int skill = enemy->bossAttack;
         if (skill == IGRIS_ECLIPSE_ECHOES) {
-            float t = enemy->stateTime;
-            int cel = t < IGRIS_ECHO_PLANT ? 0 : t >= IGRIS_ECHO_FADE ? 5 :
-                t < IgrisEchoLaunch(0) ? 1 : t < IgrisEchoLaunch(1) ? 2 : t < IgrisEchoLaunch(2) ? 3 : 4;
-            DrawIgrisBody(group->igrisArt[IGRIS_ECHO_ART],IGRIS_ECHO_ART,6,4,cel,IgrisRow(facing),
+            const float boundaries[] = {0,IGRIS_ECHO_PLANT,IgrisEchoLaunch(0),IgrisEchoLaunch(1),
+                                         IgrisEchoLaunch(2),IGRIS_ECHO_FADE,IGRIS_ECHO_END};
+            pose = IgrisTimedPose(enemy->stateTime,boundaries,6);
+            DrawIgrisBody(group->igrisArt[IGRIS_ECHO_ART],IGRIS_ECHO_ART,6,4,pose,IgrisRow(facing),
                           feet,false,0,WHITE);
             return;
         }
         if (skill == IGRIS_Z_RIP) {
-            int cel = 0;
-            while (cel < 11 && enemy->stateTime >= igrisZFrames[cel+1]) cel++;
-            DrawIgrisBody(group->igrisArt[IGRIS_Z_DOWN+facing],IGRIS_Z_DOWN+facing,4,3,cel%4,cel/4,
+            pose = IgrisTimedPose(enemy->stateTime,igrisZFrames,12);
+            DrawIgrisBody(group->igrisArt[IGRIS_Z_DOWN+facing],IGRIS_Z_DOWN+facing,4,3,
+                          fmodf(pose,4),(int)pose/4,
                           feet,false,0,WHITE);
             return;
         }
         if (skill == IGRIS_ABYSS_GRAB) {
-            float t = enemy->stateTime;
-            int cel = t < .22f ? 0 : t < .40f ? 1 : t < IGRIS_GRAB_IMPACT ? 2 :
-                t < .78f ? 3 : t < IGRIS_GRAB_RELEASE ? 4 : 5;
-            DrawIgrisBody(group->igrisArt[IGRIS_GRAB_ART],IGRIS_GRAB_ART,6,4,cel,IgrisRow(facing),
+            const float boundaries[] = {0,.22f,.40f,IGRIS_GRAB_IMPACT,.78f,IGRIS_GRAB_RELEASE,IGRIS_GRAB_END};
+            pose = IgrisTimedPose(enemy->stateTime,boundaries,6);
+            DrawIgrisBody(group->igrisArt[IGRIS_GRAB_ART],IGRIS_GRAB_ART,6,4,pose,IgrisRow(facing),
                           feet,false,0,WHITE);
             return;
         }
@@ -2479,9 +2521,9 @@ static void DrawIgris(const EnemyGroup *group, const Enemy *enemy) {
         columns = skill == IGRIS_FINAL_CLAW ? 4 : eightFrames ? 8 : 6;
         int impactFrame = eightFrames ? 4 : skill == IGRIS_FINAL_CLAW ? 2 : 3;
         float t = enemy->stateTime, impact = igrisSkills[skill].impact;
-        frame = t < impact ? (int)(t/impact*impactFrame) :
-            impactFrame+(int)((t-impact)/(igrisSkills[skill].duration-impact)*(columns-impactFrame));
-        frame = (int)Clamp(frame,0,columns-1);
+        pose = t < impact ? t/impact*impactFrame :
+            impactFrame+(t-impact)/(igrisSkills[skill].duration-impact)*(columns-impactFrame);
+        pose = Clamp(pose,0,columns-1);
     }
     bool flip = art <= IGRIS_MELEE_ART && facing == 3;
     bool fallen = enemy->state == ENEMY_FALLEN;
@@ -2492,7 +2534,7 @@ static void DrawIgris(const EnemyGroup *group, const Enemy *enemy) {
         DrawCircleV(feet,52,Fade(PURPLE,.35f+.18f*sinf(enemy->stateTime*17)));
         tint = (Color){255,174,226,255};
     }
-    DrawIgrisBody(group->igrisArt[art],art,columns,4,frame,IgrisRow(facing),
+    DrawIgrisBody(group->igrisArt[art],art,columns,4,pose,IgrisRow(facing),
                        feet,flip,fall*72,tint);
     if (fallen) DrawGameText("E: selar",(int)feet.x-30,(int)feet.y+12,18,GOLD);
 }
@@ -2671,7 +2713,7 @@ static void DrawIgrisEchoes(const EnemyGroup *group, const Enemy *boss) {
     if (t < IGRIS_ECHO_PLANT) return;
     Texture2D art = group->igrisArt[IGRIS_ECHO_FX];
     float fade = 1-Clamp((t-IGRIS_ECHO_FADE)/(IGRIS_ECHO_END-IGRIS_ECHO_FADE),0,1);
-    DrawIgrisCell(art,6,4,t < IGRIS_ECHO_FADE ? 1 : 5,0,boss->position,155,.5f,.65f,false,0,Fade(WHITE,fade));
+    DrawIgrisEffect(art,6,0,t < IGRIS_ECHO_FADE ? 1 : 5,boss->position,155,.65f,0,Fade(WHITE,fade));
     for (int i = 0; i < 3; i++) {
         float age = t-IgrisEchoLaunch(i);
         if (age < -IGRIS_ECHO_WARNING) continue;
@@ -2682,19 +2724,19 @@ static void DrawIgrisEchoes(const EnemyGroup *group, const Enemy *boss) {
             float opacity = 1+age/IGRIS_ECHO_WARNING;
             DrawLineEx(from,to,2*IGRIS_ECHO_WIDTH,Fade(PURPLE,.15f+.19f*opacity));
             DrawLineEx(from,to,3,Fade(VIOLET,.35f+.55f*opacity));
-            DrawIgrisCell(art,6,4,1,row,from,156,.5f,.65f,false,0,WHITE);
+            DrawIgrisEffect(art,6,row,1,from,156,.65f,0,WHITE);
             if (opacity > .35f)
-                DrawIgrisCell(art,6,4,2,row,from,178,.5f,.90f,false,0,Fade(WHITE,opacity*.8f));
+                DrawIgrisEffect(art,6,row,2,from,178,.90f,0,Fade(WHITE,opacity*.8f));
         } else if (age < IGRIS_ECHO_TRAVEL) {
             float progress = age/IGRIS_ECHO_TRAVEL;
-            DrawIgrisCell(art,6,4,progress < .58f ? 3 : 4,row,from,178,.5f,.90f,false,0,Fade(WHITE,1-progress));
+            DrawIgrisEffect(art,6,row,3+fminf(1,progress/.58f),from,178,.90f,0,Fade(WHITE,1-progress));
             Vector2 position = Vector2Lerp(from,to,progress);
             float angle = atan2f(direction.y,direction.x)*RAD2DEG;
-            DrawIgrisCell(group->igrisArt[IGRIS_ECLIPSE_FX],8,4,2+(int)(progress*5),1,
-                          position,115,.5f,.5f,false,angle,Fade(WHITE,1-.4f*progress));
+            DrawIgrisEffect(group->igrisArt[IGRIS_ECLIPSE_FX],8,1,2+progress*5,
+                            position,115,.5f,angle,Fade(WHITE,1-.4f*progress));
         } else {
             float dissolve = 1-Clamp((age-IGRIS_ECHO_TRAVEL)/.25f,0,1);
-            DrawIgrisCell(art,6,4,5,row,from,156,.5f,.70f,false,0,Fade(WHITE,fmaxf(dissolve,.30f*fade)));
+            DrawIgrisEffect(art,6,row,5,from,156,.70f,0,Fade(WHITE,fmaxf(dissolve,.30f*fade)));
         }
     }
 }
@@ -2730,26 +2772,27 @@ static void DrawIgrisWarning(const EnemyGroup *group, const Enemy *boss) {
         }
         if (t >= IGRIS_GRAB_IMPACT && t < IGRIS_GRAB_RELEASE) {
             Texture2D art = group->igrisArt[IGRIS_GRAB_FX];
-            int frame = t < .79f ? 3 : 4;
-            float w = art.width/6.0f, h = art.height/4.0f;
+            float pose = 3+Clamp((t-IGRIS_GRAB_IMPACT)/(.79f-IGRIS_GRAB_IMPACT),0,1);
             float angle = atan2f(boss->attackDirection.y,boss->attackDirection.x)*RAD2DEG;
             float length = Lerp(IGRIS_GRAB_REACH,95,Clamp((t-IGRIS_GRAB_IMPACT)/(IGRIS_GRAB_RELEASE-IGRIS_GRAB_IMPACT),0,1));
             Vector2 anchor = {boss->position.x,boss->position.y-28};
-            DrawTexturePro(art,(Rectangle){frame*w,h,w,h},
+            DrawTexturePro(art,IgrisEffectSource(art,6,1,pose),
                            (Rectangle){anchor.x,anchor.y,length,140},(Vector2){0,70},angle,WHITE);
         }
         return;
     }
     if (skill == IGRIS_Z_RIP) {
-        if (boss->stateTime < igrisZFrames[1]) {
-            for (int leg = 0; leg < 3; leg++) {
-                DrawLineEx(boss->igrisZPath[leg],boss->igrisZPath[leg+1],2*IGRIS_Z_RADIUS,Fade(PURPLE,.18f));
-                DrawLineEx(boss->igrisZPath[leg],boss->igrisZPath[leg+1],4,Fade(VIOLET,.8f));
-            }
-            DrawCircleLinesV(boss->igrisZPath[3],104,Fade(VIOLET,.8f));
-        } else if (boss->stateTime >= igrisZFrames[10] && boss->stateTime < igrisZFrames[11]) {
-            DrawCircleLinesV(boss->position,104,Fade(VIOLET,.55f));
+        float time = boss->stateTime;
+        for (int leg = 0; leg < 3; leg++) {
+            if (time >= igrisZFrames[igrisZLegEnd[leg]]) continue;
+            bool pending = time < igrisZFrames[igrisZLegStart[leg]];
+            Vector2 start = pending ? boss->igrisZPath[leg] : boss->position;
+            Vector2 end = boss->igrisZPath[leg+1];
+            DrawLineEx(start,end,2*IGRIS_Z_RADIUS,Fade(PURPLE,pending ? .16f : .08f));
+            DrawLineEx(start,end,3,Fade(VIOLET,pending ? .8f : .4f));
         }
+        if (time < igrisZFrames[11])
+            DrawCircleLinesV(boss->igrisZPath[3],104,Fade(VIOLET,.66f));
         return;
     }
     float t = boss->stateTime, impact = igrisSkills[skill].impact;
@@ -2778,13 +2821,10 @@ static void DrawIgrisWarning(const EnemyGroup *group, const Enemy *boss) {
     if (skill == IGRIS_ECLIPSE) {
         DrawIgrisEclipseArc(boss,progress,radius);
     } else if (skill == IGRIS_ERUPTION) {
-        int frame = (int)(progress*24);
-        DrawIgrisEruption(group->igrisArt[IGRIS_ERUPTION_FX],frame,center);
+        DrawIgrisEruption(group->igrisArt[IGRIS_ERUPTION_FX],progress*24,center);
     } else if (skill == IGRIS_VORTEX) {
         Texture2D art = group->igrisArt[IGRIS_VORTEX_FX];
-        float w = art.width/6.0f, h = art.height/4.0f;
-        int frame = 1+(int)(progress*5);
-        DrawTexturePro(art,(Rectangle){frame*w,0,w,h},
+        DrawTexturePro(art,IgrisEffectSource(art,6,0,1+progress*5),
                        (Rectangle){center.x,center.y,radius*2,radius*1.2f},
                        (Vector2){radius,radius*.68f},0,Fade(WHITE,1-.55f*progress));
     }
@@ -3115,9 +3155,8 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
             DrawGuardianWaveFrame(group->rootWave, root->position, root->age - hazard->warning, true,
                                   group->list[0].attackDirection.x < 0);
         } else {
-            int frame = (int)((root->age - hazard->warning)*10);
-            if (frame > 7) frame = 7;
-            DrawTexturePro(group->roots, (Rectangle){frame*288.0f,0,288,256},
+            float pose = fminf((root->age - hazard->warning) * 10, 7);
+            DrawTexturePro(group->roots, GuardianSample(group->roots, 8, 1, 0, pose, false),
                 (Rectangle){root->position.x-90,root->position.y-145,180,160}, (Vector2){0},0,WHITE);
         }
     }
@@ -3173,8 +3212,9 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
             float w = widePose ? 384 : 256, h = widePose ? 288 : 272;
             Texture2D texture = melee ? group->guardianMelee : attack ? group->bossAttack :
                     enemy->state == ENEMY_WALK ? group->bossWalk : group->bossSprites;
+            int columns = melee ? GUARDIAN_MELEE_FRAMES : attack ? 9 : enemy->state == ENEMY_WALK ? 8 : 6;
             DrawTexturePro(texture,
-                (Rectangle){EnemyAnimationFrame(enemy)*w, enemy->facing*h,w,h},
+                GuardianSample(texture, columns, 4, enemy->facing, GuardianBodyPose(enemy), false),
                 (Rectangle){enemy->position.x-w*.5f*GUARDIAN_SPRITE_SCALE,
                             enemy->position.y-(widePose?280:264)*GUARDIAN_SPRITE_SCALE,
                             w*GUARDIAN_SPRITE_SCALE,h*GUARDIAN_SPRITE_SCALE}, (Vector2){0},0,
@@ -3231,13 +3271,13 @@ void DrawEnemyDebug(const EnemyGroup *group) {
         Vector2 center = EnemyCenter(enemy);
         DrawCircleLines((int)center.x,(int)center.y,EnemyHurtRadius(enemy),GREEN);
         DrawCircleV(enemy->position,3.0f,YELLOW);
-        int frame = IsGuardianSpawn(group, enemy) ? GuardianSpawnFrame(enemy) : EnemyAnimationFrame(enemy);
+        int frame = IsGuardianSpawn(group, enemy) ? (int)GuardianSpawnPose(enemy) : EnemyAnimationFrame(enemy);
         if (!group->cemetery && (enemy->type == ENEMY_COMMON_MELEE || enemy->type == ENEMY_COMMON_RANGED ||
                                 enemy->type == ENEMY_SPECIAL))
             frame = ClearingEnemyFrame(enemy, group->boneland);
         if (!group->cemetery && enemy->type == ENEMY_BOSS &&
             (enemy->state == ENEMY_DIE || enemy->state == ENEMY_FALLEN))
-            frame = GuardianDefeatFrame(enemy);
+            frame = (int)GuardianDefeatPose(enemy);
         DrawGameText(TextFormat("E%d F%d",enemy->state,frame),
                  (int)enemy->position.x-28,(int)enemy->position.y-97,12,GOLD);
     }

@@ -9,6 +9,8 @@ enum { CLEARING_ALTAR_RADIUS = 72 };
 typedef struct MapObstacle {
     Vector2 vertices[16];
     int count;
+    Vector2 min, max;
+    bool hasBounds;
 } MapObstacle;
 
 typedef struct Clearing {

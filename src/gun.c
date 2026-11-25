@@ -18,13 +18,48 @@ static void AddImpact(Gun *gun, Vector2 at) {
     }
 }
 
+static Texture2D LoadGunBody(const char *path, GunBodyAtlas *fit, int columns, int rows) {
+    Image image = LoadImage(path);
+    Texture2D texture = {0};
+    if (image.data && image.width == columns*64 && image.height == rows*80) {
+        Color *pixels = LoadImageColors(image);
+        if (pixels) {
+            for (int row = 0; row < rows; row++) {
+                for (int col = 0; col < columns; col++) {
+                    int top = 80, bottom = 0, left = 64, right = 0;
+                    for (int y = 0; y < 80; y++) {
+                        const Color *line = pixels + (row*80+y)*image.width+col*64;
+                        for (int x = 10; x < 54; x++) {
+                            if (line[x].a < 144) continue;
+                            // Measure the hair above the barrel and the body around its center.
+                            if (y >= 12 && y < 25) {
+                                if (x < left) left = x;
+                                if (x+1 > right) right = x+1;
+                            }
+                            if (x < 18 || x >= 47) continue;
+                            if (y < top) top = y;
+                            if (y+1 > bottom) bottom = y+1;
+                        }
+                    }
+                    if (right > left && bottom > top)
+                        fit->frames[row][col] = (GunBodyFrame){right-left,top,bottom};
+                }
+            }
+            UnloadImageColors(pixels);
+            texture = LoadTextureFromImage(image);
+        }
+    }
+    if (image.data) UnloadImage(image);
+    return texture;
+}
+
 bool InitGun(Gun *gun) {
     *gun = (Gun){0};
     gun->projectile = LoadTexture("assets/arma_fogo_projetil.png");
     gun->impact = LoadTexture("assets/arma_fogo_impacto.png");
-    gun->body = LoadTexture("assets/arma_fogo_disparo.png");
-    gun->idleBody = LoadTexture("assets/arma_fogo_idle_novo.png");
-    gun->walkBody = LoadTexture("assets/arma_fogo_caminhada.png");
+    gun->body = LoadGunBody("assets/protagonista/fluido/arma_fogo_disparo.png",&gun->shotFit,8,4);
+    gun->idleBody = LoadGunBody("assets/protagonista/fluido/arma_fogo_idle_novo.png",&gun->idleFit,4,12);
+    gun->walkBody = LoadGunBody("assets/protagonista/fluido/arma_fogo_caminhada.png",&gun->walkFit,8,12);
     if (!gun->projectile.id || !gun->impact.id ||
         !gun->body.id || !gun->idleBody.id || !gun->walkBody.id) {
         UnloadGun(gun);
@@ -36,6 +71,22 @@ bool InitGun(Gun *gun) {
     SetTextureFilter(gun->idleBody, TEXTURE_FILTER_POINT);
     SetTextureFilter(gun->walkBody, TEXTURE_FILTER_POINT);
     return true;
+}
+
+Rectangle GunBodyDestination(const Gun *gun, Rectangle source, Vector2 player,
+                             int facing, bool walking, bool firing) {
+    int idleRow = facing < 2 ? facing : 5-facing;
+    const GunBodyFrame reference = gun->idleFit.frames[idleRow][0];
+    const GunBodyAtlas *fit = firing ? &gun->shotFit : walking ? &gun->walkFit : &gun->idleFit;
+    GunBodyFrame frame = fit->frames[(int)(source.y/80)][(int)(source.x/64)];
+    float width = facing < 2 ? 68 : 76;
+    const float baseScaleY = 75.0f/80;
+    if (!reference.headWidth || !frame.headWidth)
+        return (Rectangle){player.x-width*.5f,player.y-72,width,75};
+    width *= (float)reference.headWidth/frame.headWidth;
+    float scaleY = baseScaleY*(reference.bottom-reference.top)/(frame.bottom-frame.top);
+    float ground = player.y-72+reference.bottom*baseScaleY;
+    return (Rectangle){player.x-width*.5f,ground-frame.bottom*scaleY,width,80*scaleY};
 }
 
 void UnloadGun(Gun *gun) {

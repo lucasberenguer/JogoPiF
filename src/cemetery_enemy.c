@@ -3,15 +3,22 @@
 #include "raymath.h"
 #include <math.h>
 
-#define COVEIRO_WINDUP .8f
+#define COVEIRO_WINDUP .62f
+#define COVEIRO_ROOT_END 1.02f
+#define COVEIRO_CHARGE_FIRST_END .94f
+#define COVEIRO_CHARGE_SECOND_START 1.27f
+#define COVEIRO_CHARGE_SECOND_END 1.59f
+#define COVEIRO_CHARGE_FIRST_PHASE_END 1.17f
+#define COVEIRO_ATTACK_END 1.47f
+#define COVEIRO_DOUBLE_CHARGE_END 1.82f
 #define COVEIRO_ROOT_DAMAGE (GUARDIAN_ROOT_DAMAGE * 1.15f * COVEIRO_DAMAGE_BOOST)
 #define COVEIRO_SHOVEL_DAMAGE (GUARDIAN_WAVE_DAMAGE * 1.15f * COVEIRO_DAMAGE_BOOST)
 #define COVEIRO_CHARGE_DAMAGE (GUARDIAN_CURSE_DAMAGE * 1.15f * COVEIRO_DAMAGE_BOOST)
 #define COVEIRO_MELEE_RANGE 122.0f
 #define COVEIRO_MELEE_DAMAGE (GUARDIAN_MELEE_DAMAGE * 1.15f * COVEIRO_DAMAGE_BOOST)
 #define COVEIRO_MELEE_COOLDOWN 1.65f
-#define COVEIRO_MELEE_WINDUP .36f
-#define COVEIRO_MELEE_DURATION .78f
+#define COVEIRO_MELEE_WINDUP .30f
+#define COVEIRO_MELEE_DURATION .72f
 #define COVEIRO_MOVEMENT_SCALE .92f
 #define COVEIRO_CHARGE_SPEED (560.0f * COVEIRO_MOVEMENT_SCALE)
 #define COVEIRO_ENRAGED_CHARGE_SPEED (680.0f * COVEIRO_MOVEMENT_SCALE)
@@ -105,7 +112,7 @@ void CemeteryUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
                     ThrowShovel(group, boss, Vector2Rotate(boss->attackDirection, .25f));
                     ThrowShovel(group, boss, Vector2Rotate(boss->attackDirection, -.25f));
                 }
-            } else if (boss->bossAttack == COVEIRO_ROOTS && t < 1.2f &&
+            } else if (boss->bossAttack == COVEIRO_ROOTS && t < COVEIRO_ROOT_END &&
                        Vector2Distance(player, boss->attackTarget) < (phaseTwo ? 115 : 95)) {
                 boss->attackConnected = HitPlayer(group, dodging, health, (int)roundf(COVEIRO_ROOT_DAMAGE * boss->power));
             }
@@ -121,13 +128,15 @@ void CemeteryUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
                 }
             }
         }
-        if(boss->bossAttack==COVEIRO_CHARGE && phaseTwo && t>=1.12f && boss->attackBurst==0) {
+        if(boss->bossAttack==COVEIRO_CHARGE && phaseTwo && t>=COVEIRO_CHARGE_FIRST_END && boss->attackBurst==0) {
             boss->attackBurst=1;boss->attackConnected=false;
             Vector2 offset=Vector2Subtract(player,boss->position);
             if(Vector2LengthSqr(offset)>.01f) boss->attackDirection=Vector2Normalize(offset);
             boss->facing=fabsf(offset.x)>fabsf(offset.y)?(offset.x<0?2:3):(offset.y<0?1:0);
         }
-        bool chargeWindow=phaseTwo?((t>=.8f && t<1.12f)||(t>=1.45f && t<1.77f)):(t>=.8f && t<1.35f);
+        bool chargeWindow=phaseTwo?((t>=COVEIRO_WINDUP && t<COVEIRO_CHARGE_FIRST_END)||
+                                     (t>=COVEIRO_CHARGE_SECOND_START && t<COVEIRO_CHARGE_SECOND_END)):
+                                    (t>=COVEIRO_WINDUP && t<COVEIRO_CHARGE_FIRST_PHASE_END);
         if (boss->bossAttack == COVEIRO_CHARGE && chargeWindow) {
             float speed = phaseTwo ? COVEIRO_ENRAGED_CHARGE_SPEED : COVEIRO_CHARGE_SPEED;
             MoveEnemy(map, boss, Vector2Scale(boss->attackDirection, speed * dt));
@@ -136,9 +145,10 @@ void CemeteryUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
                 boss->attackConnected = HitPlayer(group, dodging, health, (int)roundf(COVEIRO_CHARGE_DAMAGE * boss->power));
         }
         /* Follow-through has real movement, while the initial targeting stays locked. */
-        if(boss->bossAttack!=COVEIRO_CHARGE && t>=.8f && t<1.02f)
+        if(boss->bossAttack!=COVEIRO_CHARGE && t>=COVEIRO_WINDUP && t<COVEIRO_WINDUP+.22f)
             MoveEnemy(map,boss,Vector2Scale(boss->attackDirection,110*COVEIRO_MOVEMENT_SCALE*dt));
-        if (t >= (phaseTwo && boss->bossAttack==COVEIRO_CHARGE?2.0f:1.65f)) { boss->state = ENEMY_IDLE; boss->stateTime = 0; }
+        if (t >= (phaseTwo && boss->bossAttack==COVEIRO_CHARGE?
+                  COVEIRO_DOUBLE_CHARGE_END:COVEIRO_ATTACK_END)) { boss->state = ENEMY_IDLE; boss->stateTime = 0; }
         return;
     }
     if (*health <= 0) return;
@@ -272,12 +282,13 @@ CemeteryPose CemeteryAnimationPose(const Enemy *enemy) {
             } else if (enemy->bossAttack == COVEIRO_CHARGE) {
                 bool phaseTwo = enemy->guardianPhase == GUARDIAN_PHASE_TWO;
                 if (t < COVEIRO_WINDUP) p.frame = (int)Clamp(t / COVEIRO_WINDUP * 3, 0, 2);
-                else if (phaseTwo && t >= 1.12f && t < 1.45f)
-                    p.frame = t < 1.25f ? 6 : 2;
-                else if (t < (phaseTwo ? 1.77f : 1.35f)) {
-                    float runTime = t - (phaseTwo && t >= 1.45f ? 1.45f : COVEIRO_WINDUP);
+                else if (phaseTwo && t >= COVEIRO_CHARGE_FIRST_END && t < COVEIRO_CHARGE_SECOND_START)
+                    p.frame = t < COVEIRO_CHARGE_FIRST_END+.13f ? 6 : 2;
+                else if (t < (phaseTwo ? COVEIRO_CHARGE_SECOND_END : COVEIRO_CHARGE_FIRST_PHASE_END)) {
+                    float runTime = t - (phaseTwo && t >= COVEIRO_CHARGE_SECOND_START ?
+                                         COVEIRO_CHARGE_SECOND_START : COVEIRO_WINDUP);
                     p.frame = 3 + (int)(runTime * 12) % 3;
-                } else p.frame = t < (phaseTwo ? 1.9f : 1.52f) ? 6 : 7;
+                } else p.frame = t < (phaseTwo ? 1.72f : 1.34f) ? 6 : 7;
             } else {
                 // A pá some da mão no mesmo instante em que o projétil nasce.
                 int release = enemy->bossAttack == COVEIRO_SHOVEL ? 5 : 4;
@@ -332,6 +343,37 @@ CemeteryPose CemeteryAnimationPose(const Enemy *enemy) {
     return p;
 }
 
+/* The original eight poses still define attack timing; only the in-between row changes. */
+static int CoveiroMotionSample(const Enemy *enemy) {
+    float t = enemy->stateTime;
+    float position = 0;
+    if (enemy->state == ENEMY_WALK) position = enemy->walkTime * 11;
+    else if (enemy->state == ENEMY_IDLE) position = t * 6;
+    else if (enemy->state == ENEMY_SPAWNING) position = t * 8;
+    else if (enemy->state == ENEMY_DIE) position = t / .85f * 8;
+    else if (enemy->state == ENEMY_ATTACK) {
+        if (enemy->guardianMelee) {
+            position = t < COVEIRO_MELEE_WINDUP ? t / COVEIRO_MELEE_WINDUP * 4 :
+                4 + (t - COVEIRO_MELEE_WINDUP) / (COVEIRO_MELEE_DURATION - COVEIRO_MELEE_WINDUP) * 4;
+        } else if (enemy->bossAttack == COVEIRO_CHARGE) {
+            bool second = enemy->guardianPhase == GUARDIAN_PHASE_TWO;
+            if (t < COVEIRO_WINDUP) position = t / COVEIRO_WINDUP * 3;
+            else if (second && t >= COVEIRO_CHARGE_FIRST_END && t < COVEIRO_CHARGE_SECOND_START) position = 0;
+            else if (t < (second ? COVEIRO_CHARGE_SECOND_END : COVEIRO_CHARGE_FIRST_PHASE_END)) {
+                float runTime = t - (second && t >= COVEIRO_CHARGE_SECOND_START ?
+                                     COVEIRO_CHARGE_SECOND_START : COVEIRO_WINDUP);
+                position = runTime * 12;
+            } else position = 0;
+        } else {
+            int release = enemy->bossAttack == COVEIRO_SHOVEL ? 5 : 4;
+            position = t < COVEIRO_WINDUP ? t / COVEIRO_WINDUP * release :
+                release + (t - COVEIRO_WINDUP) / .85f * (8 - release);
+        }
+    }
+    float fraction = position - floorf(position);
+    return (int)Clamp(fraction * 3, 0, 2);
+}
+
 void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
     for (int i = 0; i < ENEMY_COUNT; i++) {
         const Enemy *enemy = &group->list[i];
@@ -361,6 +403,10 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
             group->coveiroIdle,group->coveiroEmerge,group->coveiroFall};
         Texture2D tex=atlases[pose.atlas];
         int frame=pose.frame,row=pose.row;
+        if (boss) {
+            row += CoveiroMotionSample(enemy) * pose.rows;
+            pose.rows *= 3;
+        }
         float cw=(float)tex.width/pose.columns,ch=(float)tex.height/pose.rows;
         float baseSize=boss?288*(210.0f/256.0f):special?128:96;
         float height=baseSize*(1.0f-.22f*collapse);
@@ -407,10 +453,11 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
                     DrawLineEx(enemy->position,Vector2Add(enemy->position,Vector2Scale(direction,180)),3,warning);
                 }
             }
-            if (enemy->bossAttack == COVEIRO_ROOTS && enemy->stateTime < 1.2f)
+            if (enemy->bossAttack == COVEIRO_ROOTS && enemy->stateTime < COVEIRO_ROOT_END)
                 DrawCircleLines((int)enemy->attackTarget.x, (int)enemy->attackTarget.y, phaseTwo ? 115 : 95, warning);
             if (enemy->bossAttack == COVEIRO_CHARGE && (enemy->stateTime < COVEIRO_WINDUP ||
-                (phaseTwo && enemy->stateTime>=1.12f && enemy->stateTime<1.45f)))
+                (phaseTwo && enemy->stateTime>=COVEIRO_CHARGE_FIRST_END &&
+                 enemy->stateTime<COVEIRO_CHARGE_SECOND_START)))
                 DrawLineEx(enemy->position, Vector2Add(enemy->position,
                     Vector2Scale(enemy->attackDirection,
                                  (phaseTwo ? COVEIRO_ENRAGED_CHARGE_SPEED : COVEIRO_CHARGE_SPEED) * .55f)), 5, warning);

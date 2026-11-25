@@ -264,6 +264,30 @@ static void CheckGuardianMelee(Clearing *map, EnemyGroup *group) {
     }
 }
 
+static void CheckGuardianClosePressure(Clearing *map, EnemyGroup *group) {
+    const Vector2 origin = {400,400}, player = {527,400};
+    int health = 100;
+    StartArenaBoss(group,map,player,1);
+    Enemy *boss = &group->list[0];
+    boss->position = origin;
+    boss->state = ENEMY_IDLE;
+    boss->attackCooldown = 0;
+    UpdateEnemies(group,map,player,.16f,false,&health,100);
+    assert(boss->state == ENEMY_WALK && boss->position.x > origin.x);
+    UpdateEnemies(group,map,player,.01f,false,&health,100);
+    assert(boss->state == ENEMY_ATTACK && boss->guardianMelee);
+    UpdateEnemies(group,map,player,.41f,false,&health,100);
+    assert(health == 74);
+    UpdateEnemies(group,map,player,.40f,false,&health,100);
+    Vector2 feet = boss->position;
+    UpdateEnemies(group,map,player,.10f,false,&health,100);
+    assert(boss->state == ENEMY_IDLE && Vector2Distance(feet,boss->position) < .01f);
+    UpdateEnemies(group,map,player,.26f,false,&health,100);
+    assert(boss->state == ENEMY_ATTACK && boss->guardianMelee);
+    UpdateEnemies(group,map,player,.41f,false,&health,100);
+    assert(health == 48);
+}
+
 static void CheckGuardianDodge(Clearing *map, EnemyGroup *group) {
     Vector2 player={500,400};
     int health=100;
@@ -661,6 +685,7 @@ int main(void) {
     assert(EnemiesRemaining(&group)==26); /* Clareira, onda 1 */
     CheckGuardianAttacks(&map, &group);
     CheckGuardianMelee(&map, &group);
+    CheckGuardianClosePressure(&map, &group);
     CheckGuardianDodge(&map, &group);
     for (int i=0;i<ENEMY_COUNT;i++) group.list[i]=(Enemy){.state=ENEMY_GONE};
     Enemy *melee = &group.list[0];
@@ -711,9 +736,9 @@ int main(void) {
     float attackTime=group.list[0].stateTime;
     DamageEnemy(&group.list[0],25);
     assert(group.list[0].state==ENEMY_ATTACK && group.list[0].stateTime==attackTime);
-    group.list[0].stateTime=.79f;
+    group.list[0].stateTime=.59f;
     UpdateEnemies(&group,&map,target,.02f,true,&health,100);
-    assert(health==100); /* Dodge during active roots. */
+    assert(health==100 && !group.list[0].attackConnected); /* Warning still active. */
     UpdateEnemies(&group,&map,target,.02f,false,&health,100);
     assert(health==62);
     UpdateEnemies(&group,&map,target,.02f,false,&health,100);
@@ -731,8 +756,8 @@ int main(void) {
     UpdateEnemies(&group, &map, target, .25f, true, &health, 100);
     assert(coveiro->guardianPhase == GUARDIAN_PHASE_TWO && coveiro->bossAttack == COVEIRO_CHARGE);
     coveiro->bossAttack = COVEIRO_SHOVEL;
-    coveiro->stateTime = .79f;
-    UpdateEnemies(&group, &map, target, .02f, true, &health, 100);
+    coveiro->stateTime = .60f;
+    UpdateEnemies(&group, &map, target, .03f, true, &health, 100);
     assert(group.cemeteryProjectiles[2].active && !group.cemeteryProjectiles[3].active);
     assert(group.cemeteryProjectiles[0].damage == 91); /* The projectile keeps corruption power. */
     assert(fabsf(group.cemeteryProjectiles[0].velocity.x) +
@@ -746,7 +771,7 @@ int main(void) {
     UpdateEnemies(&group,&map,target,.01f,false,&health,100);
     assert(coveiro->state==ENEMY_ATTACK && coveiro->guardianMelee && coveiro->facing==3);
     assert(CemeteryAnimationPose(coveiro).atlas==CEM_BOSS_MELEE && CemeteryAnimationPose(coveiro).frame==0);
-    UpdateEnemies(&group,&map,target,.34f,false,&health,100);
+    UpdateEnemies(&group,&map,target,.28f,false,&health,100);
     assert(health==100 && !coveiro->attackConnected);
     UpdateEnemies(&group,&map,target,.03f,false,&health,100);
     assert(health==67 && coveiro->attackConnected && CemeteryAnimationPose(coveiro).frame==4);

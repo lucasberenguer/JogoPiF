@@ -81,6 +81,12 @@ typedef struct KatanaSprites {
     Texture2D attack[3];
 } KatanaSprites;
 
+static Rectangle PlayerSpriteSource(float pose, int facing, float width, float height) {
+    const int samples = 3;
+    int frame = (int)(pose*samples);
+    return (Rectangle){(frame/samples)*width,(facing + 4*(frame%samples))*height,width,height};
+}
+
 static void UnloadKatanaSprites(KatanaSprites *sprites) {
     if (sprites->idle.id) UnloadTexture(sprites->idle);
     if (sprites->walk.id) UnloadTexture(sprites->walk);
@@ -91,10 +97,10 @@ static void UnloadKatanaSprites(KatanaSprites *sprites) {
 
 static bool InitKatanaSprites(KatanaSprites *sprites) {
     *sprites = (KatanaSprites){0};
-    sprites->idle = LoadTexture("assets/katana_idle_novo.png");
-    sprites->walk = LoadTexture("assets/katana_caminhada.png");
+    sprites->idle = LoadTexture("assets/protagonista/fluido/katana_idle_novo.png");
+    sprites->walk = LoadTexture("assets/protagonista/fluido/katana_caminhada.png");
     for (int i = 0; i < 3; i++)
-        sprites->attack[i] = LoadTexture(TextFormat("assets/katana_golpe_%d.png", i + 1));
+        sprites->attack[i] = LoadTexture(TextFormat("assets/protagonista/fluido/katana_golpe_%d.png", i + 1));
     if (!sprites->idle.id || !sprites->walk.id) { UnloadKatanaSprites(sprites); return false; }
     SetTextureFilter(sprites->idle, TEXTURE_FILTER_POINT);
     SetTextureFilter(sprites->walk, TEXTURE_FILTER_POINT);
@@ -126,18 +132,18 @@ int main(void) {
         return 1;
     }
 
-    Texture2D protagonist = LoadTexture("assets/protagonista.png");
+    Texture2D protagonist = LoadTexture("assets/protagonista/fluido/protagonista.png");
     if (protagonist.id == 0) {
-        TraceLog(LOG_ERROR, "Nao foi possivel carregar assets/protagonista.png");
+        TraceLog(LOG_ERROR, "Nao foi possivel carregar a folha fluida do protagonista");
         UnloadClearing(&clearing);
         CloseWindow();
         return 1;
     }
     SetTextureFilter(protagonist, TEXTURE_FILTER_POINT);
 
-    Texture2D dodgeSprites = LoadTexture("assets/protagonista_dash.png");
+    Texture2D dodgeSprites = LoadTexture("assets/protagonista/fluido/protagonista_dash.png");
     if (dodgeSprites.id == 0) {
-        TraceLog(LOG_ERROR, "Nao foi possivel carregar assets/protagonista_dash.png");
+        TraceLog(LOG_ERROR, "Nao foi possivel carregar a folha fluida de esquiva");
         UnloadTexture(protagonist);
         UnloadClearing(&clearing);
         CloseWindow();
@@ -1133,7 +1139,7 @@ int main(void) {
         walking = false;
         Vector2 previous = player;
         bool dodging = dodgeRemaining > 0.0f;
-        int dodgeFrame = 0;
+        float dodgePose = 0;
         if (dodging) {
             float activeTime = fminf(deltaTime, dodgeRemaining);
             MoveNecromancerPlayer(&enemies, &clearing, &player,
@@ -1141,8 +1147,7 @@ int main(void) {
             dodgeRemaining -= activeTime;
             float progress = 1.0f - dodgeRemaining / dodgeDuration;
             int dodgeFrameCount = dodgeFacing < 2 ? 5 : 6;
-            dodgeFrame = (int) (progress * (float) dodgeFrameCount);
-            if (dodgeFrame >= dodgeFrameCount) dodgeFrame = dodgeFrameCount - 1;
+            dodgePose = Clamp(progress * dodgeFrameCount,0,dodgeFrameCount-1);
             if (Vector2DistanceSqr(previous, player) < 0.01f) dodgeRemaining = 0.0f;
         } else if (Vector2LengthSqr(direction) > 0.0f) {
             direction = Vector2Normalize(direction);
@@ -1335,62 +1340,59 @@ int main(void) {
                 if (currentWeapon == WEAPON_BIBLE) DrawBibleActivation(&bible, player);
                 if (dodging) {
                     DrawTexturePro(dodgeSprites,
-                        (Rectangle) { dodgeFrame * 112.0f, facing * 80.0f, 112.0f, 80.0f },
+                        PlayerSpriteSource(dodgePose,facing,112,80),
                         (Rectangle) { player.x - 52.5f, player.y - 72.0f, 105.0f, 75.0f },
                         (Vector2) { 0, 0 }, 0.0f, WHITE);
                 } else {
                     bool attacking = currentWeapon == WEAPON_KATANA && katanaAttackRemaining > 0.0f;
                     bool firing = currentWeapon == WEAPON_GUN && gun.poseRemaining > 0.0f;
                     bool invoking = currentWeapon == WEAPON_BIBLE && bible.activationRemaining > 0.0f;
-                    int poseFrame = frame;
+                    float pose = walking ? 1+fmodf(walkTime*7,4) : 0;
+                    float walkPose = fmodf(walkTime*10,8);
+                    float idlePose = (float)fmod(GetTime()*6,4);
                     int bodyFacing = facing;
                     Texture2D bodyTexture = protagonist;
                     if (attacking) {
                         bodyTexture = katanaSprites.attack[(katanaAttackId - 1) % 3];
                         float progress = 1.0f - katanaAttackRemaining / katanaAttackDuration;
-                        poseFrame = (int)(progress * 6.0f);
-                        if (poseFrame > 5) poseFrame = 5;
+                        pose = Clamp(progress * 6,0,5);
                         bodyFacing = katanaAttackFacing;
                     } else if (currentWeapon == WEAPON_KATANA) {
                         bodyTexture = walking ? katanaSprites.walk : katanaSprites.idle;
-                        poseFrame = walking ? (int)(walkTime * 10.0f) % 8 : 0;
+                        pose = walking ? walkPose : idlePose;
                     } else if (firing) {
                         bodyTexture = gun.body;
-                        poseFrame = (int)((1.0f - gun.poseRemaining / GUN_POSE_DURATION) * GUN_POSE_FRAMES);
-                        if (poseFrame >= GUN_POSE_FRAMES) poseFrame = GUN_POSE_FRAMES - 1;
+                        pose = Clamp((1-gun.poseRemaining/GUN_POSE_DURATION)*GUN_POSE_FRAMES,0,GUN_POSE_FRAMES-1);
                         bodyFacing = gunAttackFacing;
                     } else if (currentWeapon == WEAPON_GUN) {
                         bodyTexture = walking ? gun.walkBody : gun.idleBody;
-                        poseFrame = walking ? (int)(walkTime * 10.0f) % 8 : 0;
+                        pose = walking ? walkPose : idlePose;
                     } else if (invoking) {
                         bodyTexture = bible.activation;
-                        poseFrame = (int)((1.0f - bible.activationRemaining / BIBLE_ACTIVATION_DURATION) * BIBLE_ACTIVATION_FRAMES);
-                        if (poseFrame >= BIBLE_ACTIVATION_FRAMES) poseFrame = BIBLE_ACTIVATION_FRAMES - 1;
+                        pose = Clamp((1-bible.activationRemaining/BIBLE_ACTIVATION_DURATION)*
+                                     BIBLE_ACTIVATION_FRAMES,0,BIBLE_ACTIVATION_FRAMES-1);
                         bodyFacing = bibleAttackFacing;
                     } else if (currentWeapon == WEAPON_BIBLE) {
                         bodyTexture = walking ? bible.walk : bible.idle;
-                        poseFrame = walking ? (int)(walkTime * 10.0f) % 8 :
-                                              (int)(bible.animationTime * 6.0f) % 8;
+                        pose = walking ? walkPose : fmodf(bible.animationTime*6,8);
                     }
                     Rectangle bodyDestination = {player.x - 30.0f, player.y - 72.0f, 60.0f, 75.0f};
-                    Rectangle bodySource = {poseFrame * 64.0f, bodyFacing * 80.0f, 64.0f, 80.0f};
+                    Rectangle bodySource = PlayerSpriteSource(pose,bodyFacing,64,80);
                     if (currentWeapon == WEAPON_KATANA) {
-                        bodySource = (Rectangle){poseFrame * 160.0f, bodyFacing * 112.0f,
-                                                 160.0f, 112.0f};
+                        bodySource = PlayerSpriteSource(pose,bodyFacing,160,112);
                         bodyDestination = (Rectangle){player.x - 80.0f,
                                                        player.y - 108.0f, 160.0f, 112.0f};
                     } else if (invoking) {
-                        bodySource = (Rectangle){poseFrame * 128.0f, bodyFacing * 112.0f, 128, 112};
-                        bodyDestination = (Rectangle){player.x - 64, player.y - 108, 128, 112};
+                        bodySource = (Rectangle){(int)pose*128.0f,bodyFacing*112.0f,128,112};
+                        // A margem extra da folha acomoda a auréola. O corpo usa a escala da marcha.
+                        bodyDestination = (Rectangle){player.x - 60,player.y - 102,120,105};
                     } else if (currentWeapon == WEAPON_GUN) {
+                        if (firing)
+                            bodySource = (Rectangle){(int)pose*64.0f,bodyFacing*80.0f,64,80};
                         // Só a folha da pose parada ordena os perfis como direita, esquerda.
                         if (!firing && !walking && bodyFacing >= 2)
-                            bodySource.y = (5 - bodyFacing) * bodySource.height;
-                        // A arte da arma tem o corpo mais estreito que o sprite normal.
-                        // Usa a mesma escala para espera, caminhada e disparo.
-                        float width = bodyFacing < 2 ? 68.0f : 76.0f;
-                        bodyDestination = (Rectangle){player.x - width * 0.5f,
-                            player.y - 72.0f, width, 75.0f};
+                            bodySource = PlayerSpriteSource(pose,5-bodyFacing,64,80);
+                        bodyDestination = GunBodyDestination(&gun,bodySource,player,bodyFacing,walking,firing);
                     }
                     if (attacking && katanaAttackRemaining <= katanaAttackDuration * .5f) {
                         Vector2 center = {player.x, player.y - 35};

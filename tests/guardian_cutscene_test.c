@@ -387,9 +387,16 @@ int main(void) {
     assert(scene.finished && scene.skipped);
     UnloadGuardianCutscene(&scene);
     for (int skip=0; skip<2; skip++) {
-        assert(InitIgrisCutscene(&scene,.12f,0));
+        assert(InitIgrisCutscene(&scene,.12f,.12f));
         assert(scene.artCount==5 && scene.count==9);
         if (IsAudioDeviceReady()) assert(scene.music.stream.buffer);
+        for (int i=0; i<scene.count; i++) {
+            const GuardianScene *shot = &scene.scenes[i];
+            if (i==2) {
+                assert(!strcmp(shot->audioEvent,"piscada") && shot->cueAt==0);
+                if (IsAudioDeviceReady()) assert(shot->cue.stream.buffer);
+            } else assert(!shot->audioEvent[0]);
+        }
         const char *speakers[] = {"Você", "Igris", "Você", "Igris"};
         const char *dialogue[] = {
             "Seus cavaleiros caíram defendendo essa escadaria.", "Por minha ordem.",
@@ -408,6 +415,7 @@ int main(void) {
             for (int i=0; i<500 && !scene.finished; i++) {
                 if (scene.current==2) {
                     assert(scene.scenes[2].chapterCard && !scene.music.stream.buffer);
+                    if (IsAudioDeviceReady()) assert(scene.cueStarted);
                     blink=true;
                 }
                 if (scene.current!=previous) {
@@ -435,14 +443,14 @@ int main(void) {
     for (int i=0; i<scene.count; i++) {
         assert(scene.scenes[i].artIndex>=0);
         assert(scene.scenes[i].musicLoop==(i<9));
+        assert(!scene.scenes[i].audioEvent[0] && !scene.scenes[i].cue.stream.buffer);
         if (scene.scenes[i].waitsForInput) {
             assert(aftermathLines<6 && !strcmp(scene.scenes[i].speaker,aftermathSpeakers[aftermathLines]));
             aftermathLines++;
         }
     }
     assert(aftermathLines==6 && !strcmp(scene.scenes[7].id,"pausa"));
-    assert(!strcmp(scene.scenes[9].audioEvent,"espada") && !strcmp(scene.scenes[10].audioEvent,"passos"));
-    bool soundReady=IsAudioDeviceReady(), swordCue=false, footstepsCue=false;
+    bool soundReady=IsAudioDeviceReady();
     if (soundReady) assert(scene.music.stream.buffer && scene.music.looping);
     for (int i=0; i<300 && !scene.finished; i++) {
         if (scene.current==1 && scene.letters==0) {
@@ -452,12 +460,10 @@ int main(void) {
             Capture(&preview,800,"igris_aftermath_monologue");
         }
         if (soundReady && scene.current>=9) assert(scene.music.stream.buffer && !scene.music.looping);
-        if (scene.current==9 && scene.cueStarted) swordCue=true;
-        if (scene.current==10 && scene.cueStarted) footstepsCue=true;
         UpdateGuardianCutscene(&scene,.1f,(GuardianCutsceneInput){.advance=scene.scenes[scene.current].waitsForInput});
     }
     assert(scene.finished && !scene.skipped);
-    if (soundReady) assert(swordCue && footstepsCue && !IsMusicStreamPlaying(scene.music));
+    if (soundReady) assert(!IsMusicStreamPlaying(scene.music));
     UnloadGuardianCutscene(&scene);
     UnloadGameFonts();
     if (IsAudioDeviceReady()) CloseAudioDevice();
