@@ -130,6 +130,7 @@ static void HurtPlayer(EnemyGroup *group, int *playerHealth, bool dodging, int d
 
 void VillageUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss,
                        Vector2 player, float dt, bool dodging, int *playerHealth) {
+    Vector2 velocity = SampleBossPlayerVelocity(boss,player,dt);
     if (boss->guardianPhase == GUARDIAN_PHASE_ONE && boss->health <= boss->maxHealth / 2) {
         boss->guardianPhase = GUARDIAN_PHASE_TWO;
     }
@@ -150,6 +151,15 @@ void VillageUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss,
             boss->stateTime = 0.0f;
             boss->attackConnected = false;
             boss->attackDirection = toward;
+            if (boss->bossAttack != VILLAGE_SEAL_PULSE) {
+                float lead = boss->bossAttack == VILLAGE_CHARGE ? .24f : .18f;
+                Vector2 target = PredictBossTarget(map,boss->position,player,velocity,lead);
+                Vector2 aim = Vector2Subtract(target,boss->position);
+                if (Vector2LengthSqr(aim) > .001f) {
+                    boss->attackDirection = Vector2Normalize(aim);
+                    boss->facing = VillageFacing(aim,boss->facing);
+                }
+            }
             return;
         }
         if (distance > 86.0f) {

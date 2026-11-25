@@ -39,7 +39,8 @@ static void CheckCoveiroChoices(void) {
     const struct {float distance; int previous, expected;} cases[] = {
         {350,COVEIRO_ROOTS,COVEIRO_CHARGE},
         {220,COVEIRO_SHOVEL,COVEIRO_ROOTS},
-        {220,COVEIRO_ROOTS,COVEIRO_SHOVEL},
+        {220,COVEIRO_ROOTS,COVEIRO_CHARGE},
+        {220,COVEIRO_CHARGE,COVEIRO_SHOVEL},
         {145,COVEIRO_ROOTS,COVEIRO_SHOVEL},
     };
     for (unsigned i=0;i<sizeof(cases)/sizeof(cases[0]);i++) {
@@ -55,6 +56,98 @@ static void CheckCoveiroChoices(void) {
         .speed=160,.health=100,.maxHealth=100,.power=1,.bossAttack=COVEIRO_SHOVEL};
     CemeteryUpdateBoss(&group,&map,boss,player,.01f,false,&health);
     assert(boss->state==ENEMY_ATTACK && boss->bossAttack==COVEIRO_ROOTS);
+    map.obstacleCount=0;
+    *boss=(Enemy){.type=ENEMY_BOSS,.state=ENEMY_IDLE,
+        .position={player.x-220,player.y},.speed=160,.health=100,.maxHealth=100,
+        .power=1,.guardianPhase=GUARDIAN_PHASE_TWO,.bossAttack=COVEIRO_ROOTS};
+    CemeteryUpdateBoss(&group,&map,boss,player,.01f,false,&health);
+    assert(boss->state==ENEMY_ATTACK && boss->bossAttack==COVEIRO_CHARGE);
+
+    memset(&group,0,sizeof(group));
+    boss=&group.list[0];
+    *boss=(Enemy){.type=ENEMY_BOSS,.state=ENEMY_ATTACK,
+        .position={player.x-220,player.y},.health=100,.maxHealth=100,
+        .power=1,.guardianPhase=GUARDIAN_PHASE_TWO,.bossAttack=COVEIRO_SHOVEL,
+        .stateTime=.63f,.attackDirection={1,0},.attackTarget=player};
+    CemeteryUpdateBoss(&group,&map,boss,player,.02f,false,&health);
+    assert(group.cemeteryProjectiles[0].active && group.cemeteryProjectiles[1].active &&
+           group.cemeteryProjectiles[2].active);
+    assert(group.rootAttacks[0].active && group.rootAttacks[1].active);
+    assert(fabsf(group.rootAttacks[0].position.y-player.y)==125 &&
+           fabsf(group.rootAttacks[1].position.y-player.y)==125);
+    assert(group.rootAttacks[0].position.y != group.rootAttacks[1].position.y);
+
+    // An opener can link once, with a fresh target and its own windup.
+    for (int scenario = 0; scenario < 3; scenario++) {
+        memset(&group, 0, sizeof(group));
+        bool shovelCombo = scenario == 1;
+        *boss = (Enemy){.type=ENEMY_BOSS, .state=ENEMY_IDLE, .position={580,600},
+            .health=100, .maxHealth=100, .power=1,
+            .guardianPhase=shovelCombo ? GUARDIAN_PHASE_TWO : GUARDIAN_PHASE_ONE,
+            .bossAttack=shovelCombo ? COVEIRO_CHARGE : COVEIRO_SHOVEL};
+        CemeteryUpdateBoss(&group, &map, boss, player, .01f, false, &health);
+        assert(boss->bossAttack == (shovelCombo ? COVEIRO_SHOVEL : COVEIRO_ROOTS));
+        Vector2 moved = {800,720};
+        if (scenario == 2) {
+            map.obstacles[0] = (Rectangle){650,620,60,100};
+            map.obstacleCount = 1;
+        }
+        boss->stateTime = 1.19f;
+        CemeteryUpdateBoss(&group, &map, boss, moved, .01f, false, &health);
+        if (scenario == 2) {
+            assert(boss->bossAttack == COVEIRO_ROOTS && boss->stateTime > 1);
+            map.obstacleCount = 0;
+        } else {
+            assert(boss->bossAttack == (shovelCombo ? COVEIRO_ROOTS : COVEIRO_CHARGE));
+            assert(boss->stateTime == 0 && boss->attackTarget.y == moved.y);
+        }
+        boss->stateTime = 1.5f;
+        CemeteryUpdateBoss(&group, &map, boss, moved, .01f, false, &health);
+        assert(boss->state == ENEMY_IDLE && boss->coveiroCombo == COVEIRO_COMBO_RECOVERY);
+        CemeteryUpdateBoss(&group, &map, boss, boss->position, .01f, false, &health);
+        assert(boss->state == ENEMY_IDLE);
+    }
+}
+
+static void CheckBossPrediction(void) {
+    const struct { float distance; int previous; } cases[] = {
+        {200, GUARDIAN_CURSE}, {220, COVEIRO_SHOVEL},
+        {220, 0}, {500, BONE_RANGED}, {170, IGRIS_MELEE},
+    };
+    for (int i=0; i<5; i++) {
+        Clearing map = {.cemetery=i==1, .village=i==2, .boneland=i==3, .templarField=i==4,
+                        .background={.width=1600,.height=1200}, .playableBounds={0,0,1600,1200}};
+        EnemyGroup group={0};
+        Vector2 player={400+cases[i].distance,500};
+        int health=100;
+        StartArenaBoss(&group,&map,player,1);
+        Enemy *boss=&group.list[0];
+        boss->position=(Vector2){400,500};
+        boss->state=ENEMY_IDLE;
+        boss->attackCooldown=.06f;
+        boss->bossAttack=cases[i].previous;
+        UpdateEnemies(&group,&map,(Vector2){player.x,player.y-10},.05f,false,&health,100);
+        boss->position=(Vector2){400,500};
+        UpdateEnemies(&group,&map,player,.05f,false,&health,100);
+        assert(boss->state==ENEMY_ATTACK && boss->attackDirection.y>.08f);
+        if (i==0) assert(group.rootAttacks[0].active && group.rootAttacks[0].position.y>player.y+30);
+        if (i==4) {
+            for (int frame=0; frame<8; frame++) {
+                player.y+=10;
+                UpdateEnemies(&group,&map,player,.05f,false,&health,100);
+            }
+            assert(boss->attackTarget.y>player.y+20);
+        }
+        Vector2 locked=boss->attackDirection;
+        player.y-=10;
+        UpdateEnemies(&group,&map,player,.05f,false,&health,100);
+        assert(Vector2Distance(locked,boss->attackDirection)<.001f && health==100);
+    }
+    Clearing map={.background={.width=1600,.height=1200}, .playableBounds={0,0,1600,1200},
+                  .obstacles={{590,520,20,25}}, .obstacleCount=1};
+    Vector2 player={600,500};
+    Vector2 target=PredictBossTarget(&map,(Vector2){400,500},player,(Vector2){0,250},.24f);
+    assert(Vector2Distance(target,player)<.001f);
 }
 
 static void CheckBonelandWaves(void) {
@@ -253,6 +346,7 @@ static void CheckGuardianMelee(Clearing *map, EnemyGroup *group) {
         assert(boss->bossAttack == GUARDIAN_ATTACK_COUNT - 1);
         UpdateEnemies(group, map, player, .35f, false, &health, 100);
         assert(health == 100 && EnemyAnimationFrame(boss) == 3);
+        assert(boss->position.x > origin.x && boss->position.x <= origin.x+16);
         Vector2 impactPosition = player;
         if (scenario == 1) impactPosition.x = origin.x - 100;
         if (scenario == 3) impactPosition.x = origin.x + 135;
@@ -382,6 +476,7 @@ static void CheckTemplarBalance(void) {
     const int previous[] = {IGRIS_MELEE, IGRIS_ECLIPSE, IGRIS_ECLIPSE, IGRIS_SPEARS, IGRIS_ECLIPSE};
     const float choiceDistance[] = {120,450,160,300,80};
     const int damage[] = {31,28,35,36,22};
+    const float impact[] = {.96f,.59f,1.00f,1.12f,.42f};
     for (int i = 0; i < IGRIS_SKILL_COUNT; i++) {
         marshal->state = ENEMY_IDLE;
         marshal->attackCooldown = 0;
@@ -396,16 +491,43 @@ static void CheckTemplarBalance(void) {
         marshal->attackTarget = player;
         marshal->attackDirection = (Vector2){1,0};
         marshal->stateTime = 0;
-        for (int j = 0; j < 22; j++) {
+        for (int j = 0; j < 24; j++) {
             UpdateEnemies(&group,&map,player,.05f,false,&playerHealth,100);
+            if ((j+1)*.05f < impact[i]-.001f) assert(playerHealth==100);
             if (skills[i] == IGRIS_SPEARS && marshal->attackConnected && playerHealth == 100) {
                 assert(group.projectiles[0].umbraSpear && group.projectiles[1].umbraSpear &&
                        group.projectiles[2].umbraSpear);
             }
         }
         assert(playerHealth == 100-damage[i]);
+        if (skills[i] == IGRIS_ECLIPSE) assert(marshal->position.x > 870);
+        if (skills[i] == IGRIS_ECLIPSE || skills[i] == IGRIS_VORTEX || skills[i] == IGRIS_ERUPTION) {
+            for (int tick=0; tick<40 && marshal->state==ENEMY_ATTACK; tick++)
+                UpdateEnemies(&group,&map,player,.025f,false,&playerHealth,100);
+            assert(marshal->state==ENEMY_IDLE && fabsf(marshal->attackCooldown-.60f)<.001f);
+            UpdateEnemies(&group,&map,player,.49f,false,&playerHealth,100);
+            assert(marshal->state!=ENEMY_ATTACK);
+        }
         ClearEnemyAttacks(&group);
     }
+    marshal->position = (Vector2){835,500};
+    marshal->state = ENEMY_IDLE;
+    marshal->attackCooldown = 0;
+    marshal->attackBurst = 0;
+    marshal->bossAttack = IGRIS_MELEE;
+    int aimingHealth = 100;
+    UpdateEnemies(&group,&map,player,.01f,false,&aimingHealth,100);
+    assert(marshal->bossAttack == IGRIS_ECLIPSE);
+    Vector2 running = player;
+    for (int i = 0; i < 8; i++) {
+        running.y += 5;
+        UpdateEnemies(&group,&map,running,.05f,false,&aimingHealth,100);
+    }
+    Vector2 locked = marshal->attackTarget;
+    assert(locked.y > running.y+15);
+    running.y -= 10;
+    UpdateEnemies(&group,&map,running,.05f,false,&aimingHealth,100);
+    assert(Vector2Distance(marshal->attackTarget,locked)<.01f);
     marshal->state = ENEMY_IDLE;
     marshal->attackCooldown = 0;
     marshal->attackBurst = 1;
@@ -439,10 +561,11 @@ static void CheckTemplarBalance(void) {
     assert(marshal->position.x>origin.x+150 && fabsf(marshal->position.y-pivot.y)<.1f);
     UpdateEnemies(&group,&map,player,.40f,false,&playerHealth,100);
     assert(marshal->state == ENEMY_IDLE && playerHealth == 65);
+    assert(fabsf(marshal->attackCooldown - .14f) < .001f);
     for (int dodge = 0; dodge < 2; dodge++) {
         marshal->position = origin;
         marshal->attackCooldown = 0;
-        marshal->attackBurst = 2;
+        marshal->attackBurst = dodge ? 2 : 0;
         group.playerHitCooldown = 0;
         Vector2 victim = {origin.x+250,origin.y};
         playerHealth = 100;
@@ -478,6 +601,20 @@ static void CheckTemplarBalance(void) {
     assert(playerHealth == 38 && marshal->igrisEchoHits == 3u);
     UpdateEnemies(&group,&map,player,.5f,false,&playerHealth,100);
     assert(marshal->state == ENEMY_IDLE);
+    marshal->position = origin;
+    marshal->attackCooldown = 0;
+    marshal->attackBurst = 3;
+    UpdateEnemies(&group,&map,player,.01f,true,&playerHealth,100);
+    UpdateEnemies(&group,&map,player,.50f,true,&playerHealth,100);
+    Vector2 firstAim = marshal->igrisEchoTo[0];
+    Vector2 secondAim = marshal->igrisEchoTo[1];
+    Vector2 moved = {player.x,player.y+100};
+    UpdateEnemies(&group,&map,moved,.52f,true,&playerHealth,100);
+    assert(Vector2Distance(firstAim,marshal->igrisEchoTo[0]) < .01f);
+    assert(Vector2Distance(secondAim,marshal->igrisEchoTo[1]) > 20);
+    secondAim = marshal->igrisEchoTo[1];
+    UpdateEnemies(&group,&map,player,.20f,true,&playerHealth,100);
+    assert(Vector2Distance(secondAim,marshal->igrisEchoTo[1]) < .01f);
 }
 
 static int CountNecromancerShots(const EnemyGroup *group) {
@@ -642,6 +779,7 @@ int main(void) {
     CheckNecromancerPressure();
     CheckNecromancerCombos();
     CheckTemplarBalance();
+    CheckBossPrediction();
     const int expected[] = {20, 25, 45, 65, 100};
     for (int type=0; type<5; type++) {
         assert(EnemyOptionalDropChance((EnemyType)type) == expected[type]);
@@ -730,6 +868,7 @@ int main(void) {
     group.list[0].position=(Vector2){800,600};
     group.list[0].state=ENEMY_IDLE;
     group.list[0].attackCooldown=0;
+    group.list[0].bossAttack=COVEIRO_SHOVEL;
     Vector2 target={800,400};
     UpdateEnemies(&group,&map,target,.01f,false,&health,100);
     assert(group.list[0].state==ENEMY_ATTACK && group.list[0].bossAttack==0);

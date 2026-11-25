@@ -1479,9 +1479,12 @@ int main(void) {
     marshal->attackTarget = target;
     int before = fieldHealth;
     marshal->stateTime = .78f;
+    UpdateEnemies(&enemies, &field, target, .02f, false, &fieldHealth, 100);
+    assert(fieldHealth == before && !marshal->attackConnected);
+    marshal->stateTime = 1.11f;
     UpdateEnemies(&enemies, &field, target, .02f, true, &fieldHealth, 100);
     assert(fieldHealth == before && enemies.templarBlood.remaining <= 0);
-    marshal->stateTime = .78f;
+    marshal->stateTime = 1.11f;
     marshal->attackConnected = false;
     UpdateEnemies(&enemies, &field, target, .02f, false, &fieldHealth, 100);
     assert(fieldHealth == before - 36 && enemies.templarBlood.remaining > 0);

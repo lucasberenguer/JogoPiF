@@ -17,6 +17,10 @@ typedef enum GuardianAttack {
 } GuardianAttack;
 #define COVEIRO_DAMAGE_BOOST 1.10f
 enum { COVEIRO_ROOTS, COVEIRO_SHOVEL, COVEIRO_CHARGE, COVEIRO_ATTACK_COUNT };
+typedef enum CoveiroCombo {
+    COVEIRO_COMBO_NONE, COVEIRO_COMBO_TO_CHARGE, COVEIRO_COMBO_TO_ROOTS,
+    COVEIRO_COMBO_FINISHER, COVEIRO_COMBO_RECOVERY
+} CoveiroCombo;
 enum { IGRIS_MELEE, IGRIS_ECLIPSE, IGRIS_ERUPTION, IGRIS_SPEARS, IGRIS_VORTEX, IGRIS_SKILL_COUNT };
 enum { IGRIS_IDLE_ART, IGRIS_WALK_ART, IGRIS_MELEE_ART, IGRIS_ECLIPSE_ART, IGRIS_ECLIPSE_FX,
        IGRIS_ERUPTION_ART, IGRIS_ERUPTION_FX, IGRIS_SPEARS_ART, IGRIS_SPEARS_FX,
@@ -96,12 +100,15 @@ typedef struct Enemy {
     unsigned igrisEchoHits;
     bool guardianMelee;
     bool coveiroPhaseOpening;
+    CoveiroCombo coveiroCombo;
     float guardianMeleeCooldown;
     float guardianDodgeCooldown, guardianDodgeTime;
     Vector2 guardianDodgeDirection;
     int bossAttack;
     int attackBurst;
     Vector2 attackTarget;
+    Vector2 previousPlayerPosition;
+    bool hasPlayerPosition;
 } Enemy;
 typedef struct CemeteryProjectile {
     bool active;
@@ -174,6 +181,9 @@ void DamageEnemyFrom(Enemy *enemy, int damage, Vector2 source);
 void KnockbackEnemy(Enemy *enemy, const Clearing *clearing,
                     Vector2 source, float distance);
 void MoveEnemy(const Clearing *clearing, Enemy *enemy, Vector2 delta);
+Vector2 SampleBossPlayerVelocity(Enemy *boss, Vector2 player, float dt);
+Vector2 PredictBossTarget(const Clearing *map, Vector2 origin, Vector2 player,
+                          Vector2 velocity, float lead);
 void DrawEnemyHealthBar(const Enemy *enemy, float top);
 bool EnemyCanBeHit(const Enemy *enemy);
 Vector2 EnemyCenter(const Enemy *enemy);

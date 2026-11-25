@@ -953,6 +953,7 @@ int main(void) {
                 : clearing.boneland ? InitBonelandCutscene(&guardianIntro,musicVolume,effectsVolume)
                 : InitGuardianCutscene(&guardianIntro,musicVolume,effectsVolume);
             if (loaded) {
+                StopGameMusic(&menu.audio);
                 screen=GUARDIAN_SCREEN;
                 BeginGameFrame();
                     ClearBackground(BLACK);

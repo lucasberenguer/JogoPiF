@@ -263,10 +263,10 @@ static const struct {
     int damage, art;
 } igrisSkills[IGRIS_SKILL_COUNT + 1] = {
     [IGRIS_MELEE]    = {.42f, .86f, 140, .34f, 20, IGRIS_MELEE_ART},
-    [IGRIS_ECLIPSE]  = {.62f, 1.19f, 225, .50f, 28, IGRIS_ECLIPSE_ART},
-    [IGRIS_ERUPTION] = {.79f, 1.64f, 120, -1, 33, IGRIS_ERUPTION_ART},
+    [IGRIS_ECLIPSE]  = {.96f, 1.53f, 225, .50f, 28, IGRIS_ECLIPSE_ART},
+    [IGRIS_ERUPTION] = {1.12f, 1.97f, 120, -1, 33, IGRIS_ERUPTION_ART},
     [IGRIS_SPEARS]   = {.59f, 1.26f, 520, -1, 25, IGRIS_SPEARS_ART},
-    [IGRIS_VORTEX]   = {.68f, 1.41f, 182, -1, 32, IGRIS_VORTEX_ART},
+    [IGRIS_VORTEX]   = {1.00f, 1.73f, 182, -1, 32, IGRIS_VORTEX_ART},
     [IGRIS_SKILL_COUNT] = {.37f, .79f, 178, .27f, 36, IGRIS_FINAL_MELEE},
 };
 #define IGRIS_FINAL_CLAW IGRIS_SKILL_COUNT
@@ -509,10 +509,10 @@ static bool LoadBonelandEnemyAssets(EnemyGroup *group) {
         SetTextureFilter(group->boneShell[i], TEXTURE_FILTER_POINT);
     }
     const char *boneSheets[BONE_SHEET_COUNT] = {
-        "assets/rasga_ossos/idle.png", "assets/rasga_ossos/marcha.png",
-        "assets/rasga_ossos/garra.png", "assets/rasga_ossos/disparo.png",
-        "assets/rasga_ossos/chuva.png", "assets/rasga_ossos/chuva_fx.png",
-        "assets/rasga_ossos/dash.png", "assets/rasga_ossos/explosao.png",
+        "assets/rasga_ossos/fluido/idle.png", "assets/rasga_ossos/fluido/marcha.png",
+        "assets/rasga_ossos/fluido/garra.png", "assets/rasga_ossos/fluido/disparo.png",
+        "assets/rasga_ossos/fluido/chuva.png", "assets/rasga_ossos/chuva_fx.png",
+        "assets/rasga_ossos/fluido/dash.png", "assets/rasga_ossos/fluido/explosao.png",
         "assets/rasga_ossos/explosao_fx.png",
     };
     for (int i = 0; i < BONE_SHEET_COUNT; i++) {
@@ -1101,6 +1101,38 @@ static void PlaceGuardianRoot(EnemyGroup *group, Vector2 position, GuardianAttac
     }
 }
 
+Vector2 SampleBossPlayerVelocity(Enemy *boss, Vector2 player, float dt) {
+    Vector2 velocity = {0};
+    if (boss->hasPlayerPosition && dt > 0 && dt <= .12f) {
+        velocity = Vector2Scale(Vector2Subtract(player,boss->previousPlayerPosition),1/dt);
+        if (Vector2LengthSqr(velocity) > 850*850) velocity = (Vector2){0};
+    }
+    boss->previousPlayerPosition = player;
+    boss->hasPlayerPosition = true;
+    return velocity;
+}
+
+Vector2 PredictBossTarget(const Clearing *map, Vector2 origin, Vector2 player,
+                          Vector2 velocity, float lead) {
+    Vector2 offset = Vector2Scale(velocity,lead);
+    if (Vector2LengthSqr(offset) <= .01f) return player;
+    offset = Vector2ClampValue(offset,0,105);
+    Vector2 target = Vector2Add(player,offset);
+    if (IsMapActorBlocked(map,target) || !MapHasClearPath(map,player,target) ||
+        !MapHasClearPath(map,origin,target)) return player;
+    return target;
+}
+
+static void AimBossAttack(Enemy *boss, Vector2 target) {
+    boss->attackTarget = target;
+    Vector2 offset = Vector2Subtract(target,boss->position);
+    if (Vector2LengthSqr(offset) <= .001f) return;
+    boss->attackDirection = Vector2Normalize(offset);
+    boss->facing = FacingToward(offset);
+}
+
+static void MoveEnemyStraight(const Clearing *map, Enemy *boss, float distance);
+
 static void StartGuardianCast(EnemyGroup *group, const Clearing *clearing,
                               Enemy *enemy, Vector2 player) {
     enemy->attackCooldown = GuardianEnraged(enemy) ? 1.55f : 2.25f;
@@ -1136,7 +1168,14 @@ static void StartGuardianCast(EnemyGroup *group, const Clearing *clearing,
 }
 
 static void UpdateGuardianMelee(EnemyGroup *group, const Clearing *clearing, Enemy *enemy, Vector2 player,
-                                bool playerDodging, int *playerHealth) {
+                                Vector2 velocity, float dt, bool playerDodging, int *playerHealth) {
+    float time = enemy->stateTime;
+    if (time <= .20f)
+        AimBossAttack(enemy,PredictBossTarget(clearing,enemy->position,player,velocity,.20f));
+    float active = fmaxf(0,fminf(time,.40f)-fmaxf(time-dt,.26f));
+    float remaining = Vector2DotProduct(Vector2Subtract(enemy->attackTarget,enemy->position),enemy->attackDirection)-85;
+    if (active > 0 && remaining > 0)
+        MoveEnemyStraight(clearing,enemy,fminf(remaining,active*340));
     if (!enemy->attackConnected && EnemyAnimationFrame(enemy) >= GUARDIAN_MELEE_HIT_FRAME) {
         enemy->attackConnected = true;
         Vector2 offset = Vector2Subtract(player, enemy->position);
@@ -1222,6 +1261,7 @@ static Vector2 BoneDashFlank(const Clearing *map, Vector2 origin, Vector2 direct
 
 static void UpdateBoneLord(EnemyGroup *group, const Clearing *map, Enemy *boss,
                            Vector2 player, float dt, bool dodging, int *health) {
+    Vector2 velocity = SampleBossPlayerVelocity(boss,player,dt);
     Vector2 toPlayer = Vector2Subtract(player, boss->position);
     float distance = Vector2Length(toPlayer);
     if (boss->state != ENEMY_ATTACK) {
@@ -1256,8 +1296,17 @@ static void UpdateBoneLord(EnemyGroup *group, const Clearing *map, Enemy *boss,
             if (attack >= 0 && distance <= boneAttacks[attack].range) {
                 boss->bossAttack = attack;
                 boss->attackDirection = distance > .001f ? Vector2Normalize(toPlayer) : (Vector2){0, 1};
-                boss->attackTarget = attack == BONE_DASH ?
-                    BoneDashFlank(map, boss->position, boss->attackDirection, player) : player;
+                float lead = attack == BONE_RANGED ? .24f + fminf(.22f,distance/BONE_SHOT_SPEED) : .24f;
+                Vector2 target = PredictBossTarget(map,boss->position,player,velocity,lead);
+                if (attack != BONE_BLAST) AimBossAttack(boss,target);
+                if (attack == BONE_DASH) {
+                    Vector2 flank = BoneDashFlank(map,boss->position,boss->attackDirection,target);
+                    if (Vector2DistanceSqr(boss->position,flank) <= 1) {
+                        AimBossAttack(boss,player);
+                        flank = BoneDashFlank(map,boss->position,boss->attackDirection,player);
+                    }
+                    boss->attackTarget = flank;
+                }
                 boss->state = ENEMY_ATTACK;
                 boss->stateTime = 0;
                 boss->attackConnected = false;
@@ -1286,7 +1335,8 @@ static void UpdateBoneLord(EnemyGroup *group, const Clearing *map, Enemy *boss,
             MoveEnemy(map, boss, Vector2Scale(remaining, fraction));
         }
         if (previous < BONE_DASH_REAPPEAR && t >= BONE_DASH_REAPPEAR) {
-            Vector2 aim = Vector2Subtract(player, boss->position);
+            Vector2 target = PredictBossTarget(map,boss->position,player,velocity,.20f);
+            Vector2 aim = Vector2Subtract(target,boss->position);
             if (Vector2LengthSqr(aim) > .001f) boss->attackDirection = Vector2Normalize(aim);
             boss->facing = FacingToward(boss->attackDirection);
         }
@@ -1481,7 +1531,7 @@ static void UpdateIgrisZ(EnemyGroup *group, const Clearing *map, Enemy *boss,
     if (t >= igrisZFrames[12]) {
         boss->state = ENEMY_IDLE;
         boss->stateTime = 0;
-        boss->attackCooldown = .36f;
+        boss->attackCooldown = .14f;
     }
 }
 
@@ -1558,10 +1608,29 @@ static float IgrisEchoLaunch(int index) {
     return IGRIS_ECHO_PLANT + IGRIS_ECHO_WARNING + index*IGRIS_ECHO_GAP;
 }
 
+static Vector2 AimIgrisEcho(const Clearing *map, Vector2 start, Vector2 player, Vector2 fallback) {
+    Vector2 delta = Vector2Subtract(player,start);
+    float distance = Vector2Length(delta);
+    if (distance < .001f) return fallback;
+    Vector2 aim = Vector2Scale(delta,1/distance);
+    float reach = fminf(distance+96,360);
+    Vector2 end = start;
+    for (float traveled = 0; traveled < reach; ) {
+        traveled = fminf(traveled+8,reach);
+        Vector2 next = Vector2Add(start,Vector2Scale(aim,traveled));
+        if (IsMapActorBlocked(map,next) || !MapHasClearPath(map,end,next)) break;
+        end = next;
+    }
+    return end;
+}
+
 static void UpdateIgrisEchoes(EnemyGroup *group, const Clearing *map, Enemy *boss,
                               Vector2 player, float dt, bool dodging, int *health) {
     for (int i = 0; i < 3; i++) {
         float launch = IgrisEchoLaunch(i);
+        float warning = IGRIS_ECHO_PLANT + i*IGRIS_ECHO_GAP;
+        if (boss->stateTime >= warning && boss->stateTime-dt < warning)
+            boss->igrisEchoTo[i] = AimIgrisEcho(map,boss->igrisEchoFrom[i],player,boss->igrisEchoTo[i]);
         float age = boss->stateTime-launch;
         unsigned hit = 1u << i;
         if (age < 0 || age-dt >= IGRIS_ECHO_TRAVEL || (boss->igrisEchoHits & hit)) continue;
@@ -1586,6 +1655,7 @@ static void UpdateIgrisEchoes(EnemyGroup *group, const Clearing *map, Enemy *bos
 
 static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vector2 player,
                         float dt, bool dodging, int *health) {
+    Vector2 velocity = SampleBossPlayerVelocity(boss,player,dt);
     Vector2 delta = Vector2Subtract(player,boss->position);
     float distance = Vector2Length(delta);
     Vector2 direction = distance > .001f ? Vector2Scale(delta,1/distance) : (Vector2){0,1};
@@ -1597,18 +1667,22 @@ static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
         if (boss->attackCooldown <= 0 && MapHasClearPath(map,boss->position,player)) {
             int skill = -1;
             if (boss->igrisFinalForm) {
+                Vector2 target = PredictBossTarget(map,boss->position,player,velocity,.24f);
                 skill = IGRIS_FINAL_CLAW;
-                if (boss->attackBurst == 3 && distance <= 420 && PlanIgrisEchoes(map,boss,player,direction))
+                if (boss->attackBurst == 3 && distance <= 420 && PlanIgrisEchoes(map,boss,target,direction))
                     skill = IGRIS_ECLIPSE_ECHOES;
+                else if (distance > 178 && distance <= IGRIS_GRAB_REACH && boss->bossAttack != IGRIS_ABYSS_GRAB)
+                    skill = IGRIS_ABYSS_GRAB;
                 else if (boss->attackBurst == 2 && distance <= IGRIS_GRAB_REACH)
                     skill = IGRIS_ABYSS_GRAB;
                 else if (boss->bossAttack != IGRIS_Z_RIP && (boss->attackBurst == 1 || distance > 178) &&
-                    distance <= 340 && PlanIgrisZ(map,boss,player))
+                    distance <= 340 && (PlanIgrisZ(map,boss,target) ||
+                    (Vector2DistanceSqr(target,player) > .01f && PlanIgrisZ(map,boss,player))))
                     skill = IGRIS_Z_RIP;
                 else if (distance > 178 && distance <= IGRIS_GRAB_REACH)
                     skill = IGRIS_ABYSS_GRAB;
                 else if (distance > IGRIS_GRAB_REACH && distance <= 420 &&
-                         boss->bossAttack != IGRIS_ECLIPSE_ECHOES && PlanIgrisEchoes(map,boss,player,direction))
+                         boss->bossAttack != IGRIS_ECLIPSE_ECHOES && PlanIgrisEchoes(map,boss,target,direction))
                     skill = IGRIS_ECLIPSE_ECHOES;
                 float reach = skill == IGRIS_ECLIPSE_ECHOES ? 420 : skill == IGRIS_ABYSS_GRAB ? IGRIS_GRAB_REACH :
                     skill == IGRIS_Z_RIP ? 340 : igrisSkills[skill].reach;
@@ -1627,6 +1701,10 @@ static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
                         candidate == IGRIS_ERUPTION ? 18+(distance>180?12:0)+(distance>225?10:0) :
                         15+(distance>270?25:0)+(distance>320?5:0);
                     if (candidate == boss->bossAttack) score -= 20;
+                    if (distance > 180 &&
+                        ((boss->bossAttack == IGRIS_SPEARS && candidate == IGRIS_ERUPTION) ||
+                         (boss->bossAttack == IGRIS_ERUPTION && candidate == IGRIS_SPEARS)))
+                        score += enraged ? 16 : 8;
                     if (boss->attackBurst == 0 && candidate == IGRIS_ECLIPSE) score += 15;
                     if (score > bestScore) {skill=candidate;bestScore=score;}
                 }
@@ -1636,6 +1714,10 @@ static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
                 boss->bossAttack = skill;
                 boss->attackDirection = direction;
                 boss->attackTarget = player;
+                if (skill != IGRIS_Z_RIP && skill != IGRIS_ECLIPSE_ECHOES && skill != IGRIS_VORTEX) {
+                    float lead = skill == IGRIS_SPEARS ? .24f + fminf(.22f,distance/UMBRA_SPEAR_SPEED) : .24f;
+                    AimBossAttack(boss,PredictBossTarget(map,boss->position,player,velocity,lead));
+                }
                 boss->state = ENEMY_ATTACK;
                 boss->stateTime = 0;
                 boss->attackConnected = false;
@@ -1645,6 +1727,8 @@ static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
         if (distance > 90) {
             Vector2 start = boss->position;
             float speedScale = boss->igrisFinalForm ? 1.30f : enraged ? 1.13f : 1;
+            if (!boss->igrisFinalForm && distance > 180)
+                speedScale = enraged ? 1.26f : 1.12f;
             MoveEnemyTactically(group,map,boss,player,boss->speed*dt*speedScale);
             Vector2 step = Vector2Subtract(boss->position,start);
             float traveled = Vector2Length(step);
@@ -1660,6 +1744,17 @@ static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
     }
 
     int skill = boss->bossAttack;
+    float time = boss->stateTime;
+    if (skill == IGRIS_ECLIPSE || skill == IGRIS_ERUPTION || skill == IGRIS_SPEARS ||
+        skill == IGRIS_ABYSS_GRAB) {
+        float impact = skill == IGRIS_ABYSS_GRAB ? IGRIS_GRAB_IMPACT : igrisSkills[skill].impact;
+        float lockedWarning = skill == IGRIS_ECLIPSE || skill == IGRIS_ERUPTION ? .58f : .24f;
+        if (time <= impact - lockedWarning) {
+            float lead = fminf(.32f,fmaxf(.24f,impact-time));
+            if (skill == IGRIS_SPEARS) lead += fminf(.22f,distance/UMBRA_SPEAR_SPEED);
+            AimBossAttack(boss,PredictBossTarget(map,boss->position,player,velocity,lead));
+        }
+    }
     if (skill == IGRIS_Z_RIP) {
         UpdateIgrisZ(group,map,boss,player,dt,dodging,health);
         return;
@@ -1672,8 +1767,21 @@ static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
         UpdateIgrisEchoes(group,map,boss,player,dt,dodging,health);
         return;
     }
-    float time = boss->stateTime;
-    if (!boss->attackConnected && time >= igrisSkills[skill].impact) {
+    if (skill == IGRIS_ECLIPSE) {
+        float impact = igrisSkills[skill].impact;
+        float active = fmaxf(0,fminf(time,impact+.12f)-fmaxf(time-dt,impact-.12f));
+        float remaining = Vector2DotProduct(Vector2Subtract(boss->attackTarget,boss->position),boss->attackDirection)-72;
+        if (active > 0 && remaining > 0) MoveEnemyStraight(map,boss,fminf(remaining,active*520));
+        Vector2 offset = Vector2Subtract(player,boss->position);
+        float reach = Vector2Length(offset);
+        if (!boss->attackConnected && !dodging && time >= impact && time-dt < impact+.12f &&
+            reach <= igrisSkills[skill].reach &&
+            Vector2DotProduct(offset,boss->attackDirection) >= reach*igrisSkills[skill].arcDot &&
+            MapHasClearPath(map,boss->position,player)) {
+            boss->attackConnected = true;
+            HurtByTemplar(group,player,health,false,IgrisHitDamage(boss,igrisSkills[skill].damage));
+        }
+    } else if (!boss->attackConnected && time >= igrisSkills[skill].impact) {
         boss->attackConnected = true;
         int damage = IgrisHitDamage(boss,igrisSkills[skill].damage);
         if (skill == IGRIS_SPEARS) {
@@ -1689,7 +1797,11 @@ static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
     if (time >= igrisSkills[skill].duration) {
         boss->state = ENEMY_IDLE;
         boss->stateTime = 0;
-        boss->attackCooldown = boss->igrisFinalForm ? .16f : enraged ? .22f : .43f;
+        if (boss->igrisFinalForm) boss->attackCooldown = .16f;
+        else if (skill == IGRIS_ECLIPSE || skill == IGRIS_ERUPTION || skill == IGRIS_VORTEX)
+            boss->attackCooldown = .60f;
+        else if (distance > 180) boss->attackCooldown = enraged ? .12f : .24f;
+        else boss->attackCooldown = enraged ? .18f : .35f;
     }
 }
 
@@ -1733,6 +1845,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 enemy->bossAttack = enemy->templarRole == TEMPLAR_MARSHAL ? IGRIS_MELEE :
                     group->boneland ? BONE_CLAW : group->cemetery ? COVEIRO_SHOVEL : GUARDIAN_ROOT_WAVE;
                 enemy->coveiroPhaseOpening = group->cemetery;
+                enemy->coveiroCombo = COVEIRO_COMBO_NONE;
                 enemy->attackCooldown = .20f;
                 enemy->guardianMeleeCooldown = .90f;
             }
@@ -1793,6 +1906,8 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             VillageUpdateBoss(group, clearing, enemy, player, dt, playerDodging, playerHealth);
             continue;
         }
+        Vector2 guardianVelocity = enemy->type == ENEMY_BOSS ?
+            SampleBossPlayerVelocity(enemy,player,dt) : (Vector2){0};
         if (enemy->templarRole == TEMPLAR_STANDARD) continue; /* Estabelece a posição ao pé da escadaria. */
         if (enemy->state == ENEMY_ATTACK) {
             if (enemy->templarRole == TEMPLAR_EXECUTIONER) {
@@ -1815,7 +1930,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             }
             if (enemy->type == ENEMY_BOSS) {
                 if (enemy->guardianMelee) {
-                    UpdateGuardianMelee(group, clearing, enemy, player, playerDodging, playerHealth);
+                    UpdateGuardianMelee(group,clearing,enemy,player,guardianVelocity,dt,playerDodging,playerHealth);
                     continue;
                 }
                 bool roots = enemy->bossAttack == GUARDIAN_ROOTS;
@@ -1938,12 +2053,13 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 enemy->attackConnected = false;
                 enemy->attackDirection = distance > .01f ? Vector2Normalize(toPlayer) : (Vector2){0,1};
                 if (melee) {
-                    const Vector2 directions[] = {{0,1}, {0,-1}, {-1,0}, {1,0}};
                     enemy->guardianMelee = true;
                     enemy->guardianMeleeCooldown = GuardianEnraged(enemy) ? 1.0f : GUARDIAN_MELEE_COOLDOWN;
-                    enemy->attackDirection = directions[enemy->facing];
+                    enemy->attackTarget = player;
                 } else if (enemy->type == ENEMY_BOSS) {
-                    StartGuardianCast(group, clearing, enemy, player);
+                    Vector2 target = PredictBossTarget(clearing,enemy->position,player,guardianVelocity,.24f);
+                    AimBossAttack(enemy,target);
+                    StartGuardianCast(group,clearing,enemy,target);
                 } else {
                     if (enemy->templarRole == TEMPLAR_EXECUTIONER) enemy->attackTarget = player;
                     enemy->attackCooldown = enemy->templarRole == TEMPLAR_EXECUTIONER ? 1.78f :
@@ -2716,7 +2832,7 @@ static void DrawIgrisEchoes(const EnemyGroup *group, const Enemy *boss) {
     DrawIgrisEffect(art,6,0,t < IGRIS_ECHO_FADE ? 1 : 5,boss->position,155,.65f,0,Fade(WHITE,fade));
     for (int i = 0; i < 3; i++) {
         float age = t-IgrisEchoLaunch(i);
-        if (age < -IGRIS_ECHO_WARNING) continue;
+        if (t < IGRIS_ECHO_PLANT + i*IGRIS_ECHO_GAP) continue;
         Vector2 from = boss->igrisEchoFrom[i], to = boss->igrisEchoTo[i];
         Vector2 direction = Vector2Subtract(to,from);
         int row = IgrisRow(FacingToward(direction));
@@ -2814,6 +2930,10 @@ static void DrawIgrisWarning(const EnemyGroup *group, const Enemy *boss) {
             float heading = atan2f(boss->attackDirection.y,boss->attackDirection.x)*RAD2DEG;
             float spread = acosf(igrisSkills[skill].arcDot)*RAD2DEG;
             DrawCircleSector(center,radius,heading-spread,heading+spread,30,Fade(PURPLE,opacity));
+            if (skill == IGRIS_ECLIPSE) {
+                float travel = Clamp(Vector2Distance(center,boss->attackTarget)-72,0,125);
+                DrawLineEx(center,Vector2Add(center,Vector2Scale(boss->attackDirection,travel)),4,Fade(VIOLET,.75f));
+            }
         }
         return;
     }
@@ -3027,77 +3147,75 @@ static void DrawBoneLordWarning(const EnemyGroup *group, const Enemy *boss) {
     }
 }
 
+enum { BONE_BODY_SAMPLES = 3, BONE_BODY_BOTTOM_PAD = 68 };
+
+static float BoneBodyPoseAt(float time, float start, float end, int count) {
+    return Clamp((time - start) / (end - start) * count, 0, count - 1.0f / BONE_BODY_SAMPLES);
+}
+
+static Rectangle BoneBodyFrame(Texture2D texture, int columns, int rows, int row, float pose) {
+    int sample = (int)(pose * BONE_BODY_SAMPLES);
+    return BoneFrame(texture, columns, rows * BONE_BODY_SAMPLES,
+                     sample / BONE_BODY_SAMPLES, row + sample % BONE_BODY_SAMPLES * rows);
+}
+
 static void DrawBoneLord(const EnemyGroup *group, const Enemy *boss) {
     static const int rowForFacing[] = {0, 2, 3, 1};
-    static const int idleGround[] = {236, 477, 763, 983};
-    static const int walkGround[] = {242, 486, 752, 998};
-    static const int clawGround[] = {223, 463, 719, 956};
     int row = rowForFacing[boss->facing];
-    int sheet = boss->state == ENEMY_WALK ? BONE_WALK_SHEET : BONE_IDLE_SHEET;
+    bool walking = boss->state == ENEMY_WALK;
+    int sheet = walking ? BONE_WALK_SHEET : BONE_IDLE_SHEET;
     float t = boss->stateTime;
-    int frame = (int)fmaxf(0, (boss->state == ENEMY_WALK ? boss->walkTime : t) *
-                                  (boss->state == ENEMY_WALK ? 10 : 5)) % 6;
+    float pose = fmodf(fmaxf(0, (walking ? boss->walkTime : t) * (walking ? 10 : 5)), 6);
     int columns = 6, rows = 4;
-    int ground = (sheet == BONE_WALK_SHEET ? walkGround : idleGround)[row];
     bool lateral = false;
 
     if (boss->state == ENEMY_ATTACK) {
         int attack = boss->bossAttack;
         float windup = boneAttacks[attack].windup;
         float duration = boneAttacks[attack].duration;
+        columns = 8;
         if (attack == BONE_CLAW) {
             sheet = BONE_CLAW_SHEET;
-            columns = 8;
-            ground = clawGround[row];
-            frame = t < windup ? BoneFrameAt(t, 0, windup, 4) :
-                4 + BoneFrameAt(t, windup, duration, 4);
+            pose = t < windup ? BoneBodyPoseAt(t, 0, windup, 4) :
+                4 + BoneBodyPoseAt(t, windup, duration, 4);
         } else {
             lateral = true;
-            columns = 8;
-            rows = 3;
+            rows = attack == BONE_RAIN ? 2 : 3;
             if (attack == BONE_RANGED) {
                 sheet = BONE_RANGED_SHEET;
-                frame = t < windup ? BoneFrameAt(t, 0, windup, 13) :
-                    t < windup + .10f ? 13 : 16 + BoneFrameAt(t, windup + .10f, duration, 8);
-                ground = (int[]){225,464,705}[frame / 8];
+                pose = t < windup ? BoneBodyPoseAt(t, 0, windup, 13) :
+                    t < windup + .10f ? 13 : 16 + BoneBodyPoseAt(t, windup + .10f, duration, 8);
             } else if (attack == BONE_RAIN) {
                 sheet = BONE_RAIN_SHEET;
-                rows = 2;
-                frame = t < windup ? BoneFrameAt(t, 0, windup, 8) :
-                    8 + BoneFrameAt(t, windup, duration, 8);
-                ground = (int[]){349,711}[frame / 8];
+                pose = t < windup ? BoneBodyPoseAt(t, 0, windup, 8) :
+                    8 + BoneBodyPoseAt(t, windup, duration, 8);
             } else if (attack == BONE_BLAST) {
                 sheet = BONE_BLAST_SHEET;
-                frame = t < windup ? BoneFrameAt(t, 0, windup, 8) :
-                    8 + BoneFrameAt(t, windup, duration, 16);
-                ground = (int[]){240,481,685}[frame / 8];
+                pose = t < windup ? BoneBodyPoseAt(t, 0, windup, 8) :
+                    8 + BoneBodyPoseAt(t, windup, duration, 16);
             } else {
                 sheet = BONE_DASH_SHEET;
+                columns = 6;
                 if (t < BONE_DASH_HIDE) {
-                    columns = 6;
-                    frame = BoneFrameAt(t, 0, BONE_DASH_HIDE, 4);
-                    ground = 222;
+                    pose = BoneBodyPoseAt(t, 0, BONE_DASH_HIDE, 4);
                 } else if (t < BONE_DASH_REAPPEAR) {
                     return;
                 } else {
-                    columns = 5;
-                    bool charging = t >= windup;
-                    frame = charging ? 10 + BoneFrameAt(t, windup, duration, 5) :
-                        6 + BoneFrameAt(t, BONE_DASH_REAPPEAR, windup, 4);
-                    ground = charging ? 692 : 462;
+                    pose = t < windup ? 7 + BoneBodyPoseAt(t, BONE_DASH_REAPPEAR, windup, 4) :
+                        12 + BoneBodyPoseAt(t, windup, duration, 5);
                 }
             }
-            row = frame / columns;
-            frame %= columns;
+            row = (int)pose / columns;
+            pose -= row * columns;
         }
     }
 
     Texture2D texture = group->boneLordSheets[sheet];
-    Rectangle source = BoneFrame(texture, columns, rows, frame, row);
+    Rectangle source = BoneBodyFrame(texture, columns, rows, row, pose);
     float collapse = boss->state == ENEMY_FALLEN ? 1 :
         boss->state == ENEMY_DIE ? Clamp(t / ENEMY_DEFEAT_DURATION, 0, 1) : 0;
     float reveal = boss->state == ENEMY_SPAWNING ? Clamp(t, 0, 1) : 1;
-    const float scale = .62f;
+    const float scale = .62f / .75f;
     float heightScale = scale * (1 - .48f * collapse);
     float width = source.width * scale;
     Color tint = Fade(collapse > 0 ? (Color){211, 171, 163, 255} : WHITE, reveal);
@@ -3113,7 +3231,7 @@ static void DrawBoneLord(const EnemyGroup *group, const Enemy *boss) {
     if (lateral && boss->facing == 2) source.width = -source.width;
     DrawTexturePro(texture, source,
         (Rectangle){boss->position.x, boss->position.y + 28 * (1 - reveal), width, source.height * heightScale},
-        (Vector2){width * .5f, (ground - source.y) * heightScale},
+        (Vector2){width * .5f, (source.height - BONE_BODY_BOTTOM_PAD * .75f) * heightScale},
         (boss->facing == 2 ? -1 : 1) * 14 * collapse, tint);
 }
 

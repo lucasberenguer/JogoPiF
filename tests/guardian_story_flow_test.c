@@ -14,6 +14,19 @@ static Vector2 igrisApproach;
 static int igrisStarts;
 static int aftermathStarts, aftermathLines;
 static bool igrisDefeated, igrisCardCleared;
+static bool skipBonelandPassage;
+static int checkedSceneStarts, checkedLastScene;
+static const struct {
+    int map, scenes;
+    const char *firstScene;
+} checkedScenes[]={
+    {0,30,"depois_da_batalha"},
+    {1,11,"silencio"},
+    {BONELAND_MAP,7,"alem_da_capela"},
+    {2,5,"cha_de_alegria"},
+    {3,52,"fachada"},
+};
+enum { FIRST_NEW_MODE = 9 };
 static void TestWindow(int w,int h,const char *title);
 static void IgnoreResize(int w,int h);
 static void IgnoreToggle(void);
@@ -80,7 +93,7 @@ static float TestDelta(void) {return .05f;}
 static bool TestClose(void) {return ++frames>1200 || transported>0;}
 static bool TestKey(int key) {return key==KEY_E && liberated>0;}
 static bool TestKeyDown(int key) {
-    return mode >= 2 && key == KEY_W &&
+    return mode >= 2 && mode < FIRST_NEW_MODE && key == KEY_W &&
            (!active || mode >= 3 || active->progress.map == BONELAND_MAP);
 }
 static MenuAction TestMenu(Menu *menu) {
@@ -88,7 +101,12 @@ static MenuAction TestMenu(Menu *menu) {
     RunProgress progress=NewRunProgress(2);
     progress.stage=CLEARING_BOSS_STAGE;
     progress.guardianIntroSeen=true;
-    if (mode >= 2) {
+    if (mode >= FIRST_NEW_MODE) {
+        progress.map=checkedScenes[(mode-FIRST_NEW_MODE)/2].map;
+        if (progress.map<2 || progress.map==BONELAND_MAP)
+            progress.stage=CampaignWaveCount(progress.map);
+        progress.guardianIntroSeen=false;
+    } else if (mode >= 2) {
         progress.map = mode == 2 ? BONELAND_MAP : TEMPLAR_FIELD_MAP;
         progress.stage = CLEARING_COMPLETE_STAGE;
         if (mode >= 5) progress.stage = CLEARING_BOSS_STAGE;
@@ -104,8 +122,73 @@ static void TestBeginEncounter(Encounter *e,EnemyGroup *enemies,const Clearing *
     BeginEncounter(e,enemies,map,progress,p);
     active=e;
 }
+
+static bool InteractInEncounter(Encounter *e,EnemyGroup *enemies,const Clearing *map,Vector2 p,int *health) {
+    // AutomationEvent exposes numeric event types in raylib 5.5 (INPUT_KEY_UP and INPUT_KEY_DOWN).
+    enum { KEY_UP_EVENT=1, KEY_DOWN_EVENT=2 };
+    PlayAutomationEvent((AutomationEvent){.type=KEY_DOWN_EVENT,.params={KEY_E}});
+    assert(IsKeyPressed(KEY_E));
+    bool changed=UpdateEncounter(e,enemies,map,p,health);
+    PlayAutomationEvent((AutomationEvent){.type=KEY_UP_EVENT,.params={KEY_E}});
+    return changed;
+}
+
+static bool TestCutsceneEncounter(Encounter *e,EnemyGroup *enemies,const Clearing *map,Vector2 p,int *health) {
+    int expectedMap=checkedScenes[(mode-FIRST_NEW_MODE)/2].map;
+    assert(e->progress.map==expectedMap);
+    if (EncounterPaused(e) && e->phase!=ENCOUNTER_REWARD && e->phase!=ENCOUNTER_LETTER)
+        return UpdateEncounter(e,enemies,map,p,health);
+
+    RunProgress saved={0};
+    if (map->chapel) {
+        Vector2 altar={map->background.width*.50f,map->background.height*.44f};
+        Vector2 exit={map->exit.x+map->exit.width/2,map->exit.y+map->exit.height/2};
+        if (!e->chapelAltarDone) {
+            assert(!checkedSceneStarts && !CanEnterBasement(e,map,exit,false));
+            bool changed=InteractInEncounter(e,enemies,map,altar,health);
+            assert(e->phase==ENCOUNTER_ANGEL_CINEMATIC);
+            return changed;
+        }
+        assert(LoadClearingCheckpoint(&saved) && saved.angelSceneCompleted && saved.angelBlessingUses==1);
+        assert(CanEnterBasement(e,map,exit,false));
+    } else if (map->village) {
+        if (e->phase==ENCOUNTER_VILLAGE_LETTER_READY) {
+            assert(LoadClearingCheckpoint(&saved) && saved.villageAftermath==VILLAGE_SCENE_PENDING);
+            bool changed=InteractInEncounter(e,enemies,map,enemies->list[0].position,health);
+            assert(e->phase==ENCOUNTER_VILLAGE_CINEMATIC);
+            return changed;
+        }
+        if (e->phase!=ENCOUNTER_LETTER) {
+            enemies->list[0].health=0;
+            enemies->list[0].state=ENEMY_DIE;
+            return UpdateEncounter(e,enemies,map,p,health);
+        }
+        assert(LoadClearingCheckpoint(&saved) && saved.villageAftermath==VILLAGE_SCENE_SEEN);
+        assert(!e->villageHordeStarted);
+        assert(InteractInEncounter(e,enemies,map,p,health));
+        assert(e->villageHordeStarted && EnemiesRemaining(enemies)==64);
+    } else {
+        if (e->phase==ENCOUNTER_REWARD) {
+            assert(ChooseEncounterReward(e,enemies,map,p,health,0));
+            assert(e->guardianIntroPending && !EncounterBossVisible(e,enemies));
+            return true;
+        }
+        if (e->progress.stage!=CLEARING_BOSS_STAGE) {
+            for (int i=0;i<ENEMY_COUNT;i++) enemies->list[i].state=ENEMY_GONE;
+            return UpdateEncounter(e,enemies,map,p,health);
+        }
+        assert(EncounterBossVisible(e,enemies) && !EncounterPaused(e));
+        assert(LoadClearingCheckpoint(&saved) && saved.stage==CLEARING_BOSS_STAGE);
+        if (!map->cemetery) assert(saved.guardianIntroSeen);
+    }
+    assert(checkedSceneStarts==1);
+    transported++;
+    return false;
+}
+
 static bool TestEncounter(Encounter *e,EnemyGroup *enemies,const Clearing *map,Vector2 p,int *health) {
     active=e;
+    if (mode >= FIRST_NEW_MODE) return TestCutsceneEncounter(e,enemies,map,p,health);
     if (mode >= 7 && map->necromancerArena) {
         RunProgress saved={0};
         assert(aftermathStarts == 1 && e->phase == ENCOUNTER_FIGHT);
@@ -181,7 +264,7 @@ static bool TestEncounter(Encounter *e,EnemyGroup *enemies,const Clearing *map,V
             assert(*health == 83 && e->progress.weaponLevel[2] == 2);
             assert(LoadClearingCheckpoint(&saved) && saved.map == TEMPLAR_FIELD_MAP);
             if (mode == 2) {
-                assert(cinematicFrames >= 8);
+                assert(cinematicFrames >= (skipBonelandPassage ? 1 : 8));
                 assert(e->progress.stage == 1 && saved.stage == 1);
                 assert(map->exitLocked && EnemiesRemaining(enemies) == 5);
                 assert(p.x == map->spawn.x && p.y == map->spawn.y);
@@ -219,6 +302,17 @@ static void TestCinematic(GuardianCutscene *scene,float dt,GuardianCutsceneInput
         if (activeAudio->tracks[i].stream.buffer) assert(!IsMusicStreamPlaying(activeAudio->tracks[i]));
     }
     input=(GuardianCutsceneInput){0};
+    if (mode >= FIRST_NEW_MODE) {
+        int index=(mode-FIRST_NEW_MODE)/2;
+        assert(scene->count==checkedScenes[index].scenes);
+        assert(!strcmp(scene->scenes[0].id,checkedScenes[index].firstScene));
+        for (int i=0;i<scene->count;i++) {
+            assert(scene->scenes[i].artIndex>=0);
+            assert(strncmp(scene->scenes[i].image,"abertura/",9)==0);
+        }
+        if (scene->current==0 && scene->elapsed==0) checkedSceneStarts++;
+        checkedLastScene=scene->current;
+    }
     if (mode == 2) {
         assert(active->progress.map == TEMPLAR_FIELD_MAP && active->progress.stage == 1);
         assert(scene->count == 8 && scene->artCount == 7);
@@ -229,7 +323,8 @@ static void TestCinematic(GuardianCutscene *scene,float dt,GuardianCutsceneInput
         GuardianScene *shot=&scene->scenes[scene->current];
         if (shot->waitsForInput && scene->letters == 0) aftermathLines++;
     }
-    if (mode==0 || mode==5 || mode==7) input.skip=true;
+    if (mode==0 || mode==5 || mode==7 || (mode==2 && skipBonelandPassage) ||
+        (mode>=FIRST_NEW_MODE && (mode-FIRST_NEW_MODE)%2==0)) input.skip=true;
     else if (scene->scenes[scene->current].waitsForInput) input.advance=true;
     else scene->elapsed=scene->scenes[scene->current].duration-.01f;
     UpdateGuardianCutscene(scene,dt,input);
@@ -259,7 +354,20 @@ static bool TestPassage(Encounter *e,EnemyGroup *enemies,Clearing *map,Vector2 *
     return true;
 }
 int main(void) {
+    setvbuf(stdout,NULL,_IONBF,0);
     SetTraceLogLevel(LOG_WARNING);
+    for (int i=0;i<(int)(sizeof(checkedScenes)/sizeof(*checkedScenes));i++) {
+        for (int complete=0;complete<2;complete++) {
+            mode=FIRST_NEW_MODE+2*i+complete;
+            frames=transported=cinematicFrames=checkedSceneStarts=0;
+            checkedLastScene=-1;
+            active=NULL;
+            printf("Real story loop: %s %s.\n",
+                checkedScenes[i].firstScene,complete ? "complete" : "skip");
+            assert(ActualGameMain()==0 && transported==1);
+            assert(checkedSceneStarts==1 && checkedLastScene==(complete ? checkedScenes[i].scenes-1 : 0));
+        }
+    }
     for (mode=0;mode<2;mode++) {
         frames=liberated=transported=cinematicFrames=0;
         answered=false;
@@ -274,6 +382,11 @@ int main(void) {
         assert(ActualGameMain()==0);
         assert(transported==1);
     }
+    mode=2;
+    skipBonelandPassage=true;
+    frames=transported=cinematicFrames=0;
+    active=NULL;
+    assert(ActualGameMain()==0 && transported==1);
     for (mode=5;mode<7;mode++) {
         igrisCardCleared=false;
         frames=transported=cinematicFrames=igrisStarts=0;

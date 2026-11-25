@@ -11,6 +11,10 @@
 #define COVEIRO_CHARGE_FIRST_PHASE_END 1.17f
 #define COVEIRO_ATTACK_END 1.47f
 #define COVEIRO_DOUBLE_CHARGE_END 1.82f
+#define COVEIRO_ROOT_LINK_TIME 1.08f
+#define COVEIRO_SHOVEL_LINK_TIME 1.16f
+#define COVEIRO_COMBO_MIN_CHARGE_DISTANCE 135.0f
+#define COVEIRO_COMBO_MAX_DISTANCE 420.0f
 #define COVEIRO_ROOT_DAMAGE (GUARDIAN_ROOT_DAMAGE * 1.15f * COVEIRO_DAMAGE_BOOST)
 #define COVEIRO_SHOVEL_DAMAGE (GUARDIAN_WAVE_DAMAGE * 1.15f * COVEIRO_DAMAGE_BOOST)
 #define COVEIRO_CHARGE_DAMAGE (GUARDIAN_CURSE_DAMAGE * 1.15f * COVEIRO_DAMAGE_BOOST)
@@ -49,6 +53,19 @@ static void ThrowShovel(EnemyGroup *group, const Enemy *boss, Vector2 direction)
     }
 }
 
+static void MarkShovelFlanks(EnemyGroup *group, const Clearing *map, const Enemy *boss) {
+    Vector2 side = Vector2Scale(Vector2Rotate(boss->attackDirection, PI / 2), 125);
+    for (int n = -1; n <= 1; n += 2) {
+        Vector2 target = Vector2Add(boss->attackTarget, Vector2Scale(side, n));
+        if (IsClearingBlocked(map, target)) continue;
+        for (int i = 0; i < ENEMY_ROOT_COUNT; i++) {
+            if (group->rootAttacks[i].active) continue;
+            group->rootAttacks[i] = (EnemyRoot){.position=target, .active=true, .attack=GUARDIAN_ROOTS};
+            break;
+        }
+    }
+}
+
 void CemeteryUpdateProjectiles(EnemyGroup *group, const Clearing *map, Vector2 player,
                                float dt, bool dodging, int *health) {
     for (int i = 0; i < CEMETERY_PROJECTILE_COUNT; i++) {
@@ -79,8 +96,33 @@ void CemeteryUpdateProjectiles(EnemyGroup *group, const Clearing *map, Vector2 p
     }
 }
 
+static void StartCoveiroSkill(const Clearing *map, Enemy *boss, int skill, Vector2 player, Vector2 velocity) {
+    float lead = .24f;
+    if (skill == COVEIRO_SHOVEL) {
+        float speed = boss->guardianPhase == GUARDIAN_PHASE_TWO ? 740 : 620;
+        lead += fminf(.22f,Vector2Distance(player,boss->position)/speed);
+    }
+    Vector2 target = PredictBossTarget(map,boss->position,player,velocity,lead);
+    Vector2 offset = Vector2Subtract(target,boss->position);
+    boss->bossAttack = skill;
+    boss->state = ENEMY_ATTACK;
+    boss->stateTime = 0;
+    boss->attackConnected = false;
+    boss->attackBurst = 0;
+    boss->attackTarget = target;
+    if (Vector2LengthSqr(offset) > .0001f) {
+        boss->attackDirection = Vector2Normalize(offset);
+        boss->facing = fabsf(offset.x) > fabsf(offset.y) ?
+            (offset.x < 0 ? 2 : 3) : (offset.y < 0 ? 1 : 0);
+    } else {
+        boss->attackDirection = (Vector2){0, 1};
+        boss->facing = 0;
+    }
+}
+
 void CemeteryUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss, Vector2 player,
                         float dt, bool dodging, int *health) {
+    Vector2 velocity = SampleBossPlayerVelocity(boss,player,dt);
     bool phaseTwo = boss->guardianPhase == GUARDIAN_PHASE_TWO;
     if (boss->state == ENEMY_ATTACK) {
         float t = boss->stateTime;
@@ -111,6 +153,7 @@ void CemeteryUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
                 if (phaseTwo) {
                     ThrowShovel(group, boss, Vector2Rotate(boss->attackDirection, .25f));
                     ThrowShovel(group, boss, Vector2Rotate(boss->attackDirection, -.25f));
+                    MarkShovelFlanks(group, map, boss);
                 }
             } else if (boss->bossAttack == COVEIRO_ROOTS && t < COVEIRO_ROOT_END &&
                        Vector2Distance(player, boss->attackTarget) < (phaseTwo ? 115 : 95)) {
@@ -130,7 +173,8 @@ void CemeteryUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
         }
         if(boss->bossAttack==COVEIRO_CHARGE && phaseTwo && t>=COVEIRO_CHARGE_FIRST_END && boss->attackBurst==0) {
             boss->attackBurst=1;boss->attackConnected=false;
-            Vector2 offset=Vector2Subtract(player,boss->position);
+            Vector2 target=PredictBossTarget(map,boss->position,player,velocity,.24f);
+            Vector2 offset=Vector2Subtract(target,boss->position);
             if(Vector2LengthSqr(offset)>.01f) boss->attackDirection=Vector2Normalize(offset);
             boss->facing=fabsf(offset.x)>fabsf(offset.y)?(offset.x<0?2:3):(offset.y<0?1:0);
         }
@@ -147,11 +191,34 @@ void CemeteryUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
         /* Follow-through has real movement, while the initial targeting stays locked. */
         if(boss->bossAttack!=COVEIRO_CHARGE && t>=COVEIRO_WINDUP && t<COVEIRO_WINDUP+.22f)
             MoveEnemy(map,boss,Vector2Scale(boss->attackDirection,110*COVEIRO_MOVEMENT_SCALE*dt));
+        bool linkCharge = boss->coveiroCombo == COVEIRO_COMBO_TO_CHARGE && t >= COVEIRO_ROOT_LINK_TIME;
+        bool linkRoots = boss->coveiroCombo == COVEIRO_COMBO_TO_ROOTS && t >= COVEIRO_SHOVEL_LINK_TIME;
+        if (linkCharge || linkRoots) {
+            boss->coveiroCombo = COVEIRO_COMBO_FINISHER;
+            float distance = Vector2Distance(boss->position, player);
+            if (*health > 0 && distance <= COVEIRO_COMBO_MAX_DISTANCE &&
+                (!linkCharge || (distance >= COVEIRO_COMBO_MIN_CHARGE_DISTANCE &&
+                                 MapHasClearPath(map, boss->position, player)))) {
+                StartCoveiroSkill(map,boss,linkCharge ? COVEIRO_CHARGE : COVEIRO_ROOTS,player,velocity);
+                return;
+            }
+        }
         if (t >= (phaseTwo && boss->bossAttack==COVEIRO_CHARGE?
-                  COVEIRO_DOUBLE_CHARGE_END:COVEIRO_ATTACK_END)) { boss->state = ENEMY_IDLE; boss->stateTime = 0; }
+                  COVEIRO_DOUBLE_CHARGE_END:COVEIRO_ATTACK_END)) {
+            boss->state = ENEMY_IDLE;
+            boss->stateTime = 0;
+            if (boss->coveiroCombo == COVEIRO_COMBO_FINISHER) {
+                boss->coveiroCombo = COVEIRO_COMBO_RECOVERY;
+                boss->attackCooldown = phaseTwo ? .55f : .70f;
+            }
+        }
         return;
     }
     if (*health <= 0) return;
+    if (boss->coveiroCombo == COVEIRO_COMBO_RECOVERY) {
+        if (boss->attackCooldown > 0) return;
+        boss->coveiroCombo = COVEIRO_COMBO_NONE;
+    }
     Vector2 offset = Vector2Subtract(player, boss->position);
     float distance = Vector2Length(offset);
     int previousFacing = boss->facing;
@@ -166,6 +233,9 @@ void CemeteryUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
         boss->guardianMelee = true;
         boss->guardianMeleeCooldown = phaseTwo ? 1.25f : COVEIRO_MELEE_COOLDOWN;
         boss->attackDirection = directions[boss->facing];
+        Vector2 target = PredictBossTarget(map,boss->position,player,velocity,.18f);
+        if (Vector2DistanceSqr(target,player) > .01f)
+            boss->attackDirection = Vector2Normalize(Vector2Subtract(target,boss->position));
     } else if (distance <= 560 && boss->attackCooldown <= 0) {
         bool clearPath = MapHasClearPath(map,boss->position,player);
         int lastSkill = boss->bossAttack;
@@ -176,18 +246,19 @@ void CemeteryUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
             skill = COVEIRO_CHARGE;
         else if (!clearPath)
             skill = COVEIRO_ROOTS;
+        else if (lastSkill == COVEIRO_ROOTS && distance > 175)
+            skill = COVEIRO_CHARGE;
         else if (distance > 175)
-            skill = lastSkill == COVEIRO_ROOTS ? COVEIRO_SHOVEL : COVEIRO_ROOTS;
+            skill = lastSkill == COVEIRO_CHARGE ? COVEIRO_SHOVEL : COVEIRO_ROOTS;
         else
             skill = lastSkill == COVEIRO_SHOVEL ? COVEIRO_ROOTS : COVEIRO_SHOVEL;
-        boss->bossAttack = skill;
         boss->coveiroPhaseOpening = false;
-        boss->state = ENEMY_ATTACK;
-        boss->stateTime = 0;
-        boss->attackConnected = false;
-        boss->attackBurst=0;
-        boss->attackTarget = player;
-        boss->attackDirection = distance > .01f ? Vector2Normalize(offset) : (Vector2){0, 1};
+        boss->coveiroCombo = COVEIRO_COMBO_NONE;
+        if (skill == COVEIRO_ROOTS && clearPath && distance > 175)
+            boss->coveiroCombo = COVEIRO_COMBO_TO_CHARGE;
+        else if (skill == COVEIRO_SHOVEL && phaseTwo)
+            boss->coveiroCombo = COVEIRO_COMBO_TO_ROOTS;
+        StartCoveiroSkill(map,boss,skill,player,velocity);
         boss->attackCooldown = phaseTwo ? 1.75f : 2.65f;
     } else if (distance > 110) {
         Vector2 start = boss->position;
