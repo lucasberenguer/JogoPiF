@@ -339,11 +339,8 @@ int main(void) {
     while (!WindowShouldClose()) {
         bool calibratingArcade = ArcadeCalibrationActive();
         UpdateGameInput();
-        Rectangle arcadeSetup = {GetScreenWidth() - 216.0f, 12, 200, 38};
         if (!calibratingArcade && screen == 0 && !devTools.open &&
-            (IsKeyPressed(KEY_F9) || (MenuControlsVisible(&menu) &&
-             IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
-             CheckCollisionPointRec(GetMousePosition(), arcadeSetup))))
+            IsKeyPressed(KEY_F9))
             BeginArcadeCalibration();
         if (calibratingArcade || ArcadeCalibrationActive()) {
             BeginGameFrame();
@@ -574,6 +571,10 @@ int main(void) {
         if (screen == 0) {
             MenuAction action = UpdateMenu(&menu);
             if (action == MENU_QUIT) break;
+            if (action == MENU_ARCADE) {
+                BeginArcadeCalibration();
+                continue;
+            }
             if (action == MENU_START) {
                 weaponSelect.selected = 0;
                 screen = 1;
@@ -679,10 +680,6 @@ int main(void) {
                     DrawRectangleRec(toolsButton,hoverTools?MAROON:Fade(BLACK,.65f));
                     DrawRectangleLinesEx(toolsButton,1,GOLD);
                     DrawGameTextIn("Ferramentas (F1)",toolsButton,20,RAYWHITE,GAME_TEXT_BODY);
-                    bool hoverArcade=CheckCollisionPointRec(GetMousePosition(),arcadeSetup);
-                    DrawRectangleRec(arcadeSetup,hoverArcade?MAROON:Fade(BLACK,.65f));
-                    DrawRectangleLinesEx(arcadeSetup,1,GOLD);
-                    DrawGameTextIn("Configurar arcade (F9)",arcadeSetup,18,RAYWHITE,GAME_TEXT_BODY);
                 }
             EndGameFrame();
             continue;
@@ -1247,8 +1244,10 @@ int main(void) {
         }
 
         Vector2 direction = {
-            entering || grabbed ? 0.0f : (float) KeyDown(KEY_D) - (float) KeyDown(KEY_A),
-            entering || grabbed ? 0.0f : (float) KeyDown(KEY_S) - (float) KeyDown(KEY_W)
+            entering || grabbed ? 0.0f : (float)(KeyDown(KEY_D) || KeyDown(KEY_RIGHT)) -
+                                         (float)(KeyDown(KEY_A) || KeyDown(KEY_LEFT)),
+            entering || grabbed ? 0.0f : (float)(KeyDown(KEY_S) || KeyDown(KEY_DOWN)) -
+                                         (float)(KeyDown(KEY_W) || KeyDown(KEY_UP))
         };
         if (Vector2LengthSqr(direction) > 0.0f)
             direction = Vector2Normalize(direction);

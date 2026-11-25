@@ -11,16 +11,16 @@ enum { PAUSE_SCENE = 0, PAUSE_PLATE = 2, PAUSE_ICON = 3, PAUSE_FRAME = 4, MENU_B
 
 static const Color buttonText = {255, 226, 181, 255};
 
-enum MainMenuButton { MAIN_START, MAIN_CONTINUE, MAIN_SETTINGS, MAIN_CREDITS, MAIN_QUIT, MAIN_BUTTON_COUNT };
+enum MainMenuButton { MAIN_START, MAIN_CONTINUE, MAIN_SETTINGS, MAIN_ARCADE, MAIN_CREDITS, MAIN_QUIT, MAIN_BUTTON_COUNT };
 static const float menuIntroDuration = 3.8f;
 static const float menuDepartureDuration = 0.68f;
 
 static const Rectangle mainButtonSprites[MAIN_BUTTON_COUNT] = {
-    {409, 48, 720, 186},
-    {409, 243, 720, 166},
-    {409, 416, 720, 165},
-    {409, 590, 720, 167},
-    {409, 764, 720, 166}
+    [MAIN_START] = {409, 48, 720, 186},
+    [MAIN_CONTINUE] = {409, 243, 720, 166},
+    [MAIN_SETTINGS] = {409, 416, 720, 165},
+    [MAIN_CREDITS] = {409, 590, 720, 167},
+    [MAIN_QUIT] = {409, 764, 720, 166}
 };
 
 static const char *SavePath(void) {
@@ -849,7 +849,9 @@ MenuAction UpdateMenu(Menu *m) {
     }
     if (m->introTime < menuIntroDuration) {
         m->introTime = fminf(menuIntroDuration, m->introTime + dt);
-        if (GetKeyPressed() || IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || PadButtonPressed()) {
+        if (PadNavigate(GAMEPAD_BUTTON_LEFT_FACE_UP) || PadNavigate(GAMEPAD_BUTTON_LEFT_FACE_DOWN)) {
+            m->introTime = menuIntroDuration;
+        } else if (GetKeyPressed() || IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || PadButtonPressed()) {
             m->introTime = menuIntroDuration;
             return MENU_NONE;
         }
@@ -857,9 +859,12 @@ MenuAction UpdateMenu(Menu *m) {
     }
     m->hasSave = LoadMenuCheckpointWeapon() >= 0;
     bool back = KeyPressed(KEY_ESCAPE) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_RIGHT);
-    bool confirm = KeyPressed(KEY_ENTER) || KeyPressed(KEY_SPACE) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
+    bool confirm = KeyPressed(KEY_ENTER) || KeyPressed(KEY_SPACE) ||
+                   PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN) || PadPressed(GAMEPAD_BUTTON_MIDDLE_RIGHT);
     bool ranking = KeyPressed(KEY_L) || PadPressed(GAMEPAD_BUTTON_MIDDLE_LEFT) ||
                    (UsingArcade() && PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_LEFT));
+    // Any physical button can open calibration once this item is highlighted.
+    if (m->page == 0 && m->selected == MAIN_ARCADE && ArcadeRawButtonPressed()) return MENU_ARCADE;
     if (m->page == 4) {
         if (back || KeyPressed(KEY_BACKSPACE) || ranking) m->page=0;
         return MENU_NONE;
@@ -911,6 +916,7 @@ MenuAction UpdateMenu(Menu *m) {
         case MAIN_START: if (m->hasSave) { m->page = 3; return MENU_NONE; } return BeginMenuDeparture(m);
         case MAIN_CONTINUE: return m->hasSave ? MENU_CONTINUE : MENU_NONE;
         case MAIN_SETTINGS: m->page = 1; return MENU_NONE;
+        case MAIN_ARCADE: return MENU_ARCADE;
         case MAIN_CREDITS: m->page = 2; return MENU_NONE;
         case MAIN_QUIT: return MENU_QUIT;
         default: return MENU_NONE;
@@ -929,6 +935,15 @@ static void DrawMainButton(const Menu *m, int index) {
     float opacity = SmoothRange(2.03f + index*.22f, 2.60f + index*.22f, m->introTime);
     if (m->starting && !selected) opacity *= 1-SmoothRange(0, .25f, m->departureTime);
     if (opacity <= 0) return;
+    if (index == MAIN_ARCADE) {
+        float height = bounds.height * .76f;
+        Rectangle plate = {bounds.x + bounds.width*.09f, bounds.y + (bounds.height-height)*.5f,
+                           bounds.width*.82f, height};
+        DrawRectangleRounded(plate, .24f, 8, Fade(MAROON, opacity*(selected || hovered ? .94f : .65f)));
+        DrawRectangleRoundedLinesEx(plate, .24f, 8, selected ? 2.0f : 1.0f, Fade(buttonText, opacity));
+        DrawGameTextIn("Configurar arcade", plate, height*.46f, Fade(buttonText, opacity), GAME_TEXT_TITLE);
+        return;
+    }
     float scale = fminf(bounds.width / sprite.width, bounds.height / sprite.height);
     if (!selected && !hovered) scale *= 0.96f;
     if (pressed) scale *= .97f;
@@ -943,7 +958,8 @@ static void DrawMainButton(const Menu *m, int index) {
     DrawTexturePro(m->mainButtons, sprite, dest, (Vector2){0}, 0, tint);
     if (m->buttonGlow.id && !disabled && (selected || hovered)) {
         int pulse = reduced ? 5 : (int)(fmodf(m->sceneTime, 1.6f)*7.5f);
-        int frame = index*12 + pulse;
+        int artIndex = index > MAIN_ARCADE ? index - 1 : index;
+        int frame = artIndex*12 + pulse;
         Rectangle glow = {(frame%6)*360, (frame/6)*93, 360, 93};
         Color light = pressed ? (Color){255,225,146,255} : WHITE;
         DrawTexturePro(m->buttonGlow, glow, dest, (Vector2){0}, 0, Fade(light, opacity*(selected ? 1 : .60f)));
@@ -1022,7 +1038,8 @@ void DrawMenu(const Menu *m) {
         DrawGameTextIn(InputHint("L: Ranking de speedrun", "[Share]: ranking de speedrun"), (Rectangle){16, GetScreenHeight()-48, 230, 30},
                        18, buttonText, GAME_TEXT_BODY);
         if (UsingGamepad())
-            DrawGameTextIn(InputHint("", "Direcional: navegar  ·  [Cruz]: confirmar"),
+            DrawGameTextIn(UsingAutomaticArcade() ? "Alavanca: navegar  ·  Botão 1: confirmar"
+                           : InputHint("", "Direcional: navegar  ·  [Cruz]: confirmar"),
                            (Rectangle){16, GetScreenHeight()-79, 300, 30},
                            18, buttonText, GAME_TEXT_BODY);
         DrawMainMenuShortcut("Capela Invertida", TestInvertedChapelButtonBounds());

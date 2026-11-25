@@ -21,6 +21,7 @@ typedef struct {
     char guid[33];
     float axes[ARCADE_AXES];
     unsigned char buttons[ARCADE_BUTTONS], hats[ARCADE_HATS];
+    int buttonCount;
 } ArcadeDevice;
 
 static const int arcadeButtons[ARCADE_ACTIONS] = {
@@ -40,7 +41,9 @@ static const char *const arcadePrompts[ARCADE_ACTIONS] = {
 static ArcadeProfile arcadeProfile, arcadeDraft;
 static ArcadeDevice arcadeDevices[ARCADE_DEVICES];
 static bool arcadeDown[ARCADE_ACTIONS], arcadePressed[ARCADE_ACTIONS];
-static bool arcadeLoaded, arcadeCalibrating, arcadeWaitingForRelease, usingArcade;
+static bool arcadeLoaded, arcadeCalibrating, arcadeWaitingForRelease, usingArcade, arcadeAutomatic;
+static bool rawButtonPressed;
+static unsigned char lastRawButtons[ARCADE_BUTTONS];
 static int arcadeStep, arcadeDevice = -1, arcadeDraftDevice = -1;
 static const char *arcadeStatus;
 
@@ -112,10 +115,13 @@ static void ReadArcadeDevice(int id, ArcadeDevice *device) {
     int count = 0;
     const float *axes = glfwGetJoystickAxes(id, &count);
     for (int i = 0; axes && i < count && i < ARCADE_AXES; ++i) device->axes[i] = axes[i];
-    const unsigned char *buttons = glfwGetJoystickButtons(id, &count);
-    for (int i = 0; buttons && i < count && i < ARCADE_BUTTONS; ++i) device->buttons[i] = buttons[i];
+    const unsigned char *buttons = glfwGetJoystickButtons(id, &device->buttonCount);
     const unsigned char *hats = glfwGetJoystickHats(id, &count);
     for (int i = 0; hats && i < count && i < ARCADE_HATS; ++i) device->hats[i] = hats[i];
+    // Raylib's GLFW backend also reports the hat directions as virtual buttons.
+    device->buttonCount = (int)fmaxf(0, device->buttonCount - 4 * count);
+    for (int i = 0; buttons && i < device->buttonCount && i < ARCADE_BUTTONS; ++i)
+        device->buttons[i] = buttons[i];
 #else
     (void)id;
 #endif
@@ -226,23 +232,71 @@ static void UpdateArcadeCalibration(void) {
     arcadeWaitingForRelease = true;
 }
 
-static bool UpdateArcadeButtons(void) {
-    ArcadeDevice device = {0};
+static bool IsGenericArcadeDevice(int id) {
+#ifdef PIF_GLFW_ARCADE
+    if (!glfwJoystickPresent(id)) return false;
+    if (!glfwJoystickIsGamepad(id)) return true;
+    const char *raw = glfwGetJoystickName(id);
+    char name[128] = {0};
+    for (int i = 0; raw && raw[i] && i < (int)sizeof(name) - 1; ++i)
+        name[i] = (char)tolower((unsigned char)raw[i]);
+    return strstr(name, "encoder") || strstr(name, "zero delay") ||
+           strstr(name, "dragonrise") || strstr(name, "generic usb joystick");
+#else
+    (void)id;
+    return false;
+#endif
+}
+
+static int FindArcadeDevice(ArcadeDevice *device) {
+    // Preserve a calibrated port first, including after unplugging and reconnecting.
     if (arcadeProfile.guid[0]) {
-        if (arcadeDevice >= 0) ReadArcadeDevice(arcadeDevice, &device);
-        if (strcmp(device.guid, arcadeProfile.guid) != 0) {
-            arcadeDevice = -1;
-            for (int i = 0; i < ARCADE_DEVICES; ++i) {
-                ReadArcadeDevice(i, &device);
-                if (strcmp(device.guid, arcadeProfile.guid) != 0) continue;
-                arcadeDevice = i;
-                break;
-            }
+        if (arcadeDevice >= 0) {
+            ReadArcadeDevice(arcadeDevice, device);
+            if (strcmp(device->guid, arcadeProfile.guid) == 0) return arcadeDevice;
+        }
+        for (int i = 0; i < ARCADE_DEVICES; ++i) {
+            ReadArcadeDevice(i, device);
+            if (strcmp(device->guid, arcadeProfile.guid) == 0) return i;
         }
     }
-    bool pressed = false;
+    for (int i = 0; i < ARCADE_DEVICES; ++i) {
+        if (!IsGenericArcadeDevice(i)) continue;
+        ReadArcadeDevice(i, device);
+        if (device->guid[0]) return i;
+    }
+    return -1;
+}
+
+static bool DefaultArcadeDown(const ArcadeDevice *device, int action, bool wasDown) {
+    if (action < 4) {
+        static const int hats[] = {1, 2, 4, 8};
+        static const int axes[] = {1, 0, 1, 0};
+        static const int signs[] = {-1, 1, 1, -1};
+        return (device->hats[0] & hats[action]) ||
+               device->axes[axes[action]] * signs[action] > (wasDown ? .35f : .55f);
+    }
+    // Encoders label the physical ports starting at 1, while GLFW starts at 0.
+    static const int primaryButtons[] = {0, 1, 2, 3, 4};
+    if (device->buttons[primaryButtons[action - 4]]) return true;
+    return action == ARCADE_REQUIRED - 1 && (device->buttons[8] || device->buttons[9]);
+}
+
+static bool UpdateArcadeButtons(void) {
+    ArcadeDevice device = {0};
+    arcadeDevice = FindArcadeDevice(&device);
+    bool calibratedDevice = arcadeDevice >= 0 && strcmp(device.guid, arcadeProfile.guid) == 0;
+    arcadeAutomatic = arcadeDevice >= 0 && !calibratedDevice;
+    rawButtonPressed = false;
+    for (int i = 0; i < ARCADE_BUTTONS; ++i) {
+        bool down = arcadeAutomatic && device.buttons[i];
+        rawButtonPressed |= down && !lastRawButtons[i];
+        lastRawButtons[i] = down;
+    }
+    bool pressed = rawButtonPressed;
     for (int i = 0; i < ARCADE_ACTIONS; ++i) {
-        bool down = BindingDown(arcadeProfile.bindings[i], arcadeDevice >= 0 ? &device : NULL, arcadeDown[i]);
+        bool down = BindingDown(arcadeProfile.bindings[i], calibratedDevice ? &device : NULL, arcadeDown[i]) ||
+                    (arcadeAutomatic && DefaultArcadeDown(&device, i, arcadeDown[i]));
         arcadePressed[i] = down && !arcadeDown[i];
         arcadeDown[i] = down;
         pressed |= arcadePressed[i];
@@ -400,6 +454,10 @@ bool UsingGamepad(void) {
 
 bool UsingArcade(void) { return usingArcade; }
 
+bool UsingAutomaticArcade(void) { return usingArcade && arcadeAutomatic; }
+
+bool ArcadeRawButtonPressed(void) { return rawButtonPressed; }
+
 const char *InputHint(const char *keyboardMouse, const char *gamepad) {
     if (!UsingGamepad()) return keyboardMouse;
     if (playStation && !usingArcade) return gamepad;
@@ -407,20 +465,21 @@ const char *InputHint(const char *keyboardMouse, const char *gamepad) {
     static char buffers[8][256];
     static unsigned index;
     char *line = buffers[index++ % 8];
-    static const char *const labels[][3] = {
-        {"[Cruz]", "[A]", "[Ataque]"}, {"[Círculo]", "[B]", "[Esquiva]"},
-        {"[Quadrado]", "[X]", "[Interação]"}, {"[Triângulo]", "[Y]", "[Extra]"},
-        {"[Options]", "[Menu]", "[Start]"}, {"[Share]", "[View]", "[Interação]"},
-        {"R1/R2", "RB/RT", "Ataque"}, {"L1/L2", "LB/LT", "Esquiva"},
-        {"L1/R1", "LB/RB", "Interação"}
+    static const char *const labels[][4] = {
+        {"[Cruz]", "[A]", "[Ataque]", "[Botão 1]"}, {"[Círculo]", "[B]", "[Esquiva]", "[Botão 2]"},
+        {"[Quadrado]", "[X]", "[Interação]", "[Botão 3]"}, {"[Triângulo]", "[Y]", "[Extra]", "[Botão 5]"},
+        {"[Options]", "[Menu]", "[Start]", "[Start / Botão 4]"}, {"[Share]", "[View]", "[Interação]", "[Botão 3]"},
+        {"R1/R2", "RB/RT", "Ataque", "Botão 1"}, {"L1/L2", "LB/LT", "Esquiva", "Botão 2"},
+        {"L1/R1", "LB/RB", "Interação", "Botão 3"}
     };
+    int labelColumn = usingArcade ? (arcadeAutomatic ? 3 : 2) : 1;
     size_t used = 0;
     while (*gamepad && used < sizeof(buffers[0]) - 1) {
         bool replaced = false;
         for (int i = 0; i < (int)(sizeof(labels) / sizeof(labels[0])); i++) {
             size_t length = strlen(labels[i][0]);
             if (strncmp(gamepad, labels[i][0], length) != 0) continue;
-            const char *label = labels[i][usingArcade ? 2 : 1];
+            const char *label = labels[i][labelColumn];
             size_t output = strlen(label);
             if (used + output >= sizeof(buffers[0])) break;
             memcpy(line + used, label, output);

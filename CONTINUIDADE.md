@@ -2,8 +2,9 @@
 
 ## Controles do arcade (25/11/2026)
 
-- Implementado no Windows. **Configurar arcade (F9)** no menu recebe e grava as quatro direções da alavanca, ataque/confirmar, esquiva/voltar, interação e Start/pausa. O botão extra é opcional e pode ser pulado pressionando Start novamente. A calibração aceita teclas, botões USB, eixos e direcionais mesmo quando o encoder não tem mapeamento de gamepad no GLFW. O perfil fica em `arcade_pif.cfg` ao lado do executável.
-- A alavanca move e determina a mira. Os botões calibrados são usados também nos menus, nas cenas, nos selamentos, nas recompensas e no ranking. A build Release compilou em `out/review/release/JogoPiF.exe`. O teste de entrada simulou calibração e leitura de encoder USB e teclado, botões simultâneos, diagonais, persistência e reconexão. A confirmação com o painel físico do Hexcade segue pendente.
+- Encoders USB genéricos usam mapeamento automático no Windows. Eixos X/Y e direcional movem e miram, botão 1 confirma e ataca, botão 2 volta e esquiva, botão 3 interage, botão 4 ou portas 9 e 10 pausam, e botão 5 é extra. As setas também movem na partida para painéis que emulam teclado.
+- **Configurar arcade** é selecionável com a alavanca na lista principal. Para encoders genéricos no modo automático, qualquer botão físico abre a configuração quando essa opção está destacada. A calibração aceita teclas, botões USB, eixos e direcionais. Start pula o botão extra. O perfil em `arcade_pif.cfg`, ao lado do executável, tem prioridade sobre o mapeamento automático.
+- A build Release compilou em `out/review/release/JogoPiF.exe`. A simulação conferiu um encoder sem perfil e um genérico com mapeamento no GLFW, os controles padrão, diagonais, portas alternativas de Start, calibração, persistência e reconexão. A confirmação no painel físico do Hexcade segue pendente.
 
 ## Refinamento ambiental do menu (25/11/2026)
 

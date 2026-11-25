@@ -19,6 +19,8 @@ Vector2 PadStick(int xAxis, int yAxis);
 unsigned GameInputFrame(void);
 bool UsingGamepad(void);
 bool UsingArcade(void);
+bool UsingAutomaticArcade(void);
+bool ArcadeRawButtonPressed(void);
 const char *InputHint(const char *keyboardMouse, const char *gamepad);
 
 #endif
