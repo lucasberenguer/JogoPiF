@@ -1,3 +1,4 @@
+#include "game_audio.h"
 #include "game_text.h"
 #include "enemy.h"
 #include "run_progress.h"
@@ -970,6 +971,7 @@ void DamageEnemy(Enemy *enemy, int damage) {
 void DamageEnemyFrom(Enemy *enemy, int damage, Vector2 source) {
     if (!EnemyCanBeHit(enemy) || damage<=0) return;
     if (enemy->necromancerForm) { DamageNecromancer(enemy,damage); return; }
+    EmitSfx(SFX_ENEMY_HURT,enemy->position,1,1);
     static const Vector2 guardDirection[] = {{0,1}, {0,-1}, {-1,0}, {1,0}};
     Vector2 incoming = Vector2Subtract(source, enemy->position);
     if (enemy->templarRole == TEMPLAR_SHIELD &&
@@ -988,17 +990,20 @@ void DamageEnemyFrom(Enemy *enemy, int damage, Vector2 source) {
         enemy->health = finalThreshold;
         enemy->igrisFinalForm = true;
         enemy->attackBurst = 0;
+        EmitSfx(SFX_BOSS_PHASE,enemy->position,1,1);
         enemy->guardianPhase = GUARDIAN_PHASE_TRANSITION;
         enemy->state = ENEMY_IDLE;
         enemy->stateTime = 0;
     } else if (enemy->type == ENEMY_BOSS && !enemy->villageLeader && enemy->guardianPhase == GUARDIAN_PHASE_ONE &&
         enemy->health <= enemy->maxHealth / 2) {
         enemy->health = enemy->maxHealth / 2;
+        EmitSfx(SFX_BOSS_PHASE,enemy->position,1,1);
         enemy->guardianPhase = GUARDIAN_PHASE_TRANSITION;
         enemy->guardianMelee = false;
         enemy->state = ENEMY_IDLE;
         enemy->stateTime = 0.0f;
     } else if (enemy->health <= 0) {
+        EmitSfx(enemy->type==ENEMY_BOSS ? SFX_BOSS_DOWN : SFX_ENEMY_DOWN,enemy->position,1,1);
         enemy->stateTime = 0.0f;
         enemy->health = 0;
         enemy->state = ENEMY_DIE;
@@ -1208,6 +1213,7 @@ static void StartGuardianCast(EnemyGroup *group, const Clearing *clearing,
 static void UpdateGuardianMelee(EnemyGroup *group, const Clearing *clearing, Enemy *enemy, Vector2 player,
                                 bool playerDodging, int *playerHealth) {
     if (!enemy->attackConnected && enemy->stateTime >= GUARDIAN_MELEE_WINDUP) {
+        EmitSfx(SFX_MELEE,enemy->position,1,.77f);
         enemy->attackConnected = true;
         Vector2 offset = Vector2Subtract(player, enemy->position);
         float distance = Vector2Length(offset);
@@ -1422,6 +1428,10 @@ static void UpdateBoneLord(EnemyGroup *group, const Clearing *map, Enemy *boss,
                     }
                     boss->attackTarget = flank;
                 }
+                GameSfx warning=boss->bossAttack==BONE_DASH ? SFX_CHARGE_WARN :
+                    boss->bossAttack==BONE_RANGED ? SFX_MAGIC_WARN :
+                    boss->bossAttack==BONE_CLAW ? SFX_MELEE_WARN : SFX_AREA_WARN;
+                EmitSfxTimed(warning,boss->position,boneAttacks[boss->bossAttack].windup);
                 boss->state = ENEMY_ATTACK;
                 boss->stateTime = 0;
                 boss->attackConnected = false;
@@ -1440,6 +1450,11 @@ static void UpdateBoneLord(EnemyGroup *group, const Clearing *map, Enemy *boss,
     int attack = boss->bossAttack;
     float t = boss->stateTime, previous = t - dt;
     float windup = boneAttacks[attack].windup;
+    if (previous < windup && t >= windup) {
+        GameSfx cue=attack==BONE_DASH ? SFX_CHARGE : attack==BONE_RANGED ? SFX_MAGIC :
+            attack==BONE_CLAW ? SFX_MELEE : SFX_AREA;
+        EmitSfx(cue,attack==BONE_RAIN ? boss->attackTarget : boss->position,1,.86f);
+    }
     float end = boneAttacks[attack].impactEnd;
     float active = fminf(t, end) - fmaxf(previous, windup);
     if (attack == BONE_DASH) {
@@ -1504,6 +1519,7 @@ static void UpdateBoneShell(EnemyGroup *group, const Clearing *map, Enemy *enemy
                             float dt, bool dodging, int *health) {
     if (enemy->state == ENEMY_ATTACK) {
         if (enemy->stateTime >= BONE_SHELL_IMPACT && !enemy->attackConnected) {
+            EmitSfx(SFX_AREA,enemy->attackTarget,1,.87f);
             enemy->attackConnected = true;
             if (Vector2Distance(enemy->attackTarget,player) <= BONE_SHELL_RADIUS &&
                 MapHasClearPath(map,enemy->position,player))
@@ -1522,6 +1538,7 @@ static void UpdateBoneShell(EnemyGroup *group, const Clearing *map, Enemy *enemy
     if (distance <= 145 && enemy->attackCooldown <= 0 && MapHasClearPath(map,enemy->position,player)) {
         enemy->state = ENEMY_ATTACK;
         enemy->stateTime = 0;
+        EmitSfxTimed(SFX_AREA_WARN,enemy->position,BONE_SHELL_IMPACT);
         enemy->attackCooldown = 2.35f;
         enemy->attackConnected = false;
         enemy->attackTarget = Vector2Add(enemy->position,Vector2Scale(offset,fminf(52,distance)/distance));
@@ -1626,6 +1643,7 @@ static void UpdateIgrisZ(EnemyGroup *group, const Clearing *map, Enemy *boss,
     float t = boss->stateTime;
     for (int leg = 0; leg < 3; leg++) {
         float start = igrisZFrames[igrisZLegStart[leg]], end = igrisZFrames[igrisZLegEnd[leg]];
+        if (t >= start && t-dt < start) EmitSfx(SFX_CHARGE,boss->position,1,1.13f);
         if (t <= start || t-dt >= end) continue;
         float fraction = Clamp((t-start)/(end-start),0,1);
         Vector2 from = boss->position;
@@ -1746,6 +1764,10 @@ static void UpdateIgrisEchoes(EnemyGroup *group, const Clearing *map, Enemy *bos
         float warning = IGRIS_ECHO_PLANT + i*IGRIS_ECHO_GAP;
         if (boss->stateTime >= warning && boss->stateTime-dt < warning)
             boss->igrisEchoTo[i] = AimIgrisEcho(map,boss->igrisEchoFrom[i],player,boss->igrisEchoTo[i]);
+        if (boss->stateTime>=warning && boss->stateTime-dt<warning)
+            EmitSfxTimed(SFX_MAGIC_WARN,boss->igrisEchoFrom[i],launch-warning);
+        if (boss->stateTime>=launch && boss->stateTime-dt<launch)
+            EmitSfx(SFX_MAGIC,boss->igrisEchoFrom[i],1,.85f);
         float age = boss->stateTime-launch;
         unsigned hit = 1u << i;
         if (age < 0 || age-dt >= IGRIS_ECHO_TRAVEL || (boss->igrisEchoHits & hit)) continue;
@@ -1829,6 +1851,13 @@ static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
                 boss->bossAttack = skill;
                 boss->attackDirection = direction;
                 boss->attackTarget = player;
+                GameSfx warning=skill==IGRIS_Z_RIP || skill==IGRIS_ECLIPSE ? SFX_CHARGE_WARN :
+                    skill==IGRIS_SPEARS || skill==IGRIS_ABYSS_GRAB ? SFX_MAGIC_WARN :
+                    skill==IGRIS_MELEE || skill==IGRIS_FINAL_CLAW ? SFX_MELEE_WARN : SFX_AREA_WARN;
+                float windup=skill==IGRIS_Z_RIP ? igrisZFrames[igrisZLegStart[0]] :
+                    skill==IGRIS_ECLIPSE_ECHOES ? IGRIS_ECHO_PLANT :
+                    skill==IGRIS_ABYSS_GRAB ? IGRIS_GRAB_IMPACT : igrisSkills[skill].impact;
+                EmitSfxTimed(warning,boss->position,windup);
                 if (skill != IGRIS_Z_RIP && skill != IGRIS_ECLIPSE_ECHOES && skill != IGRIS_VORTEX) {
                     float lead = skill == IGRIS_SPEARS ? .24f + fminf(.22f,distance/UMBRA_SPEAR_SPEED) : .24f;
                     AimBossAttack(boss,PredictBossTarget(map,boss->position,player,velocity,lead));
@@ -1875,12 +1904,19 @@ static void UpdateIgris(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
         return;
     }
     if (skill == IGRIS_ABYSS_GRAB) {
+        if (time>=IGRIS_GRAB_IMPACT && time-dt<IGRIS_GRAB_IMPACT)
+            EmitSfx(SFX_CHAINS,boss->position,1,.81f);
         UpdateAbyssGrab(group,map,boss,player,dt,dodging,health);
         return;
     }
     if (skill == IGRIS_ECLIPSE_ECHOES) {
         UpdateIgrisEchoes(group,map,boss,player,dt,dodging,health);
         return;
+    }
+    if (time>=igrisSkills[skill].impact && time-dt<igrisSkills[skill].impact) {
+        GameSfx cue=skill==IGRIS_SPEARS ? SFX_MAGIC : skill==IGRIS_ECLIPSE ||
+            skill==IGRIS_MELEE || skill==IGRIS_FINAL_CLAW ? SFX_MELEE : SFX_AREA;
+        EmitSfx(cue,skill==IGRIS_ERUPTION ? boss->attackTarget : boss->position,1,.83f);
     }
     if (skill == IGRIS_ECLIPSE) {
         float impact = igrisSkills[skill].impact;
@@ -1946,6 +1982,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             Vector2Distance(enemy->position, player) < 26.0f) {
             *playerHealth += 15;
             if (*playerHealth > playerMaxHealth) *playerHealth = playerMaxHealth;
+            PlaySfx(SFX_PICKUP);
             enemy->pickupAvailable = false;
         }
         if (enemy->state == ENEMY_GONE) continue;
@@ -1973,6 +2010,9 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 ? GUARDIAN_SPAWN_DURATION : enemy->templarRole == TEMPLAR_STANDARD ? templarArrivalTime + templarPlantTime
                     : enemy->templarRole != TEMPLAR_NONE ? templarArrivalTime
                     : group->village && enemy->type == ENEMY_COMMON_MELEE ? VILLAGE_ZOMBIE_EMERGE_TIME : 1.0f;
+            if (enemy->templarRole==TEMPLAR_STANDARD &&
+                enemy->stateTime>=templarArrivalTime && enemy->stateTime-dt<templarArrivalTime)
+                EmitSfx(SFX_SUMMON,enemy->position,.70f,.79f);
             if (enemy->stateTime >= duration) { enemy->state = ENEMY_IDLE; enemy->stateTime = 0; }
             continue;
         }
@@ -2035,7 +2075,10 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 float remaining = Vector2DotProduct(Vector2Subtract(enemy->attackTarget, enemy->position),
                                                     enemy->attackDirection) - 46.0f;
                 MoveEnemyStraight(clearing, enemy, fminf(executionerDashSpeed * charge, fmaxf(0, remaining)));
+                if (t>=executionerDashStart && t-dt<executionerDashStart)
+                    EmitSfx(SFX_CHARGE,enemy->position,.85f,1);
                 if (t >= executionerImpact && !enemy->attackConnected) {
+                    EmitSfx(SFX_MELEE,enemy->position,1,.85f);
                     enemy->attackConnected = true;
                     Vector2 toward = Vector2Subtract(player, enemy->position);
                     if (Vector2Length(toward) <= executionerReach &&
@@ -2065,6 +2108,8 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 continue;
             }
             if (enemy->type == ENEMY_SPECIAL) {
+                if (enemy->stateTime>=SPECIAL_CHARGE_START && enemy->stateTime-dt<SPECIAL_CHARGE_START)
+                    EmitSfx(SFX_CHARGE,enemy->position,1,1);
                 if (enemy->stateTime >= SPECIAL_CHARGE_START && enemy->stateTime < SPECIAL_CHARGE_END) {
                     MoveEnemy(clearing, enemy, Vector2Scale(enemy->attackDirection, 360 * dt));
                     if (!enemy->attackConnected && !playerDodging && group->playerHitCooldown <= 0 &&
@@ -2103,6 +2148,8 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             bool impact = clearingMelee && !shield ? ClearingEnemyFrame(enemy, group->boneland) >= CLEARING_MELEE_IMPACT_FRAME :
                           enemy->stateTime >= release;
             if (!enemy->attackConnected && impact) {
+                GameSfx cue=mage || cultist ? SFX_MAGIC : ranged ? SFX_RANGED : SFX_MELEE;
+                EmitSfx(cue,enemy->position,1,shield ? .78f : 1);
                 enemy->attackConnected = true;
                 if (enemy->type == ENEMY_COMMON_RANGED) {
                     if (!mage && !cultist && enemy->templarRole != TEMPLAR_CROSSBOW) {
@@ -2160,6 +2207,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 }
                 enemy->guardianDodgeCooldown = GuardianEnraged(enemy) ? 3.4f : 4.4f;
                 if (!IsMapActorBlocked(clearing,destination)) {
+                    EmitSfx(SFX_CHARGE,enemy->position,.57f,1.2f);
                     enemy->guardianDodgeDirection=side;
                     enemy->guardianDodgeTime=.22f;
                     enemy->state=ENEMY_WALK;
@@ -2172,6 +2220,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 enemy->attackConnected = false;
                 enemy->attackDirection = distance > .01f ? Vector2Normalize(toPlayer) : (Vector2){0,1};
                 if (melee) {
+                    EmitSfxTimed(SFX_MELEE_WARN,enemy->position,GUARDIAN_MELEE_WINDUP);
                     enemy->guardianMelee = true;
                     enemy->guardianMeleeCooldown = GuardianEnraged(enemy) ?
                         GUARDIAN_MELEE_ENRAGED_COOLDOWN : GUARDIAN_MELEE_COOLDOWN;
@@ -2179,8 +2228,12 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                     Vector2 target = PredictBossTarget(clearing,enemy->position,player,guardianVelocity,.24f);
                     AimBossAttack(enemy,target);
                     StartGuardianCast(group,clearing,enemy,target);
+                    EmitSfxTimed(SFX_AREA_WARN,enemy->position,guardianHazards[enemy->bossAttack].hitStart);
                 } else {
-                    if (enemy->templarRole == TEMPLAR_EXECUTIONER) enemy->attackTarget = player;
+                    bool executioner=enemy->templarRole == TEMPLAR_EXECUTIONER;
+                    EmitSfxTimed(SFX_CHARGE_WARN,enemy->position,
+                                 executioner ? executionerDashStart : SPECIAL_CHARGE_START);
+                    if (executioner) enemy->attackTarget = player;
                     enemy->attackCooldown = enemy->templarRole == TEMPLAR_EXECUTIONER ? 1.78f :
                         2.75f / fminf(enemy->power, 1.36f);
                 }
@@ -2204,6 +2257,10 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 enemy->stateTime = 0.0f;
                 enemy->attackConnected = false;
                 enemy->attackDirection = Vector2Normalize(toPlayer);
+                bool caster=group->cemetery || group->boneland;
+                float release=enemy->templarRole==TEMPLAR_CROSSBOW ? crossbowRelease :
+                    group->boneland ? CULTIST_RELEASE_TIME : caster ? CEM_LANTERN_RELEASE_TIME : CLEARING_ARCHER_RELEASE_TIME;
+                EmitSfxTimed(caster ? SFX_MAGIC_WARN : SFX_RANGED_WARN,enemy->position,release);
                 enemy->attackCooldown = enemy->templarRole == TEMPLAR_CROSSBOW ? 1.59f :
                     group->boneland ? 2.15f : 1.5f / fminf(enemy->power, 1.36f);
             } else if (MoveRangedTactically(group,clearing,enemy,player,maxDistance,dt)) {
@@ -2217,6 +2274,11 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             enemy->stateTime = 0.0f;
             enemy->attackConnected = false;
             enemy->attackDirection = Vector2Normalize(toPlayer);
+            float windup=enemy->templarRole==TEMPLAR_SHIELD ? shieldImpact :
+                group->village ? VILLAGE_ZOMBIE_HIT_TIME : group->cemetery ? CEM_ZOMBIE_HIT_TIME :
+                CLEARING_MELEE_ATTACK_DURATION * CLEARING_MELEE_IMPACT_FRAME / CLEARING_MELEE_ATTACK_FRAMES;
+            EmitSfxTimed(enemy->villageBrute ? SFX_AREA_WARN : SFX_MELEE_WARN,
+                         enemy->position,enemy->villageBrute ? VILLAGE_BRUTE_IMPACT : windup);
             enemy->attackCooldown = enemy->villageBrute ? 1.85f :
                 enemy->templarRole == TEMPLAR_SHIELD ? .83f :
                 1.25f / fminf(enemy->power, 1.36f);
@@ -2233,6 +2295,8 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         if (!root->active) continue;
         root->age += dt;
         const GuardianHazard *hazard = &guardianHazards[root->attack];
+        if (root->age >= hazard->hitStart && root->age-dt < hazard->hitStart)
+            EmitSfx(SFX_AREA,root->position,1,.87f+.13f*root->attack);
         if (root->age >= hazard->hitStart && root->age < hazard->hitEnd && !root->hit && !playerDodging &&
             group->playerHitCooldown <= 0 && *playerHealth > 0 &&
             Vector2Distance(player, root->position) < hazard->radius) {
@@ -2256,6 +2320,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             Vector2 collisionPoint=next;
             if (group->cemetery || group->boneland || shot->umbraSpear) collisionPoint.y+=35;
             if (IsClearingBlocked(clearing, collisionPoint)) {
+                EmitSfx(SFX_PROJECTILE_HIT,next,.62f,1);
                 if (group->cemetery || group->boneland) AddEnemyImpact(group,next,shot->direction);
                 shot->remaining = 0.0f;
             } else {
@@ -2263,6 +2328,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
                 Vector2 playerCenter = {player.x, player.y - 35.0f};
                 float radius = shot->boneShot ? boneAttacks[BONE_RANGED].radius : group->cemetery ? 30 : 24;
                 if (Vector2DistanceSqr(next, playerCenter) <= radius * radius) {
+                    EmitSfx(SFX_PROJECTILE_HIT,next,1,1);
                     if (group->cemetery || group->boneland) AddEnemyImpact(group,next,shot->direction);
                     if (clearing->templarField)
                         HurtByTemplar(group, player, playerHealth, playerDodging, shot->damage);

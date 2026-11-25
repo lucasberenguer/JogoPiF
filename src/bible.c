@@ -1,3 +1,4 @@
+#include "game_audio.h"
 #include "bible.h"
 #include <math.h>
 #include <string.h>
@@ -86,6 +87,7 @@ void UpdateBible(Bible *b, float dt, bool activate, int level,
                 if (b->pools[i].remaining < b->pools[slot].remaining) slot = i;
             }
             b->pools[slot] = (HolyWaterPool){player, BIBLE_POOL_DURATION, 0.0f, false};
+            EmitSfx(SFX_HOLY_WATER,player,1,1);
             b->holyWaterCooldown = BIBLE_POOL_INTERVAL;
         }
     }

@@ -1,3 +1,4 @@
+#include "game_audio.h"
 #include "game_text.h"
 #include "enemy.h"
 #include "raymath.h"
@@ -65,6 +66,7 @@ static void ThrowShovel(EnemyGroup *group, const Enemy *boss, int lane) {
             .velocity=Vector2Scale(direction,speed), .life=COVEIRO_SHOVEL_LIFE,
             .returnOffset=Vector2Scale(flank,lane*145),
             .damage=(int)roundf(COVEIRO_SHOVEL_DAMAGE * boss->power)};
+        EmitSfx(SFX_SHOVEL,shot->position,1,1);
         return;
     }
 }
@@ -94,6 +96,7 @@ static void AimShovelReturn(CemeteryProjectile *shot, const Clearing *map, Vecto
     direction = Vector2Normalize(direction);
     Vector2 end = Vector2Add(target,Vector2Scale(direction,85));
     shot->returnTarget = MapHasClearPath(map,target,end) ? end : target;
+    EmitSfxTimed(SFX_RANGED_WARN,shot->position,COVEIRO_SHOVEL_RETURN_WARNING);
     shot->phase = CEM_SHOVEL_WARNING;
     shot->phaseTime = 0;
     shot->hitPlayer = false;
@@ -105,11 +108,17 @@ static bool MoveShovel(CemeteryProjectile *shot, EnemyGroup *group, const Cleari
     Vector2 step = Vector2Scale(delta,1.0f/steps);
     for (int i=0;i<steps;i++) {
         Vector2 next = Vector2Add(shot->position,step);
-        if (IsClearingBlocked(map,next)) return false;
+        if (IsClearingBlocked(map,next)) {
+            EmitSfx(SFX_PROJECTILE_HIT,next,.7f,.80f);
+            return false;
+        }
         shot->position = next;
         if (shot->phase != CEM_SHOVEL_RECALL && !shot->hitPlayer &&
             Vector2Distance(next,player) < COVEIRO_SHOVEL_RADIUS && MapHasClearPath(map,next,player) &&
-            HitPlayer(group,dodging,health,shot->damage)) shot->hitPlayer = true;
+            HitPlayer(group,dodging,health,shot->damage)) {
+            EmitSfx(SFX_PROJECTILE_HIT,next,1,.80f);
+            shot->hitPlayer = true;
+        }
     }
     return true;
 }
@@ -134,7 +143,10 @@ void CemeteryUpdateProjectiles(EnemyGroup *group, const Clearing *map, Vector2 p
             continue;
         }
         if (shot->phase == CEM_SHOVEL_WARNING) {
-            if (shot->phaseTime >= COVEIRO_SHOVEL_RETURN_WARNING) shot->phase = CEM_SHOVEL_RETURN;
+            if (shot->phaseTime >= COVEIRO_SHOVEL_RETURN_WARNING) {
+                EmitSfx(SFX_SHOVEL,shot->position,.9f,1.09f);
+                shot->phase = CEM_SHOVEL_RETURN;
+            }
             continue;
         }
         bool recall = shot->phase == CEM_SHOVEL_RECALL;
@@ -161,6 +173,9 @@ static void StartCoveiroSkill(const Clearing *map, Enemy *boss, int skill, Vecto
     }
     Vector2 target = PredictBossTarget(map,boss->position,player,velocity,lead);
     Vector2 offset = Vector2Subtract(target,boss->position);
+    GameSfx warning=skill==COVEIRO_SHOVEL ? SFX_RANGED_WARN :
+        skill==COVEIRO_ROOTS ? SFX_AREA_WARN : SFX_CHARGE_WARN;
+    EmitSfxTimed(warning,boss->position,skill==COVEIRO_BURIED_CHARGE ? COVEIRO_MARK_THROW : COVEIRO_WINDUP);
     boss->bossAttack = skill;
     boss->state = ENEMY_ATTACK;
     boss->stateTime = 0;
@@ -200,6 +215,9 @@ static void UpdateCoveiroBuriedCharge(EnemyGroup *group, const Clearing *map, En
                                      Vector2 player, Vector2 velocity, float dt, bool dodging, int *health) {
     float t = boss->stateTime;
     float previous = t-dt;
+    if (previous<COVEIRO_MARK_THROW && t>=COVEIRO_MARK_THROW) EmitSfx(SFX_SHOVEL,boss->position,1,1);
+    if (previous<COVEIRO_MARK_PLANT && t>=COVEIRO_MARK_PLANT) EmitSfx(SFX_AREA,boss->position,.8f,.81f);
+    if (previous<COVEIRO_MARK_DASH && t>=COVEIRO_MARK_DASH) EmitSfx(SFX_CHARGE,boss->position,1,1);
     boss->coveiroBuried = t >= COVEIRO_MARK_HIDDEN && t < COVEIRO_MARK_EMERGE;
     if (previous < COVEIRO_MARK_EMERGE && t >= COVEIRO_MARK_EMERGE) {
         Vector2 landing = boss->attackTarget;
@@ -207,6 +225,7 @@ static void UpdateCoveiroBuriedCharge(EnemyGroup *group, const Clearing *map, En
             FinishCoveiroBuriedCharge(boss);
             return;
         }
+        EmitSfx(SFX_AREA,landing,1,.82f);
         boss->position = landing;
         Vector2 target = PredictBossTarget(map,landing,player,velocity,.22f);
         Vector2 aim = Vector2Subtract(target,landing);
@@ -245,6 +264,7 @@ void CemeteryUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
         }
         if (boss->guardianMelee) {
             if (t >= COVEIRO_MELEE_WINDUP && !boss->attackConnected) {
+                EmitSfx(SFX_MELEE,boss->position,1,.76f);
                 boss->attackConnected = true;
                 Vector2 offset = Vector2Subtract(player, boss->position);
                 float distance = Vector2Length(offset);
@@ -263,6 +283,13 @@ void CemeteryUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
             }
             return;
         }
+        if (t>=COVEIRO_WINDUP && t-dt<COVEIRO_WINDUP) {
+            if (boss->bossAttack==COVEIRO_ROOTS) EmitSfx(SFX_AREA,boss->attackTarget,1,.84f);
+            else if (boss->bossAttack==COVEIRO_CHARGE) EmitSfx(SFX_CHARGE,boss->position,1,.85f);
+        }
+        if (phaseTwo && boss->bossAttack==COVEIRO_CHARGE &&
+            t>=COVEIRO_CHARGE_SECOND_START && t-dt<COVEIRO_CHARGE_SECOND_START)
+            EmitSfx(SFX_CHARGE,boss->position,1,1);
         if (t >= COVEIRO_WINDUP && !boss->attackConnected) {
             if (boss->bossAttack == COVEIRO_SHOVEL) {
                 boss->attackConnected = true;
@@ -289,6 +316,7 @@ void CemeteryUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
             }
         }
         if(boss->bossAttack==COVEIRO_CHARGE && phaseTwo && t>=COVEIRO_CHARGE_FIRST_END && boss->attackBurst==0) {
+            EmitSfxTimed(SFX_CHARGE_WARN,boss->position,COVEIRO_CHARGE_SECOND_START-COVEIRO_CHARGE_FIRST_END);
             boss->attackBurst=1;boss->attackConnected=false;
             Vector2 target=PredictBossTarget(map,boss->position,player,velocity,.24f);
             Vector2 offset=Vector2Subtract(target,boss->position);
@@ -347,6 +375,7 @@ void CemeteryUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
         boss->state = ENEMY_ATTACK;
         boss->stateTime = 0;
         boss->attackConnected = false;
+        EmitSfxTimed(SFX_MELEE_WARN,boss->position,COVEIRO_MELEE_WINDUP);
         boss->guardianMelee = true;
         boss->guardianMeleeCooldown = phaseTwo ? 1.25f : COVEIRO_MELEE_COOLDOWN;
         boss->attackDirection = directions[boss->facing];
@@ -428,6 +457,8 @@ void CemeteryUpdateSpecial(EnemyGroup *group, const Clearing *map, Enemy *enemy,
     if (enemy->state == ENEMY_ATTACK) {
         float t = enemy->stateTime;
         float dashTime = fminf(t, CEM_SPECIAL_IMPACT_TIME) - fmaxf(t - dt, CEM_SPECIAL_DASH_START);
+        if (t>=CEM_SPECIAL_DASH_START && t-dt<CEM_SPECIAL_DASH_START)
+            EmitSfx(SFX_CHARGE,enemy->position,.8f,.83f);
         if (dashTime > 0.0f) {
             Vector2 remaining = Vector2Subtract(enemy->attackTarget, enemy->position);
             float distanceLeft = Vector2DotProduct(remaining, enemy->attackDirection);
@@ -436,6 +467,7 @@ void CemeteryUpdateSpecial(EnemyGroup *group, const Clearing *map, Enemy *enemy,
                 MoveEnemy(map, enemy, Vector2Scale(enemy->attackDirection, step));
         }
         if (enemy->stateTime >= CEM_SPECIAL_IMPACT_TIME && !enemy->attackConnected) {
+            EmitSfx(SFX_AREA,enemy->position,1,.82f);
             enemy->attackConnected = true;
             if (Vector2Distance(enemy->position, player) <= CEM_SPECIAL_RADIUS &&
                 MapHasClearPath(map, enemy->position, player))
@@ -461,6 +493,7 @@ void CemeteryUpdateSpecial(EnemyGroup *group, const Clearing *map, Enemy *enemy,
         enemy->state = ENEMY_ATTACK;
         enemy->stateTime = 0;
         enemy->attackConnected = false;
+        EmitSfxTimed(SFX_CHARGE_WARN,enemy->position,CEM_SPECIAL_DASH_START);
         enemy->attackCooldown = 2.25f / fminf(enemy->power, 1.36f);
     } else if (distance > CEM_SPECIAL_RADIUS * .8f) {
         enemy->state = ENEMY_WALK;

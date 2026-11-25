@@ -1,3 +1,4 @@
+#include "game_audio.h"
 #include "gun.h"
 #include "raymath.h"
 #include <math.h>
@@ -171,6 +172,7 @@ void UpdateGun(Gun *gun, const Clearing *clearing, Vector2 player,
         gun->poseRemaining = GUN_POSE_DURATION;
         gun->shotCooldown = interval;
     }
+    bool fired=false;
     for (int i=0; i<GUN_MAX_SHOTS; i++) {
         GunShot *shot = &gun->shots[i];
         if (shot->life <= 0.0f) continue;
@@ -179,6 +181,10 @@ void UpdateGun(Gun *gun, const Clearing *clearing, Vector2 player,
             float anticipation = fminf(activeDt, shot->delay);
             shot->delay -= anticipation;
             activeDt -= anticipation;
+            if (shot->delay <= 0.0f && !fired) {
+                PlaySfx(SFX_GUN);
+                fired=true;
+            }
             if (shot->delay > 0.0f || activeDt <= 0.0f) continue;
         }
         activeDt = fminf(activeDt, shot->life);
@@ -188,6 +194,7 @@ void UpdateGun(Gun *gun, const Clearing *clearing, Vector2 player,
         for (int j=0; j<steps; j++) {
             Vector2 next = Vector2Add(shot->position, step);
             if (IsClearingBlocked(clearing, next)) {
+                EmitSfx(SFX_WALL,shot->position,1,1);
                 AddImpact(gun, shot->position);
                 shot->life = 0.0f;
                 break;

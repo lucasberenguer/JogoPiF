@@ -406,8 +406,11 @@ static Rectangle PauseButtonBounds(int index) {
 }
 static const Rectangle pauseBack = {696, 710, 280, 84};
 static const Rectangle volumeBars[AUDIO_CHANNELS] = {
-    {566, 456, 540, 16}, {566, 575, 540, 16}
+    [AUDIO_MASTER]={566, 442, 540, 16},
+    [AUDIO_MUSIC]={566, 526, 540, 16},
+    [AUDIO_EFFECTS]={566, 610, 540, 16}
 };
+static const Rectangle muteButton = {694, 640, 284, 54};
 
 static Rectangle PauseCanvas(void) {
     float scale = fminf(GetScreenWidth()/1672.0f, GetScreenHeight()/941.0f);
@@ -486,9 +489,20 @@ static bool UpdateSettings(Menu *menu) {
         if (!back) UpdateVideoSettings(menu, mouse, click);
         return back;
     }
-    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_DOWN) ||
-        IsKeyPressed(KEY_W) || IsKeyPressed(KEY_S))
-        menu->volumeFocus = 1-menu->volumeFocus;
+    static const AudioChannel next[] = {
+        [AUDIO_MASTER]=AUDIO_MUSIC, [AUDIO_MUSIC]=AUDIO_EFFECTS, [AUDIO_EFFECTS]=AUDIO_MASTER
+    };
+    static const AudioChannel previous[] = {
+        [AUDIO_MASTER]=AUDIO_EFFECTS, [AUDIO_MUSIC]=AUDIO_MASTER, [AUDIO_EFFECTS]=AUDIO_MUSIC
+    };
+    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W))
+        menu->volumeFocus = previous[menu->volumeFocus];
+    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S))
+        menu->volumeFocus = next[menu->volumeFocus];
+    if (IsKeyPressed(KEY_M) || (click && CheckCollisionPointRec(mouse,muteButton))) {
+        menu->audio.muted=!menu->audio.muted;
+        SaveAudioSettings(&menu->audio);
+    }
     if (click) {
         for (int i = 0; i < AUDIO_CHANNELS; i++) {
             Rectangle bar = volumeBars[i];
@@ -563,6 +577,7 @@ PauseAction UpdatePauseMenu(Menu *menu) {
         return PAUSE_NONE;
     }
     if (escape) return PAUSE_RESUME;
+    int previousSelection=pause->selected;
     if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) pause->selected = (pause->selected + 3) % 4;
     if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) pause->selected = (pause->selected + 1) % 4;
     Vector2 movement = GetMouseDelta();
@@ -571,6 +586,7 @@ PauseAction UpdatePauseMenu(Menu *menu) {
             if (CheckCollisionPointRec(mouse, PauseButtonBounds(i))) pause->selected = i;
     }
     UpdateButtonFocus(pause->buttonFocus, pause->selected, dt);
+    if (previousSelection != pause->selected) PlaySfx(SFX_UI_FOCUS);
     if (click ? !CheckCollisionPointRec(mouse, PauseButtonBounds(pause->selected)) :
                 !IsKeyPressed(KEY_ENTER) && !IsKeyPressed(KEY_SPACE)) return PAUSE_NONE;
     PlayAudioFeedback(&menu->audio);
@@ -731,23 +747,23 @@ static void DrawSettings(const Menu *menu, Rectangle canvas) {
         DrawPauseTextButton(menu, canvas, pauseBack, "Voltar  ·  Esc", 28);
         return;
     }
-    static const char *names[AUDIO_CHANNELS] = {"Música", "Efeitos sonoros"};
+    static const char *names[AUDIO_CHANNELS] = {"Música", "Efeitos sonoros", "Volume geral"};
     float scale = canvas.width/1672.0f;
     for (int i = 0; i < AUDIO_CHANNELS; i++) {
         Rectangle bar = PauseRect(canvas, volumeBars[i]);
         int size = (int)fmaxf(12, 37*scale);
         bool focused = menu->volumeFocus == i;
-        DrawGameText(names[i], (int)bar.x, (int)(bar.y-48*scale), size, focused ? GOLD : RAYWHITE);
+        DrawGameText(names[i], (int)bar.x, (int)(bar.y-42*scale), size, focused ? GOLD : RAYWHITE);
         const char *percent = TextFormat("%d%%", menu->audio.volume[i]);
         DrawGameText(percent, (int)(bar.x+bar.width-MeasureGameText(percent,size)),
-                 (int)(bar.y-48*scale), size, RAYWHITE);
+                 (int)(bar.y-42*scale), size, RAYWHITE);
         DrawRectangleRounded(bar, .6f, 8, (Color){87, 47, 53, 255});
         float filled = bar.width*menu->audio.volume[i]/100.0f;
         if (filled > 0.0f)
             DrawRectangleRec((Rectangle){bar.x,bar.y,filled,bar.height}, focused ? GOLD : ORANGE);
         DrawCircleV((Vector2){bar.x+filled,bar.y+bar.height/2}, 11*scale, focused ? GOLD : RAYWHITE);
     }
-    DrawPauseText(canvas, "Setas ajustam o volume  ·  Tab troca de aba  ·  F alterna tela cheia", 641, 29, LIGHTGRAY);
+    DrawPauseTextButton(menu, canvas, muteButton, menu->audio.muted ? "Ativar som  ·  M" : "Silenciar  ·  M", 26);
     DrawPauseTextButton(menu, canvas, pauseBack, "Voltar  ·  Esc", 28);
 }
 
@@ -856,6 +872,7 @@ MenuAction UpdateMenu(Menu *m) {
         return MENU_NONE;
     }
     if (IsKeyPressed(KEY_ESCAPE)) return MENU_QUIT;
+    int previousSelection=m->selected;
     if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S) || PadPressed(GAMEPAD_BUTTON_LEFT_FACE_DOWN))
         m->selected = (m->selected + 1) % MAIN_BUTTON_COUNT;
     if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W) || PadPressed(GAMEPAD_BUTTON_LEFT_FACE_UP))
@@ -867,6 +884,7 @@ MenuAction UpdateMenu(Menu *m) {
         for (int i = 0; i < MAIN_BUTTON_COUNT; i++)
             if (CheckCollisionPointRec(mouse, MainButtonBounds(m, i))) m->selected = i;
     }
+    if (previousSelection != m->selected) PlaySfx(SFX_UI_FOCUS);
     if (click && CheckCollisionPointRec(mouse, TestButtonBounds())) {
         PlayAudioFeedback(&m->audio);
         return MENU_TEST_VILLA;

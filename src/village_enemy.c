@@ -1,3 +1,4 @@
+#include "game_audio.h"
 #include "enemy.h"
 #include "game_text.h"
 #include "raymath.h"
@@ -9,7 +10,7 @@ enum {
     VILLAGE_ACTIVE_LIMIT = 44, VILLAGE_ZOMBIE_HEALTH = 72, VILLAGE_BRUTE_HEALTH = 112,
     VILLAGE_BRUTE_DAMAGE = 32, VILLAGE_COMMON_PER_BRUTE = 10
 };
-static const float bruteImpact=.64f, bruteRecoveryEnd=1.23f, bruteRadius=118;
+static const float bruteRecoveryEnd=1.23f, bruteRadius=118;
 static const float hordeReinforcementInterval = .42f;
 
 static Vector2 VillageHordeSpot(const Clearing *clearing, Vector2 player) {
@@ -101,7 +102,8 @@ void VillageUpdateHorde(EnemyGroup *group, const Clearing *clearing,
 
 void VillageUpdateBruteAttack(EnemyGroup *group, const Clearing *map, Enemy *brute,
                               Vector2 player, bool dodging, int *health) {
-    if (!brute->attackConnected && brute->stateTime>=bruteImpact) {
+    if (!brute->attackConnected && brute->stateTime>=VILLAGE_BRUTE_IMPACT) {
+        EmitSfx(SFX_AREA,brute->position,1,.72f);
         brute->attackConnected=true;
         if (!dodging && group->playerHitCooldown<=0 && *health>0 &&
             Vector2DistanceSqr(brute->position,player)<=bruteRadius*bruteRadius &&
@@ -148,6 +150,11 @@ void VillageUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss,
                 boss->bossAttack = VILLAGE_CHARGE;
             else
                 boss->bossAttack = (boss->bossAttack + 1) % maxAtk;
+            GameSfx warning=boss->bossAttack==VILLAGE_CHARGE ? SFX_CHARGE_WARN :
+                boss->bossAttack==VILLAGE_AXE_SLASH ? SFX_MELEE_WARN : SFX_AREA_WARN;
+            float windup=boss->bossAttack==VILLAGE_CHARGE ? .55f :
+                boss->bossAttack==VILLAGE_AXE_SLASH ? .48f : .72f;
+            EmitSfxTimed(warning,boss->position,windup);
             boss->state = ENEMY_ATTACK;
             boss->stateTime = 0.0f;
             boss->attackConnected = false;
@@ -178,6 +185,7 @@ void VillageUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss,
     if (boss->bossAttack == VILLAGE_AXE_SLASH) {
         if (t >= 0.45f && t <= 0.62f) MoveEnemy(map, boss, Vector2Scale(boss->attackDirection, 225.0f * dt));
         if (!boss->attackConnected && t >= 0.48f) {
+            EmitSfx(SFX_MELEE,boss->position,1,.83f);
             boss->attackConnected = true;
             if (distance <= 158.0f &&
                 Vector2DotProduct(toward, boss->attackDirection) >= -0.25f) {
@@ -190,6 +198,7 @@ void VillageUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss,
             boss->attackCooldown = boss->guardianPhase == GUARDIAN_PHASE_TWO ? 0.45f : 0.65f;
         }
     } else if (boss->bossAttack == VILLAGE_CHARGE) {
+        if (t>=.55f && t-dt<.55f) EmitSfx(SFX_CHARGE,boss->position,1,.87f);
         if (t >= 0.55f && t < 1.15f) {
             MoveEnemy(map, boss, Vector2Scale(boss->attackDirection, boss->speed * 3.0f * dt));
             if (!boss->attackConnected && Vector2Distance(boss->position, player) <= 62.0f) {
@@ -204,6 +213,7 @@ void VillageUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss,
         }
     } else {
         if (!boss->attackConnected && t >= 0.72f) {
+            EmitSfx(SFX_AREA,boss->position,1,.83f);
             boss->attackConnected = true;
             if (distance <= 185.0f) {
                 HurtPlayer(group, playerHealth, dodging, (int)(20.0f * boss->power));
@@ -349,17 +359,17 @@ static void DrawVillageBrute(const EnemyGroup *group,const Enemy *brute) {
     Texture2D texture=striking ? group->villageBruteAttack : group->villageBruteWalk;
     int frame=brute->state==ENEMY_WALK ? (int)(brute->walkTime*7)%6 : 0;
     if (striking) {
-        if (t<bruteImpact) {
-            frame=(int)Clamp(t*3/bruteImpact,0,2);
-            DrawCircleV(brute->position,bruteRadius,Fade(MAROON,.15f+.25f*t/bruteImpact));
+        if (t<VILLAGE_BRUTE_IMPACT) {
+            frame=(int)Clamp(t*3/VILLAGE_BRUTE_IMPACT,0,2);
+            DrawCircleV(brute->position,bruteRadius,Fade(MAROON,.15f+.25f*t/VILLAGE_BRUTE_IMPACT));
             DrawCircleLinesV(brute->position,bruteRadius,Fade(ORANGE,.8f));
         } else {
-            float age=(t-bruteImpact)/.32f;
+            float age=(t-VILLAGE_BRUTE_IMPACT)/.32f;
             if (age<1) {
                 float radius=bruteRadius*(.25f+.75f*age);
                 DrawRing(brute->position,radius-7,radius,0,360,36,Fade(BEIGE,.85f*(1-age)));
             }
-            frame=3+(int)Clamp(3*(t-bruteImpact)/(bruteRecoveryEnd-bruteImpact),0,2);
+            frame=3+(int)Clamp(3*(t-VILLAGE_BRUTE_IMPACT)/(bruteRecoveryEnd-VILLAGE_BRUTE_IMPACT),0,2);
         }
     }
     float w=texture.width/6.0f, h=texture.height/4.0f;

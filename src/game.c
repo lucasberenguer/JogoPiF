@@ -304,7 +304,39 @@ int main(void) {
     float entryFadeRemaining = 0.0f;
     InitAtmosphere();
 
+    bool audioDebug=false;
+    int audioMap=ClearingMapId(&clearing), audioHealth=playerHealth;
+    bool audioWasInRun=false;
     while (!WindowShouldClose()) {
+        bool gesture=GetGamepadButtonPressed()>0 || IsMouseButtonPressed(MOUSE_BUTTON_LEFT) ||
+            IsMouseButtonPressed(MOUSE_BUTTON_RIGHT);
+        if (!menu.audio.unlocked && !gesture) {
+            for (int key=KEY_SPACE; key<=KEY_KB_MENU; key++) {
+                if (IsKeyPressed(key)) { gesture=true; break; }
+            }
+        }
+        if (IsKeyPressed(KEY_F10)) audioDebug=!audioDebug;
+        SetGameAudioContext(&menu.audio,player,gesture,!IsWindowFocused() || IsWindowMinimized(),
+                            screen==3 || devTools.open || audioDebug);
+        if (audioDebug) {
+            UpdateGameMusic(&menu.audio,TRACK_SILENT,0,GetFrameTime());
+            BeginDrawing();
+            ClearBackground((Color){24,17,27,255});
+            DrawAudioDebug(&menu.audio);
+            EndDrawing();
+            continue;
+        }
+        bool audioInRun=screen==2 || screen==3 || screen==GUARDIAN_SCREEN;
+        int mapNow=ClearingMapId(&clearing);
+        if (audioInRun && (!audioWasInRun || mapNow!=audioMap)) PlaySfx(SFX_MAP);
+        if (audioInRun && audioWasInRun && mapNow==audioMap) {
+            if (audioHealth>0 && playerHealth<=0) PlaySfx(SFX_PLAYER_DOWN);
+            else if (playerHealth<audioHealth) PlaySfx(SFX_PLAYER_HURT);
+            else if (playerHealth>audioHealth) PlaySfx(SFX_HEAL);
+        }
+        audioMap=mapNow;
+        audioHealth=playerHealth;
+        audioWasInRun=audioInRun;
         if ((screen==2 || screen==GUARDIAN_SCREEN || screen==OPENING_SCREEN) &&
             !devTools.open && !openingPreview && playerHealth>0 &&
             !(encounter.progress.map==NECROMANCER_MAP && encounter.phase==ENCOUNTER_CLEAR))
@@ -1013,8 +1045,10 @@ int main(void) {
         bool altarOpen = ClearingAltarOpen(&encounter, &clearing);
         bool interactPressed = IsKeyPressed(KEY_E);
         encounter.progress.health=playerHealth;
-        if (!entering && playerHealth>0 && BeginGuardianPassage(&encounter,&clearing,player,interactPressed))
+        if (!entering && playerHealth>0 && BeginGuardianPassage(&encounter,&clearing,player,interactPressed)) {
+            PlaySfx(SFX_DOOR);
             continue;
+        }
         bool toBoneland = clearing.invertedChapel && !EncounterPaused(&encounter) &&
             CheckCollisionPointRec(player, clearing.exit);
         bool toTemplarField = CanEnterTemplarField(&encounter, &clearing, player);
@@ -1033,6 +1067,7 @@ int main(void) {
             int nextMap = toNecromancer ? NECROMANCER_MAP : toTemplarField ? TEMPLAR_FIELD_MAP : toBoneland ? BONELAND_MAP
                 : toInverted ? 5 : toBasement ? 4 : toChapel ? 3 : toVillage ? 2 : 1;
             if (InitCampaignMap(&next, nextMap)) {
+                PlaySfx(SFX_DOOR);
                 UnloadClearing(&clearing);
                 clearing = next;
                 player = clearing.spawn;
@@ -1079,11 +1114,20 @@ int main(void) {
         float katanaArcDot = (currentWeapon == WEAPON_KATANA && weaponLevel >= 3)
             ? KATANA_L3_ARC_DOT : KATANA_BASE_ARC_DOT;
 
-        if (dodgeCooldown > 0.0f) dodgeCooldown -= deltaTime;
+        if (dodgeCooldown > 0.0f) {
+            dodgeCooldown -= deltaTime;
+            if (dodgeCooldown <= 0.0f) PlaySfx(SFX_DASH_READY);
+        }
         if (katanaAttackCooldown > 0.0f) katanaAttackCooldown -= deltaTime;
         if (katanaShockwaveCooldown > 0.0f) katanaShockwaveCooldown -= deltaTime;
-        if (katanaAttackRemaining > 0.0f)
+        if (katanaAttackRemaining > 0.0f) {
+            float before=katanaAttackRemaining;
             katanaAttackRemaining = fmaxf(0.0f, katanaAttackRemaining - deltaTime);
+            if (before>katanaAttackDuration*.5f && katanaAttackRemaining<=katanaAttackDuration*.5f) {
+                Vector2 tip=Vector2Add(player,Vector2Scale(katanaAttackDirection,katanaAttackRange));
+                if (!MapHasClearPath(&clearing,player,tip)) EmitSfx(SFX_WALL,tip,.85f,1.16f);
+            }
+        }
         for (int s = 0; s < KATANA_MAX_SHOCKWAVES; s++) {
             if (katanaShockwaves[s].life <= 0.0f) continue;
             if (!entering) {
@@ -1091,8 +1135,10 @@ int main(void) {
                     katanaShockwaves[s].position,
                     Vector2Scale(katanaShockwaves[s].direction, KATANA_SHOCKWAVE_SPEED * deltaTime));
                 katanaShockwaves[s].life = fmaxf(0.0f, katanaShockwaves[s].life - deltaTime);
-                if (IsClearingBlocked(&clearing, katanaShockwaves[s].position))
+                if (IsClearingBlocked(&clearing, katanaShockwaves[s].position)) {
+                    EmitSfx(SFX_WALL,katanaShockwaves[s].position,.7f,.83f);
                     katanaShockwaves[s].life = 0.0f;
+                }
             }
         }
         bool grabbed = IgrisHoldingPlayer(&enemies);
@@ -1125,9 +1171,11 @@ int main(void) {
                 : (katanaAttackDirection.y < 0.0f ? 1 : 0);
             katanaAttackId++;
             katanaDashReducedThisSwing = false;
+            PlaySfx(SFX_KATANA);
             katanaAttackRemaining = katanaAttackDuration;
             katanaAttackCooldown = katanaAttackRecovery;
             if (weaponLevel >= 4 && katanaShockwaveCooldown <= 0.0f) {
+                PlaySfx(SFX_KATANA_WAVE);
                 static const float fanAnglesDeg[3] = {-KATANA_L5_FAN_ANGLE_DEG, 0.0f, KATANA_L5_FAN_ANGLE_DEG};
                 int waveCount = weaponLevel >= 5 ? 3 : 1;
                 for (int w = 0; w < waveCount; w++) {
@@ -1162,6 +1210,7 @@ int main(void) {
                 dodgeDirection = FacingVector(facing);
             }
             facing = dodgeFacing;
+            PlaySfx(SFX_DASH);
             dodgeRemaining = dodgeDuration;
             dodgeCooldown = dodgeRecovery;
             walkTime = 0.0f;
@@ -1231,13 +1280,17 @@ int main(void) {
                       weaponLevel);
             if (gun.poseRemaining > previousPose) gunAttackFacing = gunAimFacing;
         }
-        if (bibleActivationStarted) bibleAttackFacing = facing;
+        if (bibleActivationStarted) {
+            PlaySfx(SFX_BIBLE);
+            bibleAttackFacing = facing;
+        }
         if (!entering) {
             Vector2 playerCenter = {player.x, player.y-35.0f};
             if (currentWeapon == WEAPON_BIBLE) {
                 for (int p = 0; p < ENEMY_PROJECTILE_COUNT; p++) {
                     if (enemies.projectiles[p].remaining > 0.0f &&
                         BibleBlocksCircle(&bible, player, enemies.projectiles[p].position, 6.0f)) {
+                        EmitSfx(SFX_BIBLE_BLOCK,enemies.projectiles[p].position,1,1);
                         enemies.projectiles[p].remaining = 0.0f;
                     }
                 }
@@ -1274,7 +1327,9 @@ int main(void) {
                             DamageEnemyFrom(enemy, (int)ceilf(WeaponBaseDamage(WEAPON_KATANA)*EncounterDamage(&encounter)), player);
                             enemy->lastKatanaSwing = katanaAttackId;
                             if (weaponLevel >= 2 && !katanaDashReducedThisSwing) {
+                                float before=dodgeCooldown;
                                 dodgeCooldown = fmaxf(0.0f, dodgeCooldown - KATANA_L2_DODGE_REDUCTION);
+                                if (before>0 && dodgeCooldown<=0) PlaySfx(SFX_DASH_READY);
                                 katanaDashReducedThisSwing = true;
                             }
                             if (weaponLevel >= 3) {
@@ -1291,6 +1346,11 @@ int main(void) {
                             wave->hitEnemies[i] = true;
                         }
                     }
+                }
+                if (enemy->health < healthBefore) {
+                    GameSfx hit=currentWeapon==WEAPON_GUN ? SFX_GUN_HIT :
+                        currentWeapon==WEAPON_BIBLE ? SFX_BIBLE_HIT : SFX_KATANA_HIT;
+                    EmitSfx(hit,enemy->position,1,1);
                 }
                 if (enemies.village && enemy->type == ENEMY_BOSS &&
                     healthBefore > 0 && enemy->health <= 0) {

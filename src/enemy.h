@@ -73,6 +73,7 @@ enum { VILLAGE_ZOMBIE_IDLE, VILLAGE_ZOMBIE_EMERGE, VILLAGE_ZOMBIE_WALK,
        VILLAGE_ZOMBIE_ATTACK, VILLAGE_ZOMBIE_ATLAS_COUNT };
 #define VILLAGE_ZOMBIE_EMERGE_TIME 1.0f
 #define VILLAGE_ZOMBIE_HIT_TIME .31f
+#define VILLAGE_BRUTE_IMPACT .64f
 typedef struct Enemy {
     Vector2 position; /* ponto dos pes */
     int health;

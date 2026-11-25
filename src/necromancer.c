@@ -1,3 +1,4 @@
+#include "game_audio.h"
 #include "enemy.h"
 #include "raymath.h"
 #include <math.h>
@@ -89,7 +90,11 @@ void DamageNecromancer(Enemy *boss,int damage) {
     int threshold=boss->necromancerForm==1 ? boss->maxHealth*70/100 :
         boss->necromancerForm==2 ? boss->maxHealth*35/100 : 0;
     boss->health-=damage;
-    if (boss->health>threshold) return;
+    if (boss->health>threshold) {
+        EmitSfx(SFX_ENEMY_HURT,boss->position,.85f,.8f);
+        return;
+    }
+    EmitSfx(threshold>0 ? SFX_BOSS_PHASE : SFX_BOSS_DOWN,boss->position,1,.80f);
     boss->health=threshold;
     boss->stateTime=0;
     if (threshold>0) {
@@ -112,6 +117,7 @@ static void Hurt(EnemyGroup *g,const Enemy *boss,bool dodging,int *health,int da
 
 static void Shot(EnemyGroup *g,Vector2 origin,Vector2 direction,float speed,int damage,bool sword) {
     for(int i=0;i<NECROMANCER_SHOTS;i++) if (g->necromancer.shots[i].life<=0) {
+        EmitSfx(sword ? SFX_SPECTRAL_SWORD : SFX_MAGIC,origin,1,sword ? 1.16f : .89f);
         g->necromancer.shots[i]=(NecromancerShot){origin,Vector2Scale(direction,speed),2.7f,damage,sword};
         return;
     }
@@ -128,6 +134,7 @@ static void Fan(EnemyGroup *g,Vector2 origin,Vector2 dir,int count,float spread,
 }
 
 static void SummonWraiths(EnemyGroup *g,const Clearing *map,Vector2 player) {
+    EmitSfx(SFX_SUMMON,g->list[0].position,1,1);
     for(int i=0;i<NECROMANCER_WRAITHS;i++) {
         Enemy *wraith=&g->list[i+1];
         if(wraith->necromancerWraith && wraith->state!=ENEMY_GONE) continue;
@@ -164,6 +171,8 @@ static void UpdateWraiths(EnemyGroup *g,Vector2 player,float dt) {
             wraith->state=ENEMY_GONE;
             continue;
         }
+        if (wraith->attackCooldown>.20f && wraith->attackCooldown-dt<=.20f)
+            EmitSfxTimed(SFX_MAGIC_WARN,wraith->position,.20f);
         wraith->attackCooldown-=dt;
         if(wraith->attackCooldown<=0) {
             Shot(g,wraith->position,Aim(wraith->position,player),590,22,false);
@@ -239,6 +248,13 @@ static void StartSkill(EnemyGroup *g,const Clearing *map,Enemy *boss,Vector2 pla
     NecromancerFight *fight=&g->necromancer;
     boss->state=ENEMY_ATTACK;
     boss->stateTime=0;
+    static const GameSfx warnings[] = {
+        [SEPULCHER]=SFX_MAGIC_WARN,[CIRCLES]=SFX_AREA_WARN,[STAFF]=SFX_MAGIC_WARN,
+        [PROFANE_STEP]=SFX_CHARGE_WARN,[HALO]=SFX_MAGIC_WARN,[RUNES]=SFX_MAGIC_WARN,
+        [BLADE]=SFX_MELEE_WARN,[FLIGHT]=SFX_CHARGE_WARN,[CONDEMNED]=SFX_MAGIC_WARN,
+        [BONE_BEAM]=SFX_AREA_WARN,[CHAINS]=SFX_MAGIC_WARN,[CORPSE]=SFX_AREA_WARN
+    };
+    EmitSfxTimed(warnings[skill],boss->position,skills[skill].windup);
     boss->bossAttack=skill;
     boss->attackConnected=false;
     Vector2 delta=Vector2Subtract(player,boss->position);
@@ -284,13 +300,18 @@ static void UpdateSkill(EnemyGroup *g,const Clearing *map,Enemy *boss,Vector2 pl
     if(skill==CONDEMNED) {
         for(int i=0;i<SPECTRAL_SWORDS;i++) {
             float release=SwordRelease(i);
-            if(Crossed(before,t,release-.18f)) fight->marks[i%3]=player;
+            if(Crossed(before,t,release-.18f)) {
+                fight->marks[i%3]=player;
+                EmitSfxTimed(SFX_RANGED_WARN,SwordOrigin(boss->position,i,release),.18f);
+            }
             if(Crossed(before,t,release)) {
                 Vector2 origin=SwordOrigin(boss->position,i,release);
                 Shot(g,origin,Aim(origin,fight->marks[i%3]),920,damage,true);
             }
         }
     } else if(skill==BONE_BEAM) {
+        if(Crossed(before,t,cageClose)) EmitSfx(SFX_CHAINS,fight->cageCenter,1,.71f);
+        if(Crossed(before,t,windup)) EmitSfxTimed(SFX_BEAM,boss->position,beamActive);
         if(t>=windup && t<windup+beamActive && !boss->attackConnected &&
            InLane(boss->position,dir,player,fight->beamReach,beamWidth) &&
            !dodging && !g->practiceInvincible && g->playerHitCooldown<=0 &&
@@ -299,6 +320,7 @@ static void UpdateSkill(EnemyGroup *g,const Clearing *map,Enemy *boss,Vector2 pl
             Hurt(g,boss,false,health,damage);
         }
     } else if(skill==CHAINS) {
+        if(Crossed(before,t,windup)) EmitSfx(SFX_CHAINS,boss->position,1,1);
         if(Crossed(before,t,windup) && !dodging && !g->practiceInvincible &&
            InLane(boss->position,dir,player,chainLength,chainWidth) &&
            MapHasClearPath(map,boss->position,player)) boss->attackConnected=true;
@@ -308,13 +330,16 @@ static void UpdateSkill(EnemyGroup *g,const Clearing *map,Enemy *boss,Vector2 pl
                 boss->attackDirection=Aim(boss->position,player);
                 boss->facing=Facing(boss->attackDirection);
             }
-            if(Crossed(before,t,chainCut))
+            if(Crossed(before,t,chainCut)) {
+                EmitSfx(SFX_MELEE,boss->position,1,.72f);
                 Sweep(g,map,boss,player,dodging,health,chainReach,.0f,damage);
+            }
         }
     } else if(skill==CORPSE) {
         if(fight->markedWraith>=0 && t>=windup && before<windup) {
             Enemy *wraith=&g->list[fight->markedWraith+1];
             if(wraith->health>0 && wraith->state!=ENEMY_GONE && wraith->state!=ENEMY_DIE) {
+                EmitSfx(SFX_AREA,wraith->position,1,.78f);
                 wraith->health=0;
                 wraith->state=ENEMY_DIE;
                 wraith->stateTime=0;
@@ -329,13 +354,15 @@ static void UpdateSkill(EnemyGroup *g,const Clearing *map,Enemy *boss,Vector2 pl
         if(Crossed(before,t,windup+.31f))
             Fan(g,boss->position,Aim(boss->position,player),4,.24f,615,damage);
     } else if (skill==CIRCLES) {
-        for(int i=0;i<3;i++) if(Crossed(before,t,windup+i*circleCadence) &&
-            Vector2Distance(player,fight->marks[i])<=93)
-            Hurt(g,boss,dodging,health,damage);
+        for(int i=0;i<3;i++) if(Crossed(before,t,windup+i*circleCadence)) {
+            EmitSfx(SFX_AREA,fight->marks[i],1,.87f+i*.07f);
+            if (Vector2Distance(player,fight->marks[i])<=93) Hurt(g,boss,dodging,health,damage);
+        }
     } else if (skill==STAFF && Crossed(before,t,windup)) {
         SummonWraiths(g,map,player);
     } else if (skill==PROFANE_STEP) {
         if(Crossed(before,t,windup)) {
+            EmitSfx(SFX_CHARGE,boss->position,1,1.17f);
             boss->position=fight->marks[0];
             Vector2 aim=Vector2Subtract(player,boss->position);
             if (Vector2LengthSqr(aim)>1) boss->attackDirection=Vector2Normalize(aim);
@@ -353,6 +380,7 @@ static void UpdateSkill(EnemyGroup *g,const Clearing *map,Enemy *boss,Vector2 pl
         if(Crossed(before,t,windup))
             SummonWraiths(g,map,player);
         for(int i=0;i<count;i++) {
+            if(Crossed(before,t,windup+i*runeCadence)) EmitSfx(SFX_AREA,fight->marks[i],1,1.15f);
             float radius=190, age=t-windup-i*runeCadence;
             if (age<0 || age>runeTravel) continue;
             float distance=Vector2Distance(player,fight->marks[i]);
@@ -367,10 +395,14 @@ static void UpdateSkill(EnemyGroup *g,const Clearing *map,Enemy *boss,Vector2 pl
                 boss->attackDirection=Aim(boss->position,player);
                 boss->facing=Facing(boss->attackDirection);
             }
-            if(Crossed(before,t,bladeTimes[i]))
+            if(Crossed(before,t,bladeTimes[i])) {
+                EmitSfx(SFX_MELEE,boss->position,1,.70f+i*.11f);
                 Sweep(g,map,boss,player,dodging,health,bladeReach[i],.0f,damage+i*8);
+            }
         }
     } else if (skill==FLIGHT) {
+        if(Crossed(before,t,windup)) EmitSfx(SFX_CHARGE,boss->position,1,.78f);
+        if(Crossed(before,t,flightImpact)) EmitSfx(SFX_AREA,boss->position,1,.72f);
         float active=fmaxf(0,fminf(t,flightStop)-fmaxf(before,windup));
         if(active>0) {
             Vector2 origin=boss->position;
@@ -468,8 +500,10 @@ void UpdateNecromancer(EnemyGroup *g,const Clearing *map,Vector2 player,float dt
     } else if(boss->necromancerForm==3) {
         float before=fight->automaticClock;
         fight->automaticClock-=dt;
-        if(before>automaticWarning && fight->automaticClock<=automaticWarning)
+        if(before>automaticWarning && fight->automaticClock<=automaticWarning) {
+            EmitSfxTimed(SFX_MAGIC_WARN,boss->position,automaticWarning);
             fight->automaticAim=player;
+        }
         if(fight->automaticClock<=0) {
             Vector2 dir=Aim(boss->position,fight->automaticAim);
             bool wide=fight->automaticVolley++%2==1;
@@ -485,8 +519,11 @@ void UpdateNecromancer(EnemyGroup *g,const Clearing *map,Vector2 player,float dt
         shot->life-=dt;
         for(int j=0;j<steps && shot->life>0;j++) {
             shot->position=Vector2Add(shot->position,step);
-            if(IsClearingBlocked(map,shot->position)) shot->life=0;
-            else if(Vector2Distance(shot->position,player)<=28) {
+            if(IsClearingBlocked(map,shot->position)) {
+                EmitSfx(SFX_PROJECTILE_HIT,shot->position,.62f,.83f);
+                shot->life=0;
+            } else if(Vector2Distance(shot->position,player)<=28) {
+                EmitSfx(SFX_PROJECTILE_HIT,shot->position,1,.83f);
                 shot->life=0;
                 Hurt(g,boss,dodging,health,shot->damage);
             }
