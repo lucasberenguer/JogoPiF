@@ -1,3 +1,4 @@
+#include "game_input.h"
 #include "guardian_cutscene.h"
 #include "video_settings.h"
 #include "game_text.h"
@@ -582,10 +583,8 @@ void DrawGuardianCutscene(const GuardianCutscene *scene) {
                            (Color){255,240,219,255},GAME_TEXT_CUTSCENE);
             remaining-=letters+1;
         }
-        const char *controls=IsGamepadAvailable(0)
-            ? "A  Completar / avançar    ·    B  Pular    ·    Start  Pausar"
-            : scene->mouseAdvance ? "Espaço / Enter / Clique    ·    Esc  Pular    ·    P  Pausar"
-            : "Espaço / Enter  Completar / avançar    ·    Esc  Pular    ·    P  Pausar";
+        const char *controls=scene->mouseAdvance ? InputHint("Espaço / Enter / Clique    ·    Esc  Pular    ·    P  Pausar", "[Cruz] Avançar  ·  [Círculo] Pular  ·  [Options] Pausar")
+            : InputHint("Espaço / Enter  Completar / avançar    ·    Esc  Pular    ·    P  Pausar", "[Cruz] Avançar  ·  [Círculo] Pular  ·  [Options] Pausar");
         float hintSize=fmaxf(15,18*scale);
         float hintWidth=MeasureGameTextEx(controls,hintSize,GAME_TEXT_CUTSCENE).x;
         DrawGameTextEx(controls,
@@ -612,9 +611,7 @@ void DrawGuardianCutscene(const GuardianCutscene *scene) {
     if (shot->type!=GUARDIAN_DIALOGUE) {
         Rectangle hint={canvas.x+24*scale,canvas.y+680*scale,canvas.width-48*scale,28*scale};
         DrawRectangleRec(hint,Fade(BLACK,.78f));
-        const char *controls=IsGamepadAvailable(0)
-            ? "A  Avançar    ·    B  Pular    ·    Start  Pausar"
-            : "Espaço / Enter  Avançar    ·    Esc  Pular    ·    P  Pausar";
+        const char *controls=InputHint("Espaço / Enter  Avançar    ·    Esc  Pular    ·    P  Pausar", "[Cruz] Avançar  ·  [Círculo] Pular  ·  [Options] Pausar");
         DrawGameTextIn(controls,hint,fmaxf(16,18*scale),(Color){244,226,202,255},GAME_TEXT_CUTSCENE);
     }
     if ((!shot->dialogue[0] || scene->exiting) && shot->fadeOut>0) {

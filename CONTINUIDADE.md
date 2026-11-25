@@ -4,6 +4,7 @@
 
 - Uma seta dourada aparece perto do jogador após 8 segundos de jogo com o mesmo próximo objetivo disponível. Usa os gatilhos das passagens e ajuda a encontrar o altar, os pilares, a carta, a escadaria de Igris e os chefes caídos que ainda aguardam selamento. Na arena final, leva ao selamento do Necromante. A contagem para durante as telas de diálogo, apresentações e pausa e reinicia quando muda o objetivo.
 - A build Release em `out/review` passou nos testes de conectividade, encontro e campanha. A auditoria de desenho confirmou a seta na direção do alvo.
+- Integrada ao suporte a controle de `3abf312`. O HUD mantém a seta e mostra o comando de disparo conforme o dispositivo de entrada. A build Release integrada passou nos dez testes.
 
 ## Balanceamento do Necromante (25/11/2026)
 
@@ -18,6 +19,16 @@
 - Pistola com estalo grave e ação mecânica, Katana com corte metálico e Bíblia com timbre de coro e sino. Seis temas autorais de rock e metal para Guardião, Coveiro, Líder da Vila, Rasga-Ossos, Igris e Necromante. `src/boss_music.c` gera os loops na abertura ou carrega OGGs opcionais. As fases aumentam a intensidade sem voltar ao começo da música. **F10** tem prévia musical com **B**, **P** e **H**. A tabela com estilos e caminhos está em `docs/audio-sfx.md`.
 - Etapa 1 de áudio implementada. Katana, Arma de Fogo, Bíblia, esquiva, inimigos e habilidades de chefes emitem sons nos eventos existentes. `src/sfx_presets.h` define os sons procedurais e os nomes de substituição em `assets/audio/sfx/`. O misturador tem atenuação estéreo, limite de 14 vozes e limitador de pico. Configurações de Áudio têm volume geral e mudo persistentes. **F10** abre o painel de audição.
 - Inventário de habilidades, sons compartilhados e instruções de substituição em `docs/audio-sfx.md`. A build Release em `out/review` abriu e fechou com o áudio ativo. Os dez testes passaram, incluindo os seis loops musicais, transição de volume, pausa, retomada e início da trilha de Igris após a apresentação. Escuta em combate e medição de FPS em horda pendentes.
+
+## Suporte a controle na campanha (25/11/2026)
+
+- Na branch feature/controle-clareira, o combate aceita controle em todos os mapas. Analógico esquerdo move, direito mira, R1/R2 ou RB/RT atacam e L1/L2 ou LB/LT esquivam. Sem mira ativa, o golpe segue a direção do movimento ou mantém a última direção ao parar. Teclado e mouse podem ser usados na mesma sessão.
+- O controle também navega nos menus, na pausa, nas configurações, nos selos e nas recompensas. O botão sul confirma e avança, o botão oeste interage e o botão leste volta. As cutscenes, a derrota e o ranking têm comandos de controle. No ranking, o direcional escolhe letras e Options/Menu salva. As ferramentas de depuração continuam no teclado e mouse.
+- Os avisos acompanham a entrada mais recente e exibem os nomes de PlayStation ou Xbox conforme o controle detectado. O usuário confirmou a versão anterior na Clareira com controle físico. A ampliação foi compilada em out/review e a simulação de troca de entrada, zona morta e rótulos passou. Após integrar os três commits de áudio da main, a build Release passou em nove dos dez testes. guardian_story_flow ultrapassou 360 s após as transições de campanha e os dois fluxos de Igris. O cenário final de derrota de Igris passou em execução isolada com --igris-defeat. A campanha inteira com controle físico segue pendente de validação.
+
+## Golpe do Guardião da Clareira (25/11/2026)
+
+- A animação do golpe corpo a corpo do Guardião da Clareira dura 1,00 s, com impacto aos 0,68 s. A recarga a partir do início do golpe dura 3,80 s na primeira fase e 3,10 s na segunda. A compilação e o teste enemy_audit passaram. clearing_encounter falhou ao validar a leitura da partida salva. As execuções com limite de 25 s de guardian_cutscene e guardian_story_flow excederam esse limite.
 
 ## Remaster de mapas e atmosfera (25/11/2026)
 

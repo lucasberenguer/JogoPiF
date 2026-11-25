@@ -1,4 +1,5 @@
 #include "game_audio.h"
+#include "game_input.h"
 #include "game_text.h"
 #include "enemy.h"
 #include "run_progress.h"
@@ -56,11 +57,11 @@
 #define GUARDIAN_CURSE_TILE_HEIGHT 320
 #define GUARDIAN_MELEE_RANGE 118.0f
 #define GUARDIAN_MELEE_PRESSURE_RANGE 132.0f
-#define GUARDIAN_MELEE_COOLDOWN 4.60f
-#define GUARDIAN_MELEE_ENRAGED_COOLDOWN 3.90f
+#define GUARDIAN_MELEE_COOLDOWN 3.80f
+#define GUARDIAN_MELEE_ENRAGED_COOLDOWN 3.10f
 #define GUARDIAN_MELEE_WINDUP .68f
 #define GUARDIAN_MELEE_ARC_DOT .70710678f
-#define GUARDIAN_MELEE_FPS 10.0f
+#define GUARDIAN_MELEE_FPS 12.5f
 #define GUARDIAN_MELEE_FRAMES 8
 #define GUARDIAN_MELEE_HIT_FRAME 4
 #define GUARDIAN_MELEE_DURATION (GUARDIAN_MELEE_WINDUP + (GUARDIAN_MELEE_FRAMES - GUARDIAN_MELEE_HIT_FRAME) / GUARDIAN_MELEE_FPS)
@@ -2505,7 +2506,7 @@ static void DrawGuardianDefeat(Texture2D texture, const Enemy *enemy) {
         (Rectangle){enemy->position.x, enemy->position.y, 224 * scale, 288 * scale},
         (Vector2){112 * scale, 256 * scale}, 0, WHITE);
     if (enemy->state == ENEMY_FALLEN)
-        DrawGameText("E: selar", (int)enemy->position.x - 30, (int)enemy->position.y + 10, 18, GOLD);
+        DrawGameText(InputHint("E: selar", "[Quadrado]: selar"), (int)enemy->position.x - 30, (int)enemy->position.y + 10, 18, GOLD);
 }
 
 typedef struct ClearingEnemyRow {
@@ -2769,7 +2770,7 @@ static void DrawIgris(const EnemyGroup *group, const Enemy *enemy) {
         if (fallen) DrawBossGroundSeal(group->sealMarker,feet);
         DrawIgrisBody(group->igrisArt[IGRIS_FINAL_FALL],IGRIS_FINAL_FALL,6,4,pose,IgrisRow(enemy->facing),
                       feet,false,0,WHITE);
-        if (fallen) DrawGameText("E: selar",(int)feet.x-30,(int)feet.y+12,18,GOLD);
+        if (fallen) DrawGameText(InputHint("E: selar", "[Quadrado]: selar"),(int)feet.x-30,(int)feet.y+12,18,GOLD);
         return;
     }
     int art = IGRIS_IDLE_ART, columns = 8, facing = enemy->facing;
@@ -2848,7 +2849,7 @@ static void DrawIgris(const EnemyGroup *group, const Enemy *enemy) {
     }
     DrawIgrisBody(group->igrisArt[art],art,columns,4,pose,IgrisRow(facing),
                        feet,flip,fall*72,tint);
-    if (fallen) DrawGameText("E: selar",(int)feet.x-30,(int)feet.y+12,18,GOLD);
+    if (fallen) DrawGameText(InputHint("E: selar", "[Quadrado]: selar"),(int)feet.x-30,(int)feet.y+12,18,GOLD);
 }
 
 static void DrawTemplarKnightPose(Texture2D texture, const Enemy *enemy, Vector2 feet,
@@ -3627,7 +3628,7 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
             (Rectangle){enemy->position.x-38, enemy->position.y-75, 76, 76},
             (Vector2){0},0,tint);
         }
-        if (enemy->state == ENEMY_FALLEN) DrawGameText("E: selar",(int)enemy->position.x-30,(int)enemy->position.y+10,16,GOLD);
+        if (enemy->state == ENEMY_FALLEN) DrawGameText(InputHint("E: selar", "[Quadrado]: selar"),(int)enemy->position.x-30,(int)enemy->position.y+10,16,GOLD);
         if (enemy->type == ENEMY_SPECIAL && enemy->state == ENEMY_ATTACK && enemy->stateTime < SPECIAL_CHARGE_START)
             DrawCircleLines((int)enemy->position.x,(int)enemy->position.y,55,ORANGE);
         if (enemy->health < enemy->maxHealth)

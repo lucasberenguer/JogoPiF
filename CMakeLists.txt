@@ -19,6 +19,7 @@ set(AUDIO_SOURCES src/game_audio.c src/boss_music.c)
 
 set(SOURCES
     src/game.c
+    src/game_input.c
     src/game_text.c
     src/logica.c
     src/dev_tools.c
@@ -71,6 +72,7 @@ if(BUILD_TESTING)
     target_link_libraries(speedrun_test PRIVATE raylib)
     add_test(NAME speedrun COMMAND speedrun_test)
     add_executable(enemy_audit_test tests/enemy_audit_test.c src/enemy.c src/necromancer.c src/cemetery_enemy.c src/village_enemy.c src/clearing.c src/game_text.c)
+    target_sources(enemy_audit_test PRIVATE src/game_input.c)
     target_include_directories(enemy_audit_test PRIVATE src)
     target_sources(enemy_audit_test PRIVATE ${AUDIO_SOURCES})
     target_link_libraries(enemy_audit_test PRIVATE raylib)
@@ -87,6 +89,7 @@ if(BUILD_TESTING)
     target_sources(encounter_test PRIVATE src/hud.c)
     target_sources(encounter_test PRIVATE src/speedrun.c)
     target_sources(encounter_test PRIVATE src/menu_scene.c)
+    target_sources(encounter_test PRIVATE src/game_input.c)
     target_include_directories(encounter_test PRIVATE src)
     target_link_libraries(encounter_test PRIVATE raylib)
     if(WIN32)
@@ -96,6 +99,7 @@ if(BUILD_TESTING)
     add_test(NAME clearing_encounter COMMAND encounter_test)
     set_tests_properties(clearing_encounter PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
     add_executable(guardian_cutscene_test tests/guardian_cutscene_test.c src/guardian_cutscene.c src/game_text.c src/video_settings.c)
+    target_sources(guardian_cutscene_test PRIVATE src/game_input.c)
     target_include_directories(guardian_cutscene_test PRIVATE src)
     target_link_libraries(guardian_cutscene_test PRIVATE raylib)
     set_target_properties(guardian_cutscene_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/audit")

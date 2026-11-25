@@ -1,3 +1,4 @@
+#include "game_input.h"
 #include "game_text.h"
 #include "menu.h"
 #include "speedrun.h"
@@ -93,10 +94,6 @@ static void DrawMenuPanel(Rectangle bounds) {
 static float SmoothRange(float start, float end, float value) {
     float t = fminf(1.0f, fmaxf(0.0f, (value-start)/(end-start)));
     return t*t*(3.0f - 2.0f*t);
-}
-
-static bool PadPressed(int button) {
-    return IsGamepadAvailable(0) && IsGamepadButtonPressed(0, button);
 }
 
 static Texture2D LoadMainButtons(void) {
@@ -454,13 +451,13 @@ static void ChangeVideoOption(int row, int direction) {
 }
 
 static void UpdateVideoSettings(Menu *menu, Vector2 mouse, bool click) {
-    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W) || PadPressed(GAMEPAD_BUTTON_LEFT_FACE_UP))
+    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W) || PadNavigate(GAMEPAD_BUTTON_LEFT_FACE_UP))
         menu->videoFocus = (menu->videoFocus + VIDEO_ROWS - 1) % VIDEO_ROWS;
-    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S) || PadPressed(GAMEPAD_BUTTON_LEFT_FACE_DOWN))
+    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S) || PadNavigate(GAMEPAD_BUTTON_LEFT_FACE_DOWN))
         menu->videoFocus = (menu->videoFocus + 1) % VIDEO_ROWS;
     int direction = (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D) || IsKeyPressed(KEY_ENTER) ||
-                    PadPressed(GAMEPAD_BUTTON_LEFT_FACE_RIGHT) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN)) ? 1 :
-                    (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A) || PadPressed(GAMEPAD_BUTTON_LEFT_FACE_LEFT)) ? -1 : 0;
+                    PadNavigate(GAMEPAD_BUTTON_LEFT_FACE_RIGHT) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN)) ? 1 :
+                    (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A) || PadNavigate(GAMEPAD_BUTTON_LEFT_FACE_LEFT)) ? -1 : 0;
     if (direction) ChangeVideoOption(menu->videoFocus, direction);
     if (!click) return;
     for (int row = 0; row < VIDEO_ROWS; row++) {
@@ -495,11 +492,11 @@ static bool UpdateSettings(Menu *menu) {
     static const AudioChannel previous[] = {
         [AUDIO_MASTER]=AUDIO_EFFECTS, [AUDIO_MUSIC]=AUDIO_MASTER, [AUDIO_EFFECTS]=AUDIO_MUSIC
     };
-    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W))
+    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W) || PadNavigate(GAMEPAD_BUTTON_LEFT_FACE_UP))
         menu->volumeFocus = previous[menu->volumeFocus];
-    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S))
+    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S) || PadNavigate(GAMEPAD_BUTTON_LEFT_FACE_DOWN))
         menu->volumeFocus = next[menu->volumeFocus];
-    if (IsKeyPressed(KEY_M) || (click && CheckCollisionPointRec(mouse,muteButton))) {
+    if (IsKeyPressed(KEY_M) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_UP) || (click && CheckCollisionPointRec(mouse,muteButton))) {
         menu->audio.muted=!menu->audio.muted;
         SaveAudioSettings(&menu->audio);
     }
@@ -521,8 +518,8 @@ static bool UpdateSettings(Menu *menu) {
         Rectangle bar = volumeBars[channel];
         value = (int)roundf(100.0f*(mouse.x-bar.x)/bar.width);
     } else {
-        if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) value -= 5;
-        if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) value += 5;
+        if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A) || PadNavigate(GAMEPAD_BUTTON_LEFT_FACE_LEFT)) value -= 5;
+        if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D) || PadNavigate(GAMEPAD_BUTTON_LEFT_FACE_RIGHT)) value += 5;
     }
     value = (int)fmaxf(0, fminf(100, value));
     if (value != menu->audio.volume[channel]) {
@@ -565,9 +562,10 @@ PauseAction UpdatePauseMenu(Menu *menu) {
     pause->time += dt;
     Vector2 mouse = SettingsMouse(PauseCanvas());
     bool click = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
-    bool escape = IsKeyPressed(KEY_ESCAPE);
+    bool escape = IsKeyPressed(KEY_ESCAPE) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_RIGHT) ||
+                  PadPressed(GAMEPAD_BUTTON_MIDDLE_RIGHT);
     if (pause->page == PAUSE_SETTINGS) {
-        if (UpdateSettings(menu)) pause->page = PAUSE_OPTIONS;
+        if (UpdateSettings(menu) || PadPressed(GAMEPAD_BUTTON_MIDDLE_RIGHT)) pause->page = PAUSE_OPTIONS;
         return PAUSE_NONE;
     }
     if (pause->page != PAUSE_OPTIONS) {
@@ -578,17 +576,18 @@ PauseAction UpdatePauseMenu(Menu *menu) {
     }
     if (escape) return PAUSE_RESUME;
     int previousSelection=pause->selected;
-    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) pause->selected = (pause->selected + 3) % 4;
-    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) pause->selected = (pause->selected + 1) % 4;
+    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W) || PadNavigate(GAMEPAD_BUTTON_LEFT_FACE_UP)) pause->selected = (pause->selected + 3) % 4;
+    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S) || PadNavigate(GAMEPAD_BUTTON_LEFT_FACE_DOWN)) pause->selected = (pause->selected + 1) % 4;
     Vector2 movement = GetMouseDelta();
-    if (click || movement.x != 0 || movement.y != 0) {
+    if (click || (!UsingGamepad() && (movement.x != 0 || movement.y != 0))) {
         for (int i = 0; i < 4; i++)
             if (CheckCollisionPointRec(mouse, PauseButtonBounds(i))) pause->selected = i;
     }
     UpdateButtonFocus(pause->buttonFocus, pause->selected, dt);
     if (previousSelection != pause->selected) PlaySfx(SFX_UI_FOCUS);
     if (click ? !CheckCollisionPointRec(mouse, PauseButtonBounds(pause->selected)) :
-                !IsKeyPressed(KEY_ENTER) && !IsKeyPressed(KEY_SPACE)) return PAUSE_NONE;
+                !IsKeyPressed(KEY_ENTER) && !IsKeyPressed(KEY_SPACE) &&
+                !PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN)) return PAUSE_NONE;
     PlayAudioFeedback(&menu->audio);
     if (pause->selected == 0) return PAUSE_RESUME;
     if (pause->selected == 3) return PAUSE_MAIN_MENU;
@@ -727,7 +726,7 @@ static void DrawVideoSettings(const Menu *menu, Rectangle canvas) {
         DrawGameTextIn(TextFormat("<   %s   >", value), PauseRect(canvas, VideoValue(row)),
                        31*scale, focused ? GOLD : RAYWHITE, GAME_TEXT_BODY);
     }
-    const char *hint = "Setas ou clique alteram  ·  Tab troca de aba";
+    const char *hint = InputHint("Setas ou clique alteram  ·  Tab troca de aba", "Direcional ajusta  ·  L1/R1 troca de aba");
     if (menu->videoFocus == VIDEO_ROW_RENDER)
         hint = "Abaixo de 100%, a imagem fica menos nítida e mais leve";
     if (menu->videoFocus == VIDEO_ROW_LIGHTING)
@@ -744,7 +743,7 @@ static void DrawSettings(const Menu *menu, Rectangle canvas) {
     DrawSettingsTabs(menu, canvas);
     if (menu->settingsTab == 1) {
         DrawVideoSettings(menu, canvas);
-        DrawPauseTextButton(menu, canvas, pauseBack, "Voltar  ·  Esc", 28);
+        DrawPauseTextButton(menu, canvas, pauseBack, InputHint("Voltar  ·  Esc", "Voltar  ·  [Círculo]"), 28);
         return;
     }
     static const char *names[AUDIO_CHANNELS] = {"Música", "Efeitos sonoros", "Volume geral"};
@@ -763,8 +762,8 @@ static void DrawSettings(const Menu *menu, Rectangle canvas) {
             DrawRectangleRec((Rectangle){bar.x,bar.y,filled,bar.height}, focused ? GOLD : ORANGE);
         DrawCircleV((Vector2){bar.x+filled,bar.y+bar.height/2}, 11*scale, focused ? GOLD : RAYWHITE);
     }
-    DrawPauseTextButton(menu, canvas, muteButton, menu->audio.muted ? "Ativar som  ·  M" : "Silenciar  ·  M", 26);
-    DrawPauseTextButton(menu, canvas, pauseBack, "Voltar  ·  Esc", 28);
+    DrawPauseTextButton(menu, canvas, muteButton, menu->audio.muted ? InputHint("Ativar som  ·  M", "Ativar som  ·  [Triângulo]") : InputHint("Silenciar  ·  M", "Silenciar  ·  [Triângulo]"), 26);
+    DrawPauseTextButton(menu, canvas, pauseBack, InputHint("Voltar  ·  Esc", "Voltar  ·  [Círculo]"), 28);
 }
 
 void DrawPauseMenu(const Menu *menu) {
@@ -810,13 +809,13 @@ void DrawPauseMenu(const Menu *menu) {
     }
     Rectangle panel = PauseRect(canvas, (Rectangle){395, 148, 882, 668});
     DrawMenuPanel(panel);
-    DrawPauseTextButton(menu, canvas, pauseBack, "Voltar  ·  Esc", 28);
+    DrawPauseTextButton(menu, canvas, pauseBack, InputHint("Voltar  ·  Esc", "Voltar  ·  [Círculo]"), 28);
     DrawGameTextIn("Controles", PauseRect(canvas, (Rectangle){395, 198, 882, 80}),
                    65*canvas.width/1672.0f, buttonText, GAME_TEXT_TITLE);
-    DrawPauseText(canvas, "WASD  ·  Mover", 331, 37, RAYWHITE);
-    DrawPauseText(canvas, "Espaço / Clique direito  ·  Esquivar com qualquer arma", 400, 34, RAYWHITE);
-    DrawPauseText(canvas, "Clique esquerdo  ·  Atacar ou acelerar a Bíblia", 469, 34, RAYWHITE);
-    DrawPauseText(canvas, "E  ·  Interagir e selar", 538, 37, RAYWHITE);
+    DrawPauseText(canvas, InputHint("WASD  ·  Mover", "Analógico esquerdo  ·  Mover / analógico direito  ·  Mirar"), 331, 37, RAYWHITE);
+    DrawPauseText(canvas, InputHint("Espaço / Clique direito  ·  Esquivar com qualquer arma", "L1/L2  ·  Esquivar com qualquer arma"), 400, 34, RAYWHITE);
+    DrawPauseText(canvas, InputHint("Clique esquerdo  ·  Atacar ou acelerar a Bíblia", "R1/R2  ·  Atacar ou acelerar a Bíblia"), 469, 34, RAYWHITE);
+    DrawPauseText(canvas, InputHint("E  ·  Interagir e selar", "[Quadrado]  ·  Interagir e selar"), 538, 37, RAYWHITE);
 }
 
 static MenuAction BeginMenuDeparture(Menu *m) {
@@ -873,14 +872,14 @@ MenuAction UpdateMenu(Menu *m) {
     }
     if (IsKeyPressed(KEY_ESCAPE)) return MENU_QUIT;
     int previousSelection=m->selected;
-    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S) || PadPressed(GAMEPAD_BUTTON_LEFT_FACE_DOWN))
+    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S) || PadNavigate(GAMEPAD_BUTTON_LEFT_FACE_DOWN))
         m->selected = (m->selected + 1) % MAIN_BUTTON_COUNT;
-    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W) || PadPressed(GAMEPAD_BUTTON_LEFT_FACE_UP))
+    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W) || PadNavigate(GAMEPAD_BUTTON_LEFT_FACE_UP))
         m->selected = (m->selected + MAIN_BUTTON_COUNT - 1) % MAIN_BUTTON_COUNT;
     bool click = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     Vector2 mouse = GetMousePosition();
     Vector2 mouseDelta = GetMouseDelta();
-    if (click || mouseDelta.x != 0.0f || mouseDelta.y != 0.0f) {
+    if (click || (!UsingGamepad() && (mouseDelta.x != 0.0f || mouseDelta.y != 0.0f))) {
         for (int i = 0; i < MAIN_BUTTON_COUNT; i++)
             if (CheckCollisionPointRec(mouse, MainButtonBounds(m, i))) m->selected = i;
     }
@@ -990,7 +989,7 @@ void DrawMenu(const Menu *m) {
             DrawGameTextIn(timeText,(Rectangle){panel.x+w*.62f,panel.y+66+i*rowHeight,w*.38f-16,rowHeight},
                            (int)fminf(24.0f,rowHeight*.78f),color,GAME_TEXT_BODY);
         }
-        DrawGameTextIn("L ou Esc: voltar",(Rectangle){panel.x+16,panel.y+panel.height-48,w-32,32},
+        DrawGameTextIn(InputHint("L ou Esc: voltar", "[Círculo] ou [Share]: voltar"),(Rectangle){panel.x+16,panel.y+panel.height-48,w-32,32},
                        20,LIGHTGRAY,GAME_TEXT_BODY);
         return;
     }
@@ -1012,8 +1011,12 @@ void DrawMenu(const Menu *m) {
             DrawGameTextIn(hint, (Rectangle){notice.x+8,notice.y+4,notice.width-16,notice.height-8},
                            18, RAYWHITE, GAME_TEXT_BODY);
         }
-        DrawGameTextIn("L: Ranking de speedrun", (Rectangle){16, GetScreenHeight()-48, 230, 30},
+        DrawGameTextIn(InputHint("L: Ranking de speedrun", "[Share]: ranking de speedrun"), (Rectangle){16, GetScreenHeight()-48, 230, 30},
                        18, buttonText, GAME_TEXT_BODY);
+        if (UsingGamepad())
+            DrawGameTextIn(InputHint("", "Direcional: navegar  ·  [Cruz]: confirmar"),
+                           (Rectangle){16, GetScreenHeight()-79, 300, 30},
+                           18, buttonText, GAME_TEXT_BODY);
         DrawMainMenuShortcut("Capela Invertida", TestInvertedChapelButtonBounds());
         DrawMainMenuShortcut("Capela", TestChapelButtonBounds());
         DrawMainMenuShortcut("Teste", TestButtonBounds());
@@ -1067,7 +1070,7 @@ void DrawMenu(const Menu *m) {
         DrawGameTextIn("Áudio · TheNikonProductions, falcospizaetus e Merrick079 (Freesound)",
                        (Rectangle){panel.x+12,bottom+4,pw-24,22},
                        (int)fminf(17.0f,pw/35.0f),LIGHTGRAY,GAME_TEXT_BODY);
-        DrawGameTextIn("Esc: voltar",(Rectangle){panel.x+12,panel.y+ph-37,pw-24,30},
+        DrawGameTextIn(InputHint("Esc: voltar", "[Círculo]: voltar"),(Rectangle){panel.x+12,panel.y+ph-37,pw-24,30},
                        20,LIGHTGRAY,GAME_TEXT_BODY);
         return;
     }
@@ -1076,6 +1079,6 @@ void DrawMenu(const Menu *m) {
     DrawGameTextEx("Nova Partida", (Vector2){p.x+50,p.y+34},
                    42, buttonText, GAME_TEXT_TITLE);
     DrawGameText("Substituir o progresso salvo?",(int)p.x+50,(int)p.y+105,25,RAYWHITE);
-    DrawGameText("Enter: confirmar",(int)p.x+50,(int)p.y+155,22,RAYWHITE);
-    DrawGameText("Esc: voltar",(int)p.x+50,(int)p.y+218,22,RAYWHITE);
+    DrawGameText(InputHint("Enter: confirmar", "[Cruz]: confirmar"),(int)p.x+50,(int)p.y+155,22,RAYWHITE);
+    DrawGameText(InputHint("Esc: voltar", "[Círculo]: voltar"),(int)p.x+50,(int)p.y+218,22,RAYWHITE);
 }

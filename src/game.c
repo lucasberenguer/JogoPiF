@@ -1,3 +1,4 @@
+#include "game_input.h"
 #include "game_text.h"
 #include "raylib.h"
 #include "raymath.h"
@@ -325,16 +326,20 @@ int main(void) {
     bool speedrunRecorded=false;
     bool speedrunNamePending=false;
     char speedrunName[SPEEDRUN_NAME_BYTES]={0};
-    int speedrunNameBytes=0, speedrunNameChars=0;
+    int speedrunNameBytes=0, speedrunNameChars=0, speedrunLetter=0;
+    const char speedrunAlphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -";
     double completedRunTime=0;
     const float entryFadeDuration = 1.15f;
     float entryFadeRemaining = 0.0f;
     InitAtmosphere();
+    Vector2 gamepadAimDirection = {0};
 
     bool audioDebug=false;
     int audioMap=ClearingMapId(&clearing), audioHealth=playerHealth;
     bool audioWasInRun=false;
     while (!WindowShouldClose()) {
+        UpdateGameInput();
+        bool gamepadAiming = UsingGamepad();
         bool gesture=GetGamepadButtonPressed()>0 || IsMouseButtonPressed(MOUSE_BUTTON_LEFT) ||
             IsMouseButtonPressed(MOUSE_BUTTON_RIGHT);
         if (!menu.audio.unlocked && !gesture) {
@@ -752,11 +757,18 @@ int main(void) {
             speedrunNamePending=true;
             completedRunTime=SpeedrunTime();
             speedrunName[0]=0;
-            speedrunNameBytes=speedrunNameChars=0;
+            speedrunNameBytes=speedrunNameChars=speedrunLetter=0;
         }
         if (speedrunNamePending) {
-            int codepoint;
-            while ((codepoint=GetCharPressed())!=0) {
+            const int alphabetSize = (int)sizeof(speedrunAlphabet) - 1;
+            int step = (int)PadNavigate(GAMEPAD_BUTTON_LEFT_FACE_RIGHT) -
+                       (int)PadNavigate(GAMEPAD_BUTTON_LEFT_FACE_LEFT) +
+                       6 * ((int)PadNavigate(GAMEPAD_BUTTON_LEFT_FACE_DOWN) -
+                            (int)PadNavigate(GAMEPAD_BUTTON_LEFT_FACE_UP));
+            speedrunLetter = (speedrunLetter + step + alphabetSize) % alphabetSize;
+            int codepoint = PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN) ?
+                            speedrunAlphabet[speedrunLetter] : GetCharPressed();
+            for (; codepoint != 0; codepoint = GetCharPressed()) {
                 if (codepoint<32 || codepoint>255 || (codepoint>=127 && codepoint<160) ||
                     speedrunNameChars>=24) continue;
                 int utf8Size=0;
@@ -767,7 +779,7 @@ int main(void) {
                 speedrunName[speedrunNameBytes]=0;
                 speedrunNameChars++;
             }
-            if (IsKeyPressed(KEY_BACKSPACE) && speedrunNameBytes>0) {
+            if ((IsKeyPressed(KEY_BACKSPACE) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_LEFT)) && speedrunNameBytes>0) {
                 do {speedrunNameBytes--;} while (speedrunNameBytes>0 &&
                     ((unsigned char)speedrunName[speedrunNameBytes]&0xC0)==0x80);
                 speedrunName[speedrunNameBytes]=0;
@@ -776,7 +788,12 @@ int main(void) {
             bool hasName=false;
             for (int i=0;i<speedrunNameBytes;i++)
                 if (speedrunName[i]!=' ') {hasName=true;break;}
-            if (hasName && IsKeyPressed(KEY_ENTER)) {
+            if (PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_RIGHT)) {
+                speedrunNamePending=false;
+                screen=0;
+                continue;
+            }
+            if (hasName && (IsKeyPressed(KEY_ENTER) || PadPressed(GAMEPAD_BUTTON_MIDDLE_RIGHT))) {
                 if (SpeedrunRecord(&speedrunBoard,completedRunTime,speedrunName))
                     speedrunNamePending=false;
                 else TraceLog(LOG_WARNING,"Nao foi possivel salvar o nome da run");
@@ -793,22 +810,28 @@ int main(void) {
                                48,GOLD,GAME_TEXT_TITLE);
                 DrawGameTextIn(timeText,(Rectangle){panel.x+12,panel.y+panel.height*.24f,panel.width-24,panel.height*.15f},
                                38,RAYWHITE,GAME_TEXT_BODY);
-                DrawGameTextIn("Nome de quem concluiu a run",(Rectangle){panel.x+12,panel.y+panel.height*.42f,panel.width-24,panel.height*.12f},
+                const char *namePrompt = "Nome de quem concluiu a run";
+                if (UsingGamepad())
+                    namePrompt = speedrunAlphabet[speedrunLetter] == ' '
+                        ? "Direcional: escolher  ‹ espaço ›"
+                        : TextFormat("Direcional: escolher  ‹ %c ›", speedrunAlphabet[speedrunLetter]);
+                DrawGameTextIn(namePrompt,(Rectangle){panel.x+12,panel.y+panel.height*.42f,panel.width-24,panel.height*.12f},
                                27,RAYWHITE,GAME_TEXT_BODY);
                 Rectangle input={panel.x+panel.width*.1f,panel.y+panel.height*.56f,panel.width*.8f,panel.height*.16f};
                 DrawRectangleRec(input,Fade(BLACK,.65f));
                 DrawRectangleLinesEx(input,2,GOLD);
-                DrawGameTextIn(speedrunNameBytes?speedrunName:"Digite seu nome",
+                DrawGameTextIn(speedrunNameBytes?speedrunName:InputHint("Digite seu nome", "Escolha as letras com o direcional"),
                                (Rectangle){input.x+8,input.y+3,input.width-16,input.height-6},
                                30,speedrunNameBytes?RAYWHITE:LIGHTGRAY,GAME_TEXT_BODY);
-                DrawGameTextIn("Enter: salvar  |  Backspace: apagar",
+                DrawGameTextIn(InputHint("Enter: salvar  |  Backspace: apagar", "[Cruz]: inserir  ·  [Quadrado]: apagar  ·  [Options]: salvar  ·  [Círculo]: sair"),
                                (Rectangle){panel.x+12,panel.y+panel.height*.78f,panel.width-24,panel.height*.12f},
                                22,LIGHTGRAY,GAME_TEXT_BODY);
             EndGameFrame();
             continue;
         }
         if (clearing.necromancerArena && encounter.phase==ENCOUNTER_CLEAR &&
-            encounter.presentation.remaining<=0 && IsKeyPressed(KEY_ENTER)) {
+            encounter.presentation.remaining<=0 &&
+            (IsKeyPressed(KEY_ENTER) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN))) {
             screen=0;
             continue;
         }
@@ -855,12 +878,13 @@ int main(void) {
             Rectangle backToMenu = {centerX + btnGap * 0.5f, btnY, btnWidth, btnHeight};
             bool hoverRetry = CheckCollisionPointRec(GetMousePosition(), retry);
             bool hoverMenu = CheckCollisionPointRec(GetMousePosition(), backToMenu);
-            if (!restartImmediately && (IsKeyPressed(KEY_ESCAPE) ||
+            if (!restartImmediately && (IsKeyPressed(KEY_ESCAPE) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_RIGHT) ||
                 (hoverMenu && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)))) {
                 screen = 0;
                 continue;
             }
             if (restartImmediately || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_R) ||
+                PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN) ||
                 (hoverRetry && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))) {
                 devTools.map=CLEARING_MAP;
                 devTools.wave=1;
@@ -891,7 +915,7 @@ int main(void) {
             DrawRectangleLinesEx(backToMenu,2,GOLD);
             DrawGameTextIn("Voltar ao Menu", (Rectangle){backToMenu.x + 12.0f, backToMenu.y + 8.0f, backToMenu.width - 24.0f, backToMenu.height - 16.0f},
                            32.0f, RAYWHITE, GAME_TEXT_TITLE);
-            DrawGameTextIn("Enter ou R: nova tentativa  |  Esc: voltar ao menu",
+            DrawGameTextIn(InputHint("Enter ou R: nova tentativa  |  Esc: voltar ao menu", "[Cruz]: nova tentativa  |  [Círculo]: menu"),
                            (Rectangle){0.0f, btnY + btnHeight + 24.0f, sw, 28.0f},
                            18.0f, LIGHTGRAY, GAME_TEXT_BODY);
             EndGameFrame();
@@ -899,7 +923,8 @@ int main(void) {
         }
         /* Ao trocar de janela (Alt+Tab, Cmd+Tab etc.), a partida pausa sozinha. */
         bool lostFocus = screen == 2 && !IsWindowFocused();
-        if (screen == 3 || IsKeyPressed(KEY_ESCAPE) || lostFocus) {
+        if (screen == 3 || IsKeyPressed(KEY_ESCAPE) ||
+            PadPressed(GAMEPAD_BUTTON_MIDDLE_RIGHT) || lostFocus) {
             if (screen == 3) {
                 PauseAction action = UpdatePauseMenu(&menu);
                 if (action == PAUSE_RESUME) screen = 2;
@@ -1073,7 +1098,7 @@ int main(void) {
         bool nearPedestal = encounter.progress.map == 0 &&
             CheckCollisionPointCircle(player, clearing.pedestal, CLEARING_ALTAR_RADIUS);
         bool altarOpen = ClearingAltarOpen(&encounter, &clearing);
-        bool interactPressed = IsKeyPressed(KEY_E);
+        bool interactPressed = IsKeyPressed(KEY_E) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_LEFT);
         encounter.progress.health=playerHealth;
         if (!entering && playerHealth>0 && BeginGuardianPassage(&encounter,&clearing,player,interactPressed)) {
             PlaySfx(SFX_DOOR);
@@ -1170,14 +1195,35 @@ int main(void) {
             }
         }
         bool grabbed = IgrisHoldingPlayer(&enemies);
+        bool combatGamepad = IsGamepadAvailable(0);
+        Vector2 padMove = {0}, padAim = {0};
+        bool padAttack = false, padDash = false;
+        if (combatGamepad && !entering && !grabbed) {
+            padMove = PadStick(GAMEPAD_AXIS_LEFT_X, GAMEPAD_AXIS_LEFT_Y);
+            padAim = PadStick(GAMEPAD_AXIS_RIGHT_X, GAMEPAD_AXIS_RIGHT_Y);
+            padAttack = IsGamepadButtonPressed(0, GAMEPAD_BUTTON_RIGHT_TRIGGER_1) ||
+                        IsGamepadButtonPressed(0, GAMEPAD_BUTTON_RIGHT_TRIGGER_2);
+            padDash = IsGamepadButtonPressed(0, GAMEPAD_BUTTON_LEFT_TRIGGER_1) ||
+                      IsGamepadButtonPressed(0, GAMEPAD_BUTTON_LEFT_TRIGGER_2);
+        }
+        bool mouseAttack = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+        bool attackPressed = mouseAttack || padAttack;
+        gamepadAiming = !mouseAttack && (gamepadAiming || padAttack);
+        if (Vector2LengthSqr(padAim) > 0.0f)
+            gamepadAimDirection = Vector2Normalize(padAim);
+        else if (Vector2LengthSqr(padMove) > 0.0f)
+            gamepadAimDirection = Vector2Normalize(padMove);
+        Vector2 combatAim = Vector2LengthSqr(gamepadAimDirection) > 0.0f
+            ? gamepadAimDirection : FacingVector(facing);
+
         bool dodgePressed = !entering && !grabbed && (IsKeyPressed(KEY_SPACE) ||
-                            IsMouseButtonPressed(MOUSE_BUTTON_RIGHT));
+                            IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) || padDash);
         bool bibleActivationStarted = false;
         if (currentWeapon == WEAPON_BIBLE) {
             float previousActivation = bible.activationRemaining;
             UpdateBible(&bible, entering ? 0.0f : deltaTime,
                         !entering && !grabbed && dodgeRemaining <= 0.0f && !dodgePressed &&
-                        IsMouseButtonPressed(MOUSE_BUTTON_LEFT),
+                        attackPressed,
                         weaponLevel, !entering && EnemiesRemaining(&enemies) > 0, player);
             bibleActivationStarted = previousActivation <= 0.0f &&
                                      bible.activationRemaining > 0.0f;
@@ -1187,12 +1233,16 @@ int main(void) {
             entering || grabbed ? 0.0f : (float) IsKeyDown(KEY_D) - (float) IsKeyDown(KEY_A),
             entering || grabbed ? 0.0f : (float) IsKeyDown(KEY_S) - (float) IsKeyDown(KEY_W)
         };
+        if (Vector2LengthSqr(direction) > 0.0f)
+            direction = Vector2Normalize(direction);
+        else
+            direction = padMove;
         if (!entering && !grabbed && currentWeapon == WEAPON_KATANA &&
-            IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+            attackPressed &&
             katanaAttackCooldown <= 0.0f && dodgeRemaining <= 0.0f) {
             Vector2 cursor = GetScreenToWorld2D(GetMousePosition(), camera);
             Vector2 aim = Vector2Subtract(cursor, (Vector2){player.x, player.y - 35.0f});
-            katanaAttackDirection = Vector2LengthSqr(aim) > 0.0001f
+            katanaAttackDirection = gamepadAiming ? combatAim : Vector2LengthSqr(aim) > 0.0001f
                 ? Vector2Normalize(aim) : FacingVector(facing);
             katanaAttackFacing = fabsf(katanaAttackDirection.x) >= fabsf(katanaAttackDirection.y)
                 ? (katanaAttackDirection.x < 0.0f ? 2 : 3)
@@ -1258,7 +1308,6 @@ int main(void) {
             dodgePose = Clamp(progress * dodgeFrameCount,0,dodgeFrameCount-1);
             if (Vector2DistanceSqr(previous, player) < 0.01f) dodgeRemaining = 0.0f;
         } else if (Vector2LengthSqr(direction) > 0.0f) {
-            direction = Vector2Normalize(direction);
             MoveNecromancerPlayer(&enemies, &clearing, &player,
                                   Vector2Scale(direction, playerSpeed * deltaTime));
         }
@@ -1291,7 +1340,9 @@ int main(void) {
             walkLean = Lerp(walkLean, targetLean, 1.0f - expf(-16.0f * deltaTime));
         }
         if (currentWeapon == WEAPON_GUN) {
-            Vector2 aimWorld = GetScreenToWorld2D(GetMousePosition(), camera);
+            Vector2 aimWorld = gamepadAiming
+                ? Vector2Add((Vector2){player.x, player.y - 35.0f}, Vector2Scale(combatAim, 100.0f))
+                : GetScreenToWorld2D(GetMousePosition(), camera);
             Vector2 aimDelta = {aimWorld.x - player.x, aimWorld.y - (player.y - 35.0f)};
             if (!entering && !dodging) {
                 if (Vector2LengthSqr(aimDelta) > 4.0f)
@@ -1304,7 +1355,7 @@ int main(void) {
             float previousPose = gun.poseRemaining;
             UpdateGun(&gun, &clearing, player, aimWorld,
                       entering ? 0.0f : deltaTime,
-                      !entering && !grabbed && !dodging && IsMouseButtonPressed(MOUSE_BUTTON_LEFT),
+                      !entering && !grabbed && !dodging && attackPressed,
                       weaponLevel);
             if (gun.poseRemaining > previousPose) gunAttackFacing = gunAimFacing;
         }
@@ -1601,11 +1652,11 @@ int main(void) {
             DrawWorldFrame(camera, &scene);
 
             DrawRectangle(12, 12, 490, 130, Fade(BLACK, 0.72f));
-            DrawGameText("WASD: mover  |  Espaço/botão direito: esquiva", 24, 23, 17, RAYWHITE);
-            DrawGameText("F1: ferramentas | F3: colisão | Esc: pausa", 24, 76, 17, RAYWHITE);
-            DrawGameText("F4/F5: testar dano e cura", 24, 104, 17, RAYWHITE);
+            DrawGameText(InputHint("WASD: mover  |  Espaço/botão direito: esquiva", "Analógico esquerdo: mover  |  L1/L2: dash"), 24, 23, 17, RAYWHITE);
+            DrawGameText(InputHint("F1: ferramentas | F3: colisão | Esc: pausa", "Analógico direito: mirar  |  [Options]: pausa"), 24, 76, 17, RAYWHITE);
+            if (!UsingGamepad()) DrawGameText("F4/F5: testar dano e cura", 24, 104, 17, RAYWHITE);
             if (altarOpen) {
-                DrawGameText(nearPedestal ? "E: Interagir com o Altar Antigo"
+                DrawGameText(nearPedestal ? InputHint("E: Interagir com o Altar Antigo", "[Quadrado]: interagir com o Altar Antigo")
                                       : "Investigue o altar da clareira",
                          24, 53, 18, GOLD);
             } else if (pedestalMessageTime > 0.0f) {
@@ -1619,10 +1670,10 @@ int main(void) {
                     : (clearing.templarField ? (clearing.exitLocked ? "Derrote Igris para liberar a escadaria"
                         : "Suba ao Topo do Palácio") : clearing.necromancerArena ? "Topo do Palácio" : clearing.boneland ? "Terra dos Ossos"
                         : clearing.invertedChapel ? "Capela Invertida - saída ao sul"
-                        : (clearing.basement ? "Porão da Capela (E nas placas da parede e nos 4 pilares)"
+                        : (clearing.basement ? InputHint("Porão da Capela (E nas placas da parede e nos 4 pilares)", "Porão da Capela ([Quadrado] nas placas e pilares)")
                         : (clearing.chapel ? (encounter.chapelAltarDone
                             ? "Capela do Anjo - porta superior esquerda aberta para o Porão"
-                            : "Capela do Anjo (E perto do altar / estátuas / trono)")
+                            : InputHint("Capela do Anjo (E perto do altar / estátuas / trono)", "Capela do Anjo ([Quadrado] no altar, estátuas e trono)"))
                         : (clearing.village ? "Chã da Tristeza"
                         : (clearing.cemetery ? "Cemitério das Raízes" : "Explore a clareira"))))),
                     24, 53, 18, RAYWHITE);
@@ -1632,14 +1683,14 @@ int main(void) {
             DrawGameText(TextFormat("Arma: %s", WeaponName((Weapon)currentWeapon)),
                      24, 150, 19, GOLD);
             if (currentWeapon == WEAPON_KATANA)
-                DrawGameText("Clique esquerdo: corte de katana", 24, 176, 18, RAYWHITE);
+                DrawGameText(InputHint("Clique esquerdo: corte de katana", "R1/R2: corte de katana"), 24, 176, 18, RAYWHITE);
             if (currentWeapon == WEAPON_BIBLE)
                 DrawGameText(bible.boostCooldown <= 0.0f
-                             ? "Clique esquerdo: acelerar órbitas"
+                             ? InputHint("Clique esquerdo: acelerar órbitas", "R1/R2: acelerar órbitas")
                              : TextFormat("Aceleração: %.1f s", bible.boostCooldown),
                          24, 176, 18, RAYWHITE);
             if (currentWeapon == WEAPON_GUN)
-                DrawGameText("Clique esquerdo: disparar (um tiro por clique)", 24, 176, 18, RAYWHITE);
+                DrawGameText(InputHint("Clique esquerdo: disparar (um tiro por clique)", "R1/R2: disparar (um tiro por aperto)"), 24, 176, 18, RAYWHITE);
             if (showMapGuide) DrawMapGuideArrow(camera,player,encounter.guideTarget);
             DrawEncounter(&encounter,&enemies);
             DrawAtmospherePanel(&clearing);
