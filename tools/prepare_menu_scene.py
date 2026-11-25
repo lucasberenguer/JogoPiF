@@ -7,10 +7,12 @@ from pathlib import Path
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw
+from menu_environment import cloth_atlases, plant_atlases, write_wind
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / "assets" / "menu"
 SOURCES = ROOT / "design" / "menu_animado" / "fontes"
+REFINEMENT = SOURCES.parent / "refinamento"
 W, H = 1672, 941
 Y, X = np.mgrid[:H, :W]
 LAYERS = []
@@ -32,7 +34,8 @@ def grow(mask, amount, shape=cv2.MORPH_ELLIPSE):
     return cv2.dilate(mask, cv2.getStructuringElement(shape, (2*amount+1,)*2))
 
 
-def atlas(name, frames, position=(0, 0), *, period=0, drift=(0, 0), alpha=1, delay=0, kind='n'):
+def atlas(name, frames, position=(0, 0), *, period=0, drift=(0, 0), alpha=1, delay=0,
+          kind='n', start=0, duration=0):
     h, w = frames[0].shape[:2]
     columns = min(len(frames), max(1, 1920//w), 8)
     sheet = Image.new('RGBA', (columns*w, math.ceil(len(frames)/columns)*h))
@@ -49,7 +52,8 @@ def atlas(name, frames, position=(0, 0), *, period=0, drift=(0, 0), alpha=1, del
     LAYERS.append(dict(path=f'{name}.png', kind=kind, x=position[0], y=position[1], width=w, height=h,
                        columns=columns, frames=len(frames), period=period, driftX=drift[0],
                        driftY=drift[1], opacity=alpha, delay=delay, pivot=[w//2,h//2],
-                       fps=len(frames)/period if period else 0, loop=bool(period), order=len(LAYERS)))
+                       fps=len(frames)/(duration or period) if period else 0,
+                       start=start, duration=duration, loop=bool(period and not duration), order=len(LAYERS)))
 
 
 def cut(rgb, mask, box):
@@ -86,10 +90,12 @@ def motion_part(name, art, mask, box, count, period, **motion):
     atlas(name, flexible(sprite,count,**motion), box[:2], period=period, delay=.22)
 
 
-def morph_keys(keys, count):
+def morph_keys(keys, count, contours=False):
     # Both flows reference adjacent key drawings. Crossfade in premultiplied space.
     n = len(keys)
     gray = [cv2.cvtColor(k, cv2.COLOR_RGBA2GRAY) * (k[:,:,3] > 30) for k in keys]
+    if contours:
+        gray = [cv2.addWeighted(luma,.61,key[:,:,3],.39,0) for luma,key in zip(gray,keys)]
     y,x = np.mgrid[:keys[0].shape[0],:keys[0].shape[1]].astype(np.float32)
     flow = {}
     for a in range(n-1):
@@ -105,6 +111,10 @@ def morph_keys(keys, count):
         two = cv2.remap(keys[a+1],x-(1-t)*ba[:,:,0],y-(1-t)*ba[:,:,1],cv2.INTER_NEAREST).astype(np.float32)
         alpha = (1-t)*one[:,:,3]+t*two[:,:,3]
         rgb = ((1-t)*one[:,:,:3]*one[:,:,3,None]+t*two[:,:,:3]*two[:,:,3,None])/np.maximum(alpha[:,:,None],1)
+        if contours:
+            # Let the illuminated edges develop inside the morph instead of multiplying a static tint.
+            roll = (.5+.5*np.sin(x*.024-y*.041-i*math.tau/count))*np.clip((x/x.shape[1])**.7,.15,1)
+            rgb = np.clip(rgb + roll[:,:,None]*np.array([13,1,3]),0,255)
         frames.append(rgba(rgb.astype(np.uint8),alpha))
     return frames
 
@@ -112,10 +122,24 @@ def morph_keys(keys, count):
 def weather():
     im = Image.open(SOURCES/'clima.png').convert('RGBA')
     width,height = im.size
+    cloud_sheet = Image.open(REFINEMENT/'nuvens_chaves.png').convert('RGBA')
+    for row,(name,pos,size,period,drift,strength,count) in enumerate([
+        ('veu_distante',(319,237),(480,122),36,(23,3),.46,36),
+        ('frente_intermediaria',(581,343),(500,144),28,(43,5),.36,40),
+        ('banco_proximo',(68,320),(420,145),22,(66,7),.31,44),
+    ]):
+        y0,y1 = [(116,314),(347,554),(556,837)][row]
+        keys=[]
+        for col in range(6):
+            x0,x1=(col*cloud_sheet.width)//6,((col+1)*cloud_sheet.width)//6
+            tile = cloud_sheet.crop((x0,y0,x1,y1))
+            key = np.array(tile.resize(size,Image.Resampling.NEAREST))
+            edge = np.minimum(np.arange(size[0]),np.arange(size[0])[::-1])/15
+            key[:,:,3] = np.where(key[:,:,3]>24,key[:,:,3]*np.clip(edge,0,1),0)
+            keys.append(key)
+        atlas('background/clouds_refinadas/'+name,morph_keys(keys,count,contours=True),pos,
+              period=period,drift=drift,alpha=strength,delay=.5,kind='h')
     specs = [
-        ('background/clouds/distantes',0,(289,230),(360,155),26,(31,3),.34),
-        ('background/clouds/intermediarias',1,(610,345),(410,145),20,(48,9),.24),
-        ('background/clouds/proximas',2,(78,348),(380,113),16,(62,7),.25),
         ('atmosphere/fog/distante',2,(693,580),(470,115),24,(54,8),.20),
         ('atmosphere/fog/intermediaria',2,(493,702),(480,138),20,(72,12),.25),
         ('atmosphere/fog/proxima',2,(945,757),(530,165),16,(91,11),.26),
@@ -369,7 +393,7 @@ def main():
     motion_part('characters/necromancer/robe',art,robe,(1297,279,1437,414),32,7.8,
                 anchor=(67,10),sway=4.3,lift=1.6,root='top')
     for name,box,mask in [('degraus',(755,380,1441,823),stairs),('ruinas',(1438,104,W,436),pillars),
-                          ('capa',(273,650,468,803),cape),('atmosfera',(541,473,1186,739),np.full((H,W),255,np.uint8))]:
+                          ('atmosfera',(541,473,1186,739),np.full((H,W),255,np.uint8))]:
         relevant=((red>100)&(red>green+42)).astype(np.uint8)*mask
         glow=rgba(np.full(art.shape,[247,59,68],np.uint8), relevant*.12)
         atlas('atmosphere/lighting/'+name,[glow[box[1]:box[3],box[0]:box[2]]],box[:2],kind='l',delay=.5)
@@ -377,28 +401,11 @@ def main():
                 anchor=(63,165),sway=.75,lift=1.8,root='bottom')
     motion_part('characters/protagonist/clothes',art,hems,(379,737,480,824),16,4.4,
                 anchor=(53,11),sway=1.6,lift=1.4,root='top')
-    motion_part('characters/protagonist/cape',art,cape,(261,638,475,812),32,4.4,
-                anchor=(190,70),sway=9,lift=11,root='left')
+    cloth_atlases(art,cape,REFINEMENT/'capa_chaves.png',atlas)
     motion_part('characters/protagonist/hair',art,hair,(407,638,473,686),16,4.4,
                 anchor=(42,39),sway=2.6,lift=2.5,root='bottom')
     atlas('foreground/ruins/primeiro_plano',[rgba(clean,front)],delay=0)
-    vine_box=(109,0,336,189)
-    motion_part('vegetation/vines/arco',art,vine_mask,vine_box,16,4.4,anchor=(90,31),sway=3,lift=1,root='top')
-    # Eight isolated foreground shapes cut from the original silhouette.
-    for i,(x,y,w,h) in enumerate([(502,849,77,47),(580,847,55,53),(642,865,53,41),(697,869,61,48),
-                                  (756,891,53,37),(814,895,38,40),(903,893,76,48),(966,905,54,36)]):
-        mask=np.where((red<42)&(green<29),grass,0).astype(np.uint8)
-        box=(x,y,x+w,min(H,y+h))
-        part=cut(art,mask,box)
-        if not part[:,:,3].any():
-            root=w//2
-            leaf=Image.new('RGBA',(w,box[3]-y))
-            draw=ImageDraw.Draw(leaf)
-            for j in range(3+i%3):
-                draw.line(((root,h-2),(root-3-j*2,h-8-j*2),(root-7-j*3,h-11-j*3)),fill=(29,15,26,220),width=2)
-            part=np.array(leaf)
-        atlas(f'vegetation/grass/tufo_{i+1:02}', flexible(part,14,anchor=(w/2,h-5),sway=2.8,lift=1.1,
-              root='bottom',rate=i+1),box[:2],period=3.8+i*.19)
+    plant_atlases(art,vine_mask,REFINEMENT/'vegetacao_chaves.png',atlas)
     lights(False)
 
     title_box=(391,19,1205,282)
@@ -427,9 +434,10 @@ def main():
     metadata=ASSETS/'metadata'
     metadata.mkdir(parents=True,exist_ok=True)
     (metadata/'layers.json').write_text(json.dumps({'reference':[W,H],'layers':LAYERS},indent=2),encoding='utf8')
-    keys='path kind x y width height columns frames period driftX driftY opacity delay'.split()
+    keys='path kind x y width height columns frames period driftX driftY opacity delay start duration'.split()
     (metadata/'layers.txt').write_text('# '+' '.join(keys)+'\n'+'\n'.join(' '.join(str(row[k]) for k in keys) for row in LAYERS)+'\n',encoding='ascii')
     buttons()
+    write_wind(metadata/'vento.txt')
     print(f'{len(LAYERS)} layers, {sum(layer["frames"] for layer in LAYERS if layer["frames"]>1)} animation frames')
 
 

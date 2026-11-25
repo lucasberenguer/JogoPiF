@@ -1,27 +1,308 @@
 #include "game_input.h"
 #include "raymath.h"
 #include <ctype.h>
+#include <stdio.h>
 #include <string.h>
+
+#ifdef PIF_GLFW_ARCADE
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
+#endif
+
+enum { ARCADE_KEY = 1, ARCADE_BUTTON, ARCADE_AXIS, ARCADE_HAT };
+enum { ARCADE_AXES = 32, ARCADE_BUTTONS = 128, ARCADE_HATS = 8, ARCADE_DEVICES = 16 };
+enum { ARCADE_REQUIRED = 8, ARCADE_ACTIONS = 9 };
+typedef struct { int type, index, direction; } ArcadeBinding;
+typedef struct {
+    char guid[33];
+    ArcadeBinding bindings[ARCADE_ACTIONS];
+} ArcadeProfile;
+typedef struct {
+    char guid[33];
+    float axes[ARCADE_AXES];
+    unsigned char buttons[ARCADE_BUTTONS], hats[ARCADE_HATS];
+} ArcadeDevice;
+
+static const int arcadeButtons[ARCADE_ACTIONS] = {
+    GAMEPAD_BUTTON_LEFT_FACE_UP, GAMEPAD_BUTTON_LEFT_FACE_RIGHT,
+    GAMEPAD_BUTTON_LEFT_FACE_DOWN, GAMEPAD_BUTTON_LEFT_FACE_LEFT,
+    GAMEPAD_BUTTON_RIGHT_FACE_DOWN, GAMEPAD_BUTTON_RIGHT_FACE_RIGHT,
+    GAMEPAD_BUTTON_RIGHT_FACE_LEFT, GAMEPAD_BUTTON_MIDDLE_RIGHT,
+    GAMEPAD_BUTTON_RIGHT_FACE_UP
+};
+static const char *const arcadePrompts[ARCADE_ACTIONS] = {
+    "Mova a alavanca para cima", "Mova a alavanca para a direita",
+    "Mova a alavanca para baixo", "Mova a alavanca para a esquerda",
+    "Pressione o botão de ataque / confirmar", "Pressione o botão de esquiva / voltar",
+    "Pressione o botão de interação", "Pressione o botão Start / pausa",
+    "Pressione o botão extra, se houver"
+};
+static ArcadeProfile arcadeProfile, arcadeDraft;
+static ArcadeDevice arcadeDevices[ARCADE_DEVICES];
+static bool arcadeDown[ARCADE_ACTIONS], arcadePressed[ARCADE_ACTIONS];
+static bool arcadeLoaded, arcadeCalibrating, arcadeWaitingForRelease, usingArcade;
+static int arcadeStep, arcadeDevice = -1, arcadeDraftDevice = -1;
+static const char *arcadeStatus;
+
+static const char *ArcadeConfigPath(void) {
+    return TextFormat("%sarcade_pif.cfg", GetApplicationDirectory());
+}
+
+static bool IsBindingValid(ArcadeBinding b) {
+    switch (b.type) {
+        case ARCADE_KEY: return b.index >= KEY_SPACE && b.index <= KEY_KB_MENU &&
+                               b.index != KEY_F8 && b.index != KEY_F9 && b.direction == 0;
+        case ARCADE_BUTTON: return b.index >= 0 && b.index < ARCADE_BUTTONS && b.direction == 0;
+        case ARCADE_AXIS: return b.index >= 0 && b.index < ARCADE_AXES &&
+                                 (b.direction == -1 || b.direction == 1);
+        case ARCADE_HAT: return b.index >= 0 && b.index < ARCADE_HATS &&
+                                (b.direction == 1 || b.direction == 2 ||
+                                 b.direction == 4 || b.direction == 8);
+        default: return false;
+    }
+}
+
+static bool BindingsMatch(ArcadeBinding a, ArcadeBinding b) {
+    return a.type == b.type && a.index == b.index && a.direction == b.direction;
+}
+
+static void LoadArcadeProfile(void) {
+    arcadeLoaded = true;
+    FILE *file = fopen(ArcadeConfigPath(), "r");
+    if (!file) return;
+    ArcadeProfile loaded = {0};
+    char guid[33] = {0};
+    int version = 0;
+    bool valid = fscanf(file, "PIF_ARCADE %d %32s", &version, guid) == 2 &&
+                 version == 1 && (strcmp(guid, "-") == 0 ||
+                 (strlen(guid) == 32 && strspn(guid, "0123456789abcdefABCDEF") == 32));
+    if (valid && guid[0] != '-') memcpy(loaded.guid, guid, sizeof(guid));
+    for (int i = 0; valid && i < ARCADE_ACTIONS; ++i) {
+        ArcadeBinding *b = &loaded.bindings[i];
+        valid = fscanf(file, "%d %d %d", &b->type, &b->index, &b->direction) == 3 &&
+                (IsBindingValid(*b) || (i >= ARCADE_REQUIRED && !b->type));
+        if (b->type > ARCADE_KEY && !loaded.guid[0]) valid = false;
+        for (int j = 0; valid && b->type && j < i; ++j)
+            valid = !BindingsMatch(loaded.bindings[j], *b);
+    }
+    fclose(file);
+    if (valid) arcadeProfile = loaded;
+    else TraceLog(LOG_WARNING, "ARCADE: Configuracao invalida. Reconfigure com F9.");
+}
+
+static bool SaveArcadeDraft(void) {
+    char contents[384];
+    int length = snprintf(contents, sizeof(contents), "PIF_ARCADE 1 %s\n",
+                          arcadeDraft.guid[0] ? arcadeDraft.guid : "-");
+    for (int i = 0; i < ARCADE_ACTIONS; ++i) {
+        ArcadeBinding b = arcadeDraft.bindings[i];
+        length += snprintf(contents + length, sizeof(contents) - length,
+                           "%d %d %d\n", b.type, b.index, b.direction);
+    }
+    return SaveFileText(ArcadeConfigPath(), contents);
+}
+
+static void ReadArcadeDevice(int id, ArcadeDevice *device) {
+    *device = (ArcadeDevice){0};
+#ifdef PIF_GLFW_ARCADE
+    if (!glfwJoystickPresent(id)) return;
+    const char *guid = glfwGetJoystickGUID(id);
+    if (!guid || strlen(guid) != sizeof(device->guid) - 1) return;
+    memcpy(device->guid, guid, sizeof(device->guid));
+    int count = 0;
+    const float *axes = glfwGetJoystickAxes(id, &count);
+    for (int i = 0; axes && i < count && i < ARCADE_AXES; ++i) device->axes[i] = axes[i];
+    const unsigned char *buttons = glfwGetJoystickButtons(id, &count);
+    for (int i = 0; buttons && i < count && i < ARCADE_BUTTONS; ++i) device->buttons[i] = buttons[i];
+    const unsigned char *hats = glfwGetJoystickHats(id, &count);
+    for (int i = 0; hats && i < count && i < ARCADE_HATS; ++i) device->hats[i] = hats[i];
+#else
+    (void)id;
+#endif
+}
+
+static bool BindingDown(ArcadeBinding b, const ArcadeDevice *device, bool wasDown) {
+    if (b.type == ARCADE_KEY) return IsKeyDown(b.index);
+    if (!device || !device->guid[0]) return false;
+    switch (b.type) {
+        case ARCADE_BUTTON: return device->buttons[b.index] != 0;
+        case ARCADE_AXIS: return device->axes[b.index] * b.direction > (wasDown ? .35f : .60f);
+        case ARCADE_HAT: return (device->hats[b.index] & b.direction) != 0;
+        default: return false;
+    }
+}
+
+static ArcadeBinding NewRawBinding(const ArcadeDevice *before, const ArcadeDevice *now) {
+    if (!now->guid[0] || strcmp(before->guid, now->guid) != 0) return (ArcadeBinding){0};
+    for (int i = 0; i < ARCADE_HATS; ++i) {
+        int direction = now->hats[i];
+        if (direction != before->hats[i] && direction && (direction & (direction - 1)) == 0)
+            return (ArcadeBinding){ARCADE_HAT, i, direction};
+    }
+    for (int i = 0; i < ARCADE_BUTTONS; ++i)
+        if (now->buttons[i] && !before->buttons[i]) return (ArcadeBinding){ARCADE_BUTTON, i, 0};
+    for (int i = 0; i < ARCADE_AXES; ++i) {
+        float old = before->axes[i], value = now->axes[i];
+        if (value > .60f && old <= .60f) return (ArcadeBinding){ARCADE_AXIS, i, 1};
+        if (value < -.60f && old >= -.60f) return (ArcadeBinding){ARCADE_AXIS, i, -1};
+    }
+    return (ArcadeBinding){0};
+}
+
+bool ArcadeCalibrationActive(void) { return arcadeCalibrating; }
+
+void BeginArcadeCalibration(void) {
+    arcadeDraft = (ArcadeProfile){0};
+    arcadeStep = 0;
+    arcadeDraftDevice = -1;
+    arcadeCalibrating = true;
+    arcadeWaitingForRelease = false;
+    arcadeStatus = NULL;
+    while (GetKeyPressed()) {}
+    for (int i = 0; i < ARCADE_DEVICES; ++i) ReadArcadeDevice(i, &arcadeDevices[i]);
+}
+
+const char *ArcadeCalibrationPrompt(void) {
+    int step = arcadeWaitingForRelease ? arcadeStep - 1 : arcadeStep;
+    return step < ARCADE_ACTIONS ? arcadePrompts[step] : "Salvando controles";
+}
+
+const char *ArcadeCalibrationStatus(void) {
+    if (arcadeStatus) return arcadeStatus;
+    if (arcadeWaitingForRelease) return "Solte o comando para continuar";
+    return arcadeStep >= ARCADE_REQUIRED ? "Start ou F8 para pular  ·  F9 para cancelar" : "F9 para cancelar";
+}
+
+static void UpdateArcadeCalibration(void) {
+    if (IsKeyPressed(KEY_F9)) {
+        arcadeCalibrating = false;
+        return;
+    }
+    ArcadeBinding binding = {0};
+    int key;
+    while ((key = GetKeyPressed()) != 0) {
+        ArcadeBinding candidate = {ARCADE_KEY, key, 0};
+        if (!binding.type && IsBindingValid(candidate) && IsKeyPressed(key)) binding = candidate;
+    }
+    int source = -1;
+    for (int i = 0; i < ARCADE_DEVICES; ++i) {
+        ArcadeDevice device;
+        ReadArcadeDevice(i, &device);
+        if ((arcadeDraftDevice < 0 || arcadeDraftDevice == i) && !binding.type) {
+            binding = NewRawBinding(&arcadeDevices[i], &device);
+            if (binding.type) source = i;
+        }
+        arcadeDevices[i] = device;
+    }
+    if (arcadeWaitingForRelease) {
+        const ArcadeDevice *device = arcadeDraftDevice >= 0 ? &arcadeDevices[arcadeDraftDevice] : NULL;
+        if (BindingDown(arcadeDraft.bindings[arcadeStep - 1], device, true)) return;
+        arcadeWaitingForRelease = false;
+        arcadeStatus = NULL;
+    }
+    if (arcadeStep == ARCADE_ACTIONS ||
+        (arcadeStep == ARCADE_REQUIRED && (IsKeyPressed(KEY_F8) ||
+         BindingsMatch(binding, arcadeDraft.bindings[ARCADE_REQUIRED - 1])))) {
+        arcadeProfile = arcadeDraft;
+        arcadeDevice = arcadeDraftDevice;
+        usingArcade = true;
+        arcadeCalibrating = false;
+        if (!SaveArcadeDraft())
+            TraceLog(LOG_WARNING, "ARCADE: Mapeamento ativo, mas nao foi possivel salvar arcade_pif.cfg");
+        return;
+    }
+    if (!binding.type) return;
+    for (int i = 0; i < arcadeStep; ++i) {
+        if (!BindingsMatch(arcadeDraft.bindings[i], binding)) continue;
+        arcadeStatus = "Este comando já está em uso. Escolha outro.";
+        return;
+    }
+    if (source >= 0 && arcadeDraftDevice < 0) {
+        arcadeDraftDevice = source;
+        memcpy(arcadeDraft.guid, arcadeDevices[source].guid, sizeof(arcadeDraft.guid));
+    }
+    arcadeDraft.bindings[arcadeStep++] = binding;
+    arcadeStatus = NULL;
+    arcadeWaitingForRelease = true;
+}
+
+static bool UpdateArcadeButtons(void) {
+    ArcadeDevice device = {0};
+    if (arcadeProfile.guid[0]) {
+        if (arcadeDevice >= 0) ReadArcadeDevice(arcadeDevice, &device);
+        if (strcmp(device.guid, arcadeProfile.guid) != 0) {
+            arcadeDevice = -1;
+            for (int i = 0; i < ARCADE_DEVICES; ++i) {
+                ReadArcadeDevice(i, &device);
+                if (strcmp(device.guid, arcadeProfile.guid) != 0) continue;
+                arcadeDevice = i;
+                break;
+            }
+        }
+    }
+    bool pressed = false;
+    for (int i = 0; i < ARCADE_ACTIONS; ++i) {
+        bool down = BindingDown(arcadeProfile.bindings[i], arcadeDevice >= 0 ? &device : NULL, arcadeDown[i]);
+        arcadePressed[i] = down && !arcadeDown[i];
+        arcadeDown[i] = down;
+        pressed |= arcadePressed[i];
+    }
+    return pressed;
+}
+
+static bool IsArcadeKey(int key) {
+    for (int i = 0; i < ARCADE_ACTIONS; ++i) {
+        ArcadeBinding b = arcadeProfile.bindings[i];
+        if (b.type == ARCADE_KEY && b.index == key) return true;
+    }
+    return false;
+}
+
+bool KeyPressed(int key) { return !IsArcadeKey(key) && IsKeyPressed(key); }
+bool KeyDown(int key) { return !IsArcadeKey(key) && IsKeyDown(key); }
+
+int TextInputPressed(void) {
+    if (!usingArcade) return GetCharPressed();
+    while (GetCharPressed()) {}
+    return 0;
+}
 
 static unsigned inputFrame;
 static bool usingGamepad;
 static bool playStation;
+static bool padButtonPressed;
+static int gamepad = -1;
 static int stickHorizontal, stickVertical;
 static Vector2 lastLeft, lastRight;
 static bool navigate[4];
 
 bool PadPressed(int button) {
-    return IsGamepadAvailable(0) && IsGamepadButtonPressed(0, button);
+    for (int i = 0; i < ARCADE_ACTIONS; ++i)
+        if (arcadePressed[i] && arcadeButtons[i] == button) return true;
+    return gamepad >= 0 && IsGamepadButtonPressed(gamepad, button);
 }
 
+bool PadButtonPressed(void) { return padButtonPressed; }
+
 Vector2 PadStick(int xAxis, int yAxis) {
-    if (!IsGamepadAvailable(0)) return (Vector2){0};
+    if (gamepad < 0) return (Vector2){0};
     const float deadzone = .22f;
-    Vector2 stick = {GetGamepadAxisMovement(0, xAxis), GetGamepadAxisMovement(0, yAxis)};
+    Vector2 stick = {GetGamepadAxisMovement(gamepad, xAxis), GetGamepadAxisMovement(gamepad, yAxis)};
     float magnitude = Vector2Length(stick);
     if (magnitude <= deadzone) return (Vector2){0};
     float strength = (fminf(magnitude, 1.0f) - deadzone) / (1.0f - deadzone);
     return Vector2Scale(stick, strength / magnitude);
+}
+
+Vector2 PadMovement(void) {
+    bool direction[4];
+    for (int i = 0; i < 4; ++i)
+        direction[i] = usingArcade ? arcadeDown[i] :
+                       gamepad >= 0 && IsGamepadButtonDown(gamepad, arcadeButtons[i]);
+    Vector2 digital = {direction[1] - direction[3], direction[2] - direction[0]};
+    if (Vector2LengthSqr(digital) > 0.0f) return Vector2Normalize(digital);
+    if (usingArcade) return digital;
+    return PadStick(GAMEPAD_AXIS_LEFT_X, GAMEPAD_AXIS_LEFT_Y);
 }
 
 static int StickDirection(float value, int previous) {
@@ -32,6 +313,22 @@ static int StickDirection(float value, int previous) {
 
 void UpdateGameInput(void) {
     inputFrame++;
+    if (!arcadeLoaded) LoadArcadeProfile();
+    if (arcadeCalibrating) {
+        UpdateArcadeCalibration();
+        return;
+    }
+    bool arcadeActivity = UpdateArcadeButtons();
+    gamepad = -1;
+    for (int id = 0; id < 4; ++id) {
+        if (id == arcadeDevice || !IsGamepadAvailable(id)) continue;
+#ifdef PIF_GLFW_ARCADE
+        if (glfwJoystickPresent(id) && !glfwJoystickIsGamepad(id)) continue;
+#endif
+        gamepad = id;
+        break;
+    }
+    if (arcadeActivity) usingArcade = true;
     Vector2 left = PadStick(GAMEPAD_AXIS_LEFT_X, GAMEPAD_AXIS_LEFT_Y);
     Vector2 right = PadStick(GAMEPAD_AXIS_RIGHT_X, GAMEPAD_AXIS_RIGHT_Y);
     // A stick held at the same angle does not steal focus back from the mouse.
@@ -51,29 +348,32 @@ void UpdateGameInput(void) {
     stickHorizontal = x;
     stickVertical = y;
 
-    bool padButton = false;
-    for (int button = GAMEPAD_BUTTON_LEFT_FACE_UP; button <= GAMEPAD_BUTTON_RIGHT_THUMB; button++)
-        padButton |= PadPressed(button);
+    bool standardButton = false;
+    for (int button = GAMEPAD_BUTTON_LEFT_FACE_UP; gamepad >= 0 && button <= GAMEPAD_BUTTON_RIGHT_THUMB; button++)
+        standardButton |= IsGamepadButtonPressed(gamepad, button);
+    padButtonPressed = arcadeActivity || standardButton;
     bool key = false;
     for (int code = KEY_SPACE; code <= KEY_KB_MENU && !key; code++)
-        key = IsKeyPressed(code);
+        key = KeyPressed(code);
     Vector2 mouse = GetMouseDelta();
     bool mouseButton = IsMouseButtonPressed(MOUSE_BUTTON_LEFT) ||
                        IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) ||
                        IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE);
-    if (key || mouseButton || !IsGamepadAvailable(0)) {
+    if (arcadeActivity) {
         usingGamepad = false;
-    } else if (padButton || navigate[0] || navigate[1] || navigate[2] || navigate[3]) {
-        usingGamepad = true;
-    } else if (Vector2LengthSqr(mouse) >= 4.0f || GetMouseWheelMove() != 0.0f) {
+    } else if (key || mouseButton) {
+        usingArcade = false;
         usingGamepad = false;
-    } else if (movedStick) {
+    } else if (standardButton || movedStick) {
+        usingArcade = false;
         usingGamepad = true;
+    } else if (!usingArcade && (Vector2LengthSqr(mouse) >= 4.0f || GetMouseWheelMove() != 0.0f)) {
+        usingGamepad = false;
     }
 
     if (usingGamepad) {
         char name[128] = {0};
-        const char *raw = GetGamepadName(0);
+        const char *raw = gamepad >= 0 ? GetGamepadName(gamepad) : NULL;
         if (raw)
             for (int i = 0; i < (int)sizeof(name) - 1 && raw[i]; i++)
                 name[i] = (char)tolower((unsigned char)raw[i]);
@@ -86,7 +386,8 @@ void UpdateGameInput(void) {
 }
 
 bool PadNavigate(int direction) {
-    return PadPressed(direction) || navigate[direction - GAMEPAD_BUTTON_LEFT_FACE_UP];
+    int index = direction - GAMEPAD_BUTTON_LEFT_FACE_UP;
+    return index >= 0 && index < 4 && (PadPressed(direction) || navigate[index]);
 }
 
 unsigned GameInputFrame(void) {
@@ -94,20 +395,24 @@ unsigned GameInputFrame(void) {
 }
 
 bool UsingGamepad(void) {
-    return usingGamepad && IsGamepadAvailable(0);
+    return usingArcade || (usingGamepad && gamepad >= 0);
 }
+
+bool UsingArcade(void) { return usingArcade; }
 
 const char *InputHint(const char *keyboardMouse, const char *gamepad) {
     if (!UsingGamepad()) return keyboardMouse;
-    if (playStation) return gamepad;
+    if (playStation && !usingArcade) return gamepad;
     // Pad hints use PlayStation names in brackets. Translate those tokens for Xbox.
     static char buffers[8][256];
     static unsigned index;
     char *line = buffers[index++ % 8];
-    static const char *const labels[][2] = {
-        {"[Cruz]", "[A]"}, {"[Círculo]", "[B]"}, {"[Quadrado]", "[X]"},
-        {"[Triângulo]", "[Y]"}, {"[Options]", "[Menu]"}, {"[Share]", "[View]"},
-        {"R1/R2", "RB/RT"}, {"L1/L2", "LB/LT"}, {"L1/R1", "LB/RB"}
+    static const char *const labels[][3] = {
+        {"[Cruz]", "[A]", "[Ataque]"}, {"[Círculo]", "[B]", "[Esquiva]"},
+        {"[Quadrado]", "[X]", "[Interação]"}, {"[Triângulo]", "[Y]", "[Extra]"},
+        {"[Options]", "[Menu]", "[Start]"}, {"[Share]", "[View]", "[Interação]"},
+        {"R1/R2", "RB/RT", "Ataque"}, {"L1/L2", "LB/LT", "Esquiva"},
+        {"L1/R1", "LB/RB", "Interação"}
     };
     size_t used = 0;
     while (*gamepad && used < sizeof(buffers[0]) - 1) {
@@ -115,9 +420,10 @@ const char *InputHint(const char *keyboardMouse, const char *gamepad) {
         for (int i = 0; i < (int)(sizeof(labels) / sizeof(labels[0])); i++) {
             size_t length = strlen(labels[i][0]);
             if (strncmp(gamepad, labels[i][0], length) != 0) continue;
-            size_t output = strlen(labels[i][1]);
+            const char *label = labels[i][usingArcade ? 2 : 1];
+            size_t output = strlen(label);
             if (used + output >= sizeof(buffers[0])) break;
-            memcpy(line + used, labels[i][1], output);
+            memcpy(line + used, label, output);
             used += output;
             gamepad += length;
             replaced = true;

@@ -337,16 +337,36 @@ int main(void) {
     int audioMap=ClearingMapId(&clearing), audioHealth=playerHealth;
     bool audioWasInRun=false;
     while (!WindowShouldClose()) {
+        bool calibratingArcade = ArcadeCalibrationActive();
         UpdateGameInput();
+        Rectangle arcadeSetup = {GetScreenWidth() - 216.0f, 12, 200, 38};
+        if (!calibratingArcade && screen == 0 && !devTools.open &&
+            (IsKeyPressed(KEY_F9) || (MenuControlsVisible(&menu) &&
+             IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+             CheckCollisionPointRec(GetMousePosition(), arcadeSetup))))
+            BeginArcadeCalibration();
+        if (calibratingArcade || ArcadeCalibrationActive()) {
+            BeginGameFrame();
+                ClearBackground((Color){24,17,27,255});
+                float width = GetScreenWidth(), middle = GetScreenHeight() * .5f;
+                DrawGameTextIn("Configurar arcade", (Rectangle){24,middle-125,width-48,60},
+                               46, GOLD, GAME_TEXT_TITLE);
+                DrawGameTextIn(ArcadeCalibrationPrompt(), (Rectangle){24,middle-34,width-48,56},
+                               32, RAYWHITE, GAME_TEXT_BODY);
+                DrawGameTextIn(ArcadeCalibrationStatus(), (Rectangle){24,middle+45,width-48,38},
+                               21, LIGHTGRAY, GAME_TEXT_BODY);
+            EndGameFrame();
+            continue;
+        }
         bool gamepadAiming = UsingGamepad();
-        bool gesture=GetGamepadButtonPressed()>0 || IsMouseButtonPressed(MOUSE_BUTTON_LEFT) ||
+        bool gesture=PadButtonPressed() || IsMouseButtonPressed(MOUSE_BUTTON_LEFT) ||
             IsMouseButtonPressed(MOUSE_BUTTON_RIGHT);
         if (!menu.audio.unlocked && !gesture) {
             for (int key=KEY_SPACE; key<=KEY_KB_MENU; key++) {
-                if (IsKeyPressed(key)) { gesture=true; break; }
+                if (KeyPressed(key)) { gesture=true; break; }
             }
         }
-        if (IsKeyPressed(KEY_F10)) {
+        if (KeyPressed(KEY_F10)) {
             audioDebug=!audioDebug;
             if (!audioDebug) ResetAudioDebugMusic();
         }
@@ -381,7 +401,7 @@ int main(void) {
         bool toolsClicked=screen==0 && MenuControlsVisible(&menu) && !devTools.open &&
             CheckCollisionPointRec(GetMousePosition(),toolsButton) &&
             IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
-        bool devToggle=!toolsBlocked && (IsKeyPressed(KEY_F1) || toolsClicked);
+        bool devToggle=!toolsBlocked && (KeyPressed(KEY_F1) || toolsClicked);
         bool devWasOpen=devTools.open;
         if (devToggle && !devWasOpen) {
             devTools.open=true;
@@ -659,6 +679,10 @@ int main(void) {
                     DrawRectangleRec(toolsButton,hoverTools?MAROON:Fade(BLACK,.65f));
                     DrawRectangleLinesEx(toolsButton,1,GOLD);
                     DrawGameTextIn("Ferramentas (F1)",toolsButton,20,RAYWHITE,GAME_TEXT_BODY);
+                    bool hoverArcade=CheckCollisionPointRec(GetMousePosition(),arcadeSetup);
+                    DrawRectangleRec(arcadeSetup,hoverArcade?MAROON:Fade(BLACK,.65f));
+                    DrawRectangleLinesEx(arcadeSetup,1,GOLD);
+                    DrawGameTextIn("Configurar arcade (F9)",arcadeSetup,18,RAYWHITE,GAME_TEXT_BODY);
                 }
             EndGameFrame();
             continue;
@@ -763,8 +787,8 @@ int main(void) {
                             (int)PadNavigate(GAMEPAD_BUTTON_LEFT_FACE_UP));
             speedrunLetter = (speedrunLetter + step + alphabetSize) % alphabetSize;
             int codepoint = PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN) ?
-                            speedrunAlphabet[speedrunLetter] : GetCharPressed();
-            for (; codepoint != 0; codepoint = GetCharPressed()) {
+                            speedrunAlphabet[speedrunLetter] : TextInputPressed();
+            for (; codepoint != 0; codepoint = TextInputPressed()) {
                 if (codepoint<32 || codepoint>255 || (codepoint>=127 && codepoint<160) ||
                     speedrunNameChars>=24) continue;
                 int utf8Size=0;
@@ -775,7 +799,7 @@ int main(void) {
                 speedrunName[speedrunNameBytes]=0;
                 speedrunNameChars++;
             }
-            if ((IsKeyPressed(KEY_BACKSPACE) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_LEFT)) && speedrunNameBytes>0) {
+            if ((KeyPressed(KEY_BACKSPACE) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_LEFT)) && speedrunNameBytes>0) {
                 do {speedrunNameBytes--;} while (speedrunNameBytes>0 &&
                     ((unsigned char)speedrunName[speedrunNameBytes]&0xC0)==0x80);
                 speedrunName[speedrunNameBytes]=0;
@@ -789,7 +813,7 @@ int main(void) {
                 screen=0;
                 continue;
             }
-            if (hasName && (IsKeyPressed(KEY_ENTER) || PadPressed(GAMEPAD_BUTTON_MIDDLE_RIGHT))) {
+            if (hasName && (KeyPressed(KEY_ENTER) || PadPressed(GAMEPAD_BUTTON_MIDDLE_RIGHT))) {
                 if (SpeedrunRecord(&speedrunBoard,completedRunTime,speedrunName))
                     speedrunNamePending=false;
                 else TraceLog(LOG_WARNING,"Nao foi possivel salvar o nome da run");
@@ -827,7 +851,7 @@ int main(void) {
         }
         if (clearing.necromancerArena && encounter.phase==ENCOUNTER_CLEAR &&
             encounter.presentation.remaining<=0 &&
-            (IsKeyPressed(KEY_ENTER) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN))) {
+            (KeyPressed(KEY_ENTER) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN))) {
             screen=0;
             continue;
         }
@@ -874,12 +898,12 @@ int main(void) {
             Rectangle backToMenu = {centerX + btnGap * 0.5f, btnY, btnWidth, btnHeight};
             bool hoverRetry = CheckCollisionPointRec(GetMousePosition(), retry);
             bool hoverMenu = CheckCollisionPointRec(GetMousePosition(), backToMenu);
-            if (!restartImmediately && (IsKeyPressed(KEY_ESCAPE) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_RIGHT) ||
+            if (!restartImmediately && (KeyPressed(KEY_ESCAPE) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_RIGHT) ||
                 (hoverMenu && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)))) {
                 screen = 0;
                 continue;
             }
-            if (restartImmediately || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_R) ||
+            if (restartImmediately || KeyPressed(KEY_ENTER) || KeyPressed(KEY_R) ||
                 PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN) ||
                 (hoverRetry && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))) {
                 devTools.map=CLEARING_MAP;
@@ -919,7 +943,7 @@ int main(void) {
         }
         /* Ao trocar de janela (Alt+Tab, Cmd+Tab etc.), a partida pausa sozinha. */
         bool lostFocus = screen == 2 && !IsWindowFocused();
-        if (screen == 3 || IsKeyPressed(KEY_ESCAPE) ||
+        if (screen == 3 || KeyPressed(KEY_ESCAPE) ||
             PadPressed(GAMEPAD_BUTTON_MIDDLE_RIGHT) || lostFocus) {
             if (screen == 3) {
                 PauseAction action = UpdatePauseMenu(&menu);
@@ -1085,12 +1109,12 @@ int main(void) {
             entering = true;
             deltaTime = 0;
         }
-        if (!entering && IsKeyPressed(KEY_F3)) showCollisionGuide = !showCollisionGuide;
-        if (!entering && IsKeyPressed(KEY_F6)) showSpriteDebug = !showSpriteDebug;
+        if (!entering && KeyPressed(KEY_F3)) showCollisionGuide = !showCollisionGuide;
+        if (!entering && KeyPressed(KEY_F6)) showSpriteDebug = !showSpriteDebug;
         if (clearing.templarField)
             clearing.exitLocked = encounter.progress.stage != CLEARING_COMPLETE_STAGE;
         bool altarOpen = ClearingAltarOpen(&encounter, &clearing);
-        bool interactPressed = IsKeyPressed(KEY_E) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_LEFT);
+        bool interactPressed = KeyPressed(KEY_E) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_LEFT);
         encounter.progress.health=playerHealth;
         if (!entering && playerHealth>0 && BeginGuardianPassage(&encounter,&clearing,player,interactPressed)) {
             PlaySfx(SFX_DOOR);
@@ -1142,11 +1166,11 @@ int main(void) {
                 continue;
             }
         }
-        if (!entering && IsKeyPressed(KEY_F4)) {
+        if (!entering && KeyPressed(KEY_F4)) {
             playerHealth = playerHealth>5 ? playerHealth-5 : 0;
             if (playerHealth==0) continue;
         }
-        if (!entering && IsKeyPressed(KEY_F5)) {
+        if (!entering && KeyPressed(KEY_F5)) {
             playerHealth += 5;
             if (playerHealth > playerMaxHealth) playerHealth = playerMaxHealth;
         }
@@ -1187,16 +1211,17 @@ int main(void) {
             }
         }
         bool grabbed = IgrisHoldingPlayer(&enemies);
-        bool combatGamepad = IsGamepadAvailable(0);
         Vector2 padMove = {0}, padAim = {0};
         bool padAttack = false, padDash = false;
-        if (combatGamepad && !entering && !grabbed) {
-            padMove = PadStick(GAMEPAD_AXIS_LEFT_X, GAMEPAD_AXIS_LEFT_Y);
-            padAim = PadStick(GAMEPAD_AXIS_RIGHT_X, GAMEPAD_AXIS_RIGHT_Y);
-            padAttack = IsGamepadButtonPressed(0, GAMEPAD_BUTTON_RIGHT_TRIGGER_1) ||
-                        IsGamepadButtonPressed(0, GAMEPAD_BUTTON_RIGHT_TRIGGER_2);
-            padDash = IsGamepadButtonPressed(0, GAMEPAD_BUTTON_LEFT_TRIGGER_1) ||
-                      IsGamepadButtonPressed(0, GAMEPAD_BUTTON_LEFT_TRIGGER_2);
+        if (!entering && !grabbed) {
+            padMove = PadMovement();
+            if (!UsingArcade()) padAim = PadStick(GAMEPAD_AXIS_RIGHT_X, GAMEPAD_AXIS_RIGHT_Y);
+            padAttack = PadPressed(GAMEPAD_BUTTON_RIGHT_TRIGGER_1) ||
+                        PadPressed(GAMEPAD_BUTTON_RIGHT_TRIGGER_2) ||
+                        PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
+            padDash = PadPressed(GAMEPAD_BUTTON_LEFT_TRIGGER_1) ||
+                      PadPressed(GAMEPAD_BUTTON_LEFT_TRIGGER_2) ||
+                      PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_RIGHT);
         }
         bool mouseAttack = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
         bool attackPressed = mouseAttack || padAttack;
@@ -1208,7 +1233,7 @@ int main(void) {
         Vector2 combatAim = Vector2LengthSqr(gamepadAimDirection) > 0.0f
             ? gamepadAimDirection : FacingVector(facing);
 
-        bool dodgePressed = !entering && !grabbed && (IsKeyPressed(KEY_SPACE) ||
+        bool dodgePressed = !entering && !grabbed && (KeyPressed(KEY_SPACE) ||
                             IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) || padDash);
         bool bibleActivationStarted = false;
         if (currentWeapon == WEAPON_BIBLE) {
@@ -1222,8 +1247,8 @@ int main(void) {
         }
 
         Vector2 direction = {
-            entering || grabbed ? 0.0f : (float) IsKeyDown(KEY_D) - (float) IsKeyDown(KEY_A),
-            entering || grabbed ? 0.0f : (float) IsKeyDown(KEY_S) - (float) IsKeyDown(KEY_W)
+            entering || grabbed ? 0.0f : (float) KeyDown(KEY_D) - (float) KeyDown(KEY_A),
+            entering || grabbed ? 0.0f : (float) KeyDown(KEY_S) - (float) KeyDown(KEY_W)
         };
         if (Vector2LengthSqr(direction) > 0.0f)
             direction = Vector2Normalize(direction);

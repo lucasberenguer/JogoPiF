@@ -3,24 +3,56 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
-enum { MAX_LAYERS = 80, STAR_COUNT = 32, PARTICLE_COUNT = 43 };
+enum { MAX_LAYERS = 80, MAX_WIND_KEYS = 32, STAR_COUNT = 32, PARTICLE_COUNT = 43, PLANT_FLUTTER_FRAMES = 8 };
 
 typedef struct SceneLayer {
     Texture2D texture;
     int x, y, width, height, columns, frames;
     float period, driftX, driftY, opacity, delay;
+    float start, duration;
     char kind;
 } SceneLayer;
 
 struct MenuScene {
     SceneLayer layers[MAX_LAYERS];
     int count;
+    Vector2 wind[MAX_WIND_KEYS];
+    int windCount;
+    float windPeriod;
 };
 
 static float Ease(float value) {
     float t = fminf(1, fmaxf(0, value));
     return t*t*(3-2*t);
+}
+
+static void LoadWind(MenuScene *scene) {
+    char *schedule = LoadFileText("assets/menu/metadata/vento.txt");
+    if (!schedule) return;
+    const char *line = schedule;
+    if (sscanf(line, "%f", &scene->windPeriod) == 1 && scene->windPeriod > 0) {
+        while ((line = strchr(line, '\n')) && line[1] && scene->windCount < MAX_WIND_KEYS) {
+            line++;
+            Vector2 key;
+            if (sscanf(line, "%f %f", &key.x, &key.y) != 2) break;
+            if (scene->windCount && key.x <= scene->wind[scene->windCount-1].x) break;
+            scene->wind[scene->windCount++] = key;
+        }
+    }
+    UnloadFileText(schedule);
+}
+
+static float WindAt(const MenuScene *scene, float time) {
+    if (scene->windCount < 2) return .15f;
+    float local = fmodf(time, scene->windPeriod);
+    if (local < 0) local += scene->windPeriod;
+    for (int i = 1; i < scene->windCount; i++) {
+        Vector2 a = scene->wind[i-1], b = scene->wind[i];
+        if (local <= b.x) return a.y + (b.y-a.y)*Ease((local-a.x)/(b.x-a.x));
+    }
+    return scene->wind[scene->windCount-1].y;
 }
 
 MenuScene *LoadMenuScene(void) {
@@ -32,10 +64,10 @@ MenuScene *LoadMenuScene(void) {
     while (*line && scene->count < MAX_LAYERS) {
         char path[160];
         SceneLayer layer = {0};
-        if (*line != '#' && sscanf(line, "%159s %c %d %d %d %d %d %d %f %f %f %f %f",
+        if (*line != '#' && sscanf(line, "%159s %c %d %d %d %d %d %d %f %f %f %f %f %f %f",
             path, &layer.kind, &layer.x, &layer.y, &layer.width, &layer.height,
             &layer.columns, &layer.frames, &layer.period, &layer.driftX, &layer.driftY,
-            &layer.opacity, &layer.delay) == 13) {
+            &layer.opacity, &layer.delay, &layer.start, &layer.duration) >= 13) {
             layer.texture = LoadTexture(TextFormat("assets/menu/%s", path));
             if (!layer.texture.id || layer.width < 1 || layer.height < 1 || layer.columns < 1 ||
                 layer.frames < 1 || layer.columns > layer.texture.width / layer.width ||
@@ -53,6 +85,7 @@ MenuScene *LoadMenuScene(void) {
     }
     UnloadFileText(manifest);
     if (!scene->count) { free(scene); return NULL; }
+    LoadWind(scene);
     return scene;
 }
 
@@ -101,7 +134,7 @@ static void DrawAir(const SceneLayer *layer, float time, float opacity) {
 void DrawMenuScene(const MenuScene *scene, Rectangle canvas, Rectangle crop,
                    float time, float intro, float departure, bool reduced) {
     float scale = canvas.width / crop.width;
-    float wind = 0.65f*sinf(time*0.68f) + 0.35f*sinf(time*1.31f);
+    float wind = WindAt(scene, time);
     float moon = 0.5f - 0.5f*cosf(time*2*PI/10.0f);
     BeginGameScissor((int)canvas.x, (int)canvas.y, (int)ceilf(canvas.width), (int)ceilf(canvas.height));
     // Local reference coordinates are shared by the artwork and the atlas metadata.
@@ -119,6 +152,26 @@ void DrawMenuScene(const MenuScene *scene, Rectangle canvas, Rectangle crop,
         int cell = (int)(phase*layer->frames);
         float dx = reduced ? 0 : layer->driftX * (.28f*wind + .72f*sinf(2*PI*phase));
         float dy = reduced ? 0 : layer->driftY * sinf(time*.53f);
+        if (layer->kind == 'c') {
+            // Cape atlases are consecutive segments on the same clock, with no repeated seam frame.
+            float local = fmodf(time, layer->period) - layer->start;
+            if (local < 0 || local >= layer->duration) continue;
+            cell = (int)(local/layer->duration*layer->frames);
+        } else if (layer->kind == 'v') {
+            // A plant leans toward earlier wind samples while it gives back stored flexion.
+            float arrival = time - layer->start;
+            float inertia = layer->duration;
+            float flex = .53f*WindAt(scene, arrival) + .31f*WindAt(scene, arrival-inertia) +
+                         .16f*WindAt(scene, arrival-2*inertia);
+            int levels = layer->frames / PLANT_FLUTTER_FRAMES;
+            if (levels < 1) continue;
+            int level = (int)roundf(fminf(1, fmaxf(0,flex))*(levels-1));
+            cell = level*PLANT_FLUTTER_FRAMES + (int)(phase*PLANT_FLUTTER_FRAMES);
+        } else if (layer->kind == 'h') {
+            dx = layer->driftX*(.86f*sinf(2*PI*phase) - .26f*WindAt(scene,time-.9f));
+            dy = layer->driftY*cosf(2*PI*phase);
+        }
+        if (cell > layer->frames-1) cell = layer->frames-1;
         Rectangle dest = {layer->x + dx, layer->y + dy, layer->width, layer->height};
         Vector2 pivot = {0};
         float angle = 0;

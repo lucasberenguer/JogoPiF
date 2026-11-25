@@ -272,14 +272,13 @@ void UnloadGuardianCutscene(GuardianCutscene *scene) {
 }
 
 GuardianCutsceneInput ReadGuardianCutsceneInput(void) {
-    bool controller=IsGamepadAvailable(0);
     return (GuardianCutsceneInput){
-        .advance=IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) ||
-            (controller && IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN)),
-        .skip=IsKeyPressed(KEY_ESCAPE) ||
-            (controller && IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT)),
-        .pause=IsKeyPressed(KEY_P) ||
-            (controller && IsGamepadButtonPressed(0,GAMEPAD_BUTTON_MIDDLE_RIGHT))};
+        .advance=KeyPressed(KEY_ENTER) || KeyPressed(KEY_SPACE) ||
+            PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN),
+        .skip=KeyPressed(KEY_ESCAPE) ||
+            PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_RIGHT),
+        .pause=KeyPressed(KEY_P) ||
+            PadPressed(GAMEPAD_BUTTON_MIDDLE_RIGHT)};
 }
 
 void SetGuardianCutscenePaused(GuardianCutscene *scene, bool paused) {

@@ -23,6 +23,8 @@
         470
       ],
       "fps": 0,
+      "start": 0,
+      "duration": 0,
       "loop": false,
       "order": 0
     },
@@ -45,6 +47,8 @@
         470
       ],
       "fps": 0,
+      "start": 0,
+      "duration": 0,
       "loop": false,
       "order": 1
     },
@@ -67,6 +71,8 @@
         12
       ],
       "fps": 0,
+      "start": 0,
+      "duration": 0,
       "loop": false,
       "order": 2
     },
@@ -89,6 +95,8 @@
         146
       ],
       "fps": 0,
+      "start": 0,
+      "duration": 0,
       "loop": false,
       "order": 3
     },
@@ -111,6 +119,8 @@
         235
       ],
       "fps": 0,
+      "start": 0,
+      "duration": 0,
       "loop": false,
       "order": 4
     },
@@ -133,6 +143,8 @@
         186
       ],
       "fps": 2.0,
+      "start": 0,
+      "duration": 0,
       "loop": true,
       "order": 5
     },
@@ -155,6 +167,8 @@
         247
       ],
       "fps": 0,
+      "start": 0,
+      "duration": 0,
       "loop": false,
       "order": 6
     },
@@ -177,6 +191,8 @@
         228
       ],
       "fps": 0,
+      "start": 0,
+      "duration": 0,
       "loop": false,
       "order": 7
     },
@@ -199,72 +215,80 @@
         164
       ],
       "fps": 0,
+      "start": 0,
+      "duration": 0,
       "loop": false,
       "order": 8
     },
     {
-      "path": "background/clouds/distantes.png",
-      "kind": "n",
-      "x": 289,
-      "y": 230,
-      "width": 360,
-      "height": 155,
-      "columns": 5,
-      "frames": 20,
-      "period": 26,
-      "driftX": 31,
+      "path": "background/clouds_refinadas/veu_distante.png",
+      "kind": "h",
+      "x": 319,
+      "y": 237,
+      "width": 480,
+      "height": 122,
+      "columns": 4,
+      "frames": 36,
+      "period": 36,
+      "driftX": 23,
       "driftY": 3,
-      "opacity": 0.34,
-      "delay": 0.55,
+      "opacity": 0.46,
+      "delay": 0.5,
       "pivot": [
-        180,
-        77
+        240,
+        61
       ],
-      "fps": 0.7692307692307693,
+      "fps": 1.0,
+      "start": 0,
+      "duration": 0,
       "loop": true,
       "order": 9
     },
     {
-      "path": "background/clouds/intermediarias.png",
-      "kind": "n",
-      "x": 610,
-      "y": 345,
-      "width": 410,
-      "height": 145,
-      "columns": 4,
-      "frames": 20,
-      "period": 20,
-      "driftX": 48,
-      "driftY": 9,
-      "opacity": 0.24,
-      "delay": 0.55,
+      "path": "background/clouds_refinadas/frente_intermediaria.png",
+      "kind": "h",
+      "x": 581,
+      "y": 343,
+      "width": 500,
+      "height": 144,
+      "columns": 3,
+      "frames": 40,
+      "period": 28,
+      "driftX": 43,
+      "driftY": 5,
+      "opacity": 0.36,
+      "delay": 0.5,
       "pivot": [
-        205,
+        250,
         72
       ],
-      "fps": 1.0,
+      "fps": 1.4285714285714286,
+      "start": 0,
+      "duration": 0,
       "loop": true,
       "order": 10
     },
     {
-      "path": "background/clouds/proximas.png",
-      "kind": "n",
-      "x": 78,
-      "y": 348,
-      "width": 380,
-      "height": 113,
-      "columns": 5,
-      "frames": 20,
-      "period": 16,
-      "driftX": 62,
+      "path": "background/clouds_refinadas/banco_proximo.png",
+      "kind": "h",
+      "x": 68,
+      "y": 320,
+      "width": 420,
+      "height": 145,
+      "columns": 4,
+      "frames": 44,
+      "period": 22,
+      "driftX": 66,
       "driftY": 7,
-      "opacity": 0.25,
-      "delay": 0.55,
+      "opacity": 0.31,
+      "delay": 0.5,
       "pivot": [
-        190,
-        56
+        210,
+        72
       ],
-      "fps": 1.25,
+      "fps": 2.0,
+      "start": 0,
+      "duration": 0,
       "loop": true,
       "order": 11
     },
@@ -287,6 +311,8 @@
         57
       ],
       "fps": 0.8333333333333334,
+      "start": 0,
+      "duration": 0,
       "loop": true,
       "order": 12
     },
@@ -309,6 +335,8 @@
         69
       ],
       "fps": 1.0,
+      "start": 0,
+      "duration": 0,
       "loop": true,
       "order": 13
     },
@@ -331,6 +359,8 @@
         82
       ],
       "fps": 1.25,
+      "start": 0,
+      "duration": 0,
       "loop": true,
       "order": 14
     },
@@ -353,6 +383,8 @@
         82
       ],
       "fps": 0.019230769230769232,
+      "start": 0,
+      "duration": 0,
       "loop": true,
       "order": 15
     },
@@ -375,6 +407,8 @@
         82
       ],
       "fps": 0.019230769230769232,
+      "start": 0,
+      "duration": 0,
       "loop": true,
       "order": 16
     },
@@ -397,6 +431,8 @@
         82
       ],
       "fps": 0.021739130434782608,
+      "start": 0,
+      "duration": 0,
       "loop": true,
       "order": 17
     },
@@ -419,6 +455,8 @@
         82
       ],
       "fps": 0.021739130434782608,
+      "start": 0,
+      "duration": 0,
       "loop": true,
       "order": 18
     },
@@ -441,6 +479,8 @@
         82
       ],
       "fps": 2.807017543859649,
+      "start": 0,
+      "duration": 0,
       "loop": true,
       "order": 19
     },
@@ -463,6 +503,8 @@
         82
       ],
       "fps": 3.076923076923077,
+      "start": 0,
+      "duration": 0,
       "loop": true,
       "order": 20
     },
@@ -485,6 +527,8 @@
         82
       ],
       "fps": 2.4,
+      "start": 0,
+      "duration": 0,
       "loop": true,
       "order": 21
     },
@@ -507,6 +551,8 @@
         30
       ],
       "fps": 2.6666666666666665,
+      "start": 0,
+      "duration": 0,
       "loop": true,
       "order": 22
     },
@@ -529,6 +575,8 @@
         67
       ],
       "fps": 4.102564102564103,
+      "start": 0,
+      "duration": 0,
       "loop": true,
       "order": 23
     },
@@ -551,6 +599,8 @@
         221
       ],
       "fps": 0,
+      "start": 0,
+      "duration": 0,
       "loop": false,
       "order": 24
     },
@@ -573,30 +623,10 @@
         166
       ],
       "fps": 0,
+      "start": 0,
+      "duration": 0,
       "loop": false,
       "order": 25
-    },
-    {
-      "path": "atmosphere/lighting/capa.png",
-      "kind": "l",
-      "x": 273,
-      "y": 650,
-      "width": 195,
-      "height": 153,
-      "columns": 1,
-      "frames": 1,
-      "period": 0,
-      "driftX": 0,
-      "driftY": 0,
-      "opacity": 1,
-      "delay": 0.5,
-      "pivot": [
-        97,
-        76
-      ],
-      "fps": 0,
-      "loop": false,
-      "order": 26
     },
     {
       "path": "atmosphere/lighting/atmosfera.png",
@@ -617,8 +647,10 @@
         133
       ],
       "fps": 0,
+      "start": 0,
+      "duration": 0,
       "loop": false,
-      "order": 27
+      "order": 26
     },
     {
       "path": "characters/protagonist/body.png",
@@ -639,8 +671,10 @@
         98
       ],
       "fps": 3.0769230769230766,
+      "start": 0,
+      "duration": 0,
       "loop": true,
-      "order": 28
+      "order": 27
     },
     {
       "path": "characters/protagonist/clothes.png",
@@ -661,30 +695,178 @@
         43
       ],
       "fps": 3.6363636363636362,
+      "start": 0,
+      "duration": 0,
       "loop": true,
-      "order": 29
+      "order": 28
     },
     {
-      "path": "characters/protagonist/cape.png",
-      "kind": "n",
-      "x": 261,
-      "y": 638,
-      "width": 214,
-      "height": 174,
-      "columns": 8,
-      "frames": 32,
-      "period": 4.4,
+      "path": "characters/protagonist/cape_refinada/01_calma.png",
+      "kind": "c",
+      "x": 238,
+      "y": 622,
+      "width": 245,
+      "height": 209,
+      "columns": 7,
+      "frames": 24,
+      "period": 18.0,
       "driftX": 0,
       "driftY": 0,
       "opacity": 1,
       "delay": 0.22,
       "pivot": [
-        107,
-        87
+        122,
+        104
       ],
-      "fps": 7.2727272727272725,
-      "loop": true,
+      "fps": 10.0,
+      "start": 0.0,
+      "duration": 2.4,
+      "loop": false,
+      "order": 29
+    },
+    {
+      "path": "characters/protagonist/cape_refinada/02_brisa.png",
+      "kind": "c",
+      "x": 238,
+      "y": 622,
+      "width": 245,
+      "height": 209,
+      "columns": 7,
+      "frames": 32,
+      "period": 18.0,
+      "driftX": 0,
+      "driftY": 0,
+      "opacity": 1,
+      "delay": 0.22,
+      "pivot": [
+        122,
+        104
+      ],
+      "fps": 13.333333333333334,
+      "start": 2.4,
+      "duration": 2.4,
+      "loop": false,
       "order": 30
+    },
+    {
+      "path": "characters/protagonist/cape_refinada/03_vento.png",
+      "kind": "c",
+      "x": 238,
+      "y": 622,
+      "width": 245,
+      "height": 209,
+      "columns": 7,
+      "frames": 48,
+      "period": 18.0,
+      "driftX": 0,
+      "driftY": 0,
+      "opacity": 1,
+      "delay": 0.22,
+      "pivot": [
+        122,
+        104
+      ],
+      "fps": 15.0,
+      "start": 4.8,
+      "duration": 3.2,
+      "loop": false,
+      "order": 31
+    },
+    {
+      "path": "characters/protagonist/cape_refinada/04_rajada_moderada.png",
+      "kind": "c",
+      "x": 238,
+      "y": 622,
+      "width": 245,
+      "height": 209,
+      "columns": 7,
+      "frames": 40,
+      "period": 18.0,
+      "driftX": 0,
+      "driftY": 0,
+      "opacity": 1,
+      "delay": 0.22,
+      "pivot": [
+        122,
+        104
+      ],
+      "fps": 20.0,
+      "start": 8.0,
+      "duration": 2.0,
+      "loop": false,
+      "order": 32
+    },
+    {
+      "path": "characters/protagonist/cape_refinada/05_rajada_intensa.png",
+      "kind": "c",
+      "x": 238,
+      "y": 622,
+      "width": 245,
+      "height": 209,
+      "columns": 7,
+      "frames": 48,
+      "period": 18.0,
+      "driftX": 0,
+      "driftY": 0,
+      "opacity": 1,
+      "delay": 0.22,
+      "pivot": [
+        122,
+        104
+      ],
+      "fps": 20.0,
+      "start": 10.0,
+      "duration": 2.4,
+      "loop": false,
+      "order": 33
+    },
+    {
+      "path": "characters/protagonist/cape_refinada/06_recuperacao.png",
+      "kind": "c",
+      "x": 238,
+      "y": 622,
+      "width": 245,
+      "height": 209,
+      "columns": 7,
+      "frames": 32,
+      "period": 18.0,
+      "driftX": 0,
+      "driftY": 0,
+      "opacity": 1,
+      "delay": 0.22,
+      "pivot": [
+        122,
+        104
+      ],
+      "fps": 13.333333333333334,
+      "start": 12.4,
+      "duration": 2.4,
+      "loop": false,
+      "order": 34
+    },
+    {
+      "path": "characters/protagonist/cape_refinada/07_transicao.png",
+      "kind": "c",
+      "x": 238,
+      "y": 622,
+      "width": 245,
+      "height": 209,
+      "columns": 7,
+      "frames": 48,
+      "period": 18.0,
+      "driftX": 0,
+      "driftY": 0,
+      "opacity": 1,
+      "delay": 0.22,
+      "pivot": [
+        122,
+        104
+      ],
+      "fps": 15.0,
+      "start": 14.8,
+      "duration": 3.2,
+      "loop": false,
+      "order": 35
     },
     {
       "path": "characters/protagonist/hair.png",
@@ -705,8 +887,10 @@
         24
       ],
       "fps": 3.6363636363636362,
+      "start": 0,
+      "duration": 0,
       "loop": true,
-      "order": 31
+      "order": 36
     },
     {
       "path": "foreground/ruins/primeiro_plano.png",
@@ -727,151 +911,333 @@
         470
       ],
       "fps": 0,
+      "start": 0,
+      "duration": 0,
       "loop": false,
-      "order": 32
-    },
-    {
-      "path": "vegetation/vines/arco.png",
-      "kind": "n",
-      "x": 109,
-      "y": 0,
-      "width": 227,
-      "height": 189,
-      "columns": 8,
-      "frames": 16,
-      "period": 4.4,
-      "driftX": 0,
-      "driftY": 0,
-      "opacity": 1,
-      "delay": 0.22,
-      "pivot": [
-        113,
-        94
-      ],
-      "fps": 3.6363636363636362,
-      "loop": true,
-      "order": 33
-    },
-    {
-      "path": "vegetation/grass/tufo_01.png",
-      "kind": "n",
-      "x": 502,
-      "y": 849,
-      "width": 77,
-      "height": 47,
-      "columns": 8,
-      "frames": 14,
-      "period": 3.8,
-      "driftX": 0,
-      "driftY": 0,
-      "opacity": 1,
-      "delay": 0,
-      "pivot": [
-        38,
-        23
-      ],
-      "fps": 3.68421052631579,
-      "loop": true,
-      "order": 34
-    },
-    {
-      "path": "vegetation/grass/tufo_02.png",
-      "kind": "n",
-      "x": 580,
-      "y": 847,
-      "width": 55,
-      "height": 53,
-      "columns": 8,
-      "frames": 14,
-      "period": 3.9899999999999998,
-      "driftX": 0,
-      "driftY": 0,
-      "opacity": 1,
-      "delay": 0,
-      "pivot": [
-        27,
-        26
-      ],
-      "fps": 3.5087719298245617,
-      "loop": true,
-      "order": 35
-    },
-    {
-      "path": "vegetation/grass/tufo_03.png",
-      "kind": "n",
-      "x": 642,
-      "y": 865,
-      "width": 53,
-      "height": 41,
-      "columns": 8,
-      "frames": 14,
-      "period": 4.18,
-      "driftX": 0,
-      "driftY": 0,
-      "opacity": 1,
-      "delay": 0,
-      "pivot": [
-        26,
-        20
-      ],
-      "fps": 3.349282296650718,
-      "loop": true,
-      "order": 36
-    },
-    {
-      "path": "vegetation/grass/tufo_04.png",
-      "kind": "n",
-      "x": 697,
-      "y": 869,
-      "width": 61,
-      "height": 48,
-      "columns": 8,
-      "frames": 14,
-      "period": 4.37,
-      "driftX": 0,
-      "driftY": 0,
-      "opacity": 1,
-      "delay": 0,
-      "pivot": [
-        30,
-        24
-      ],
-      "fps": 3.203661327231121,
-      "loop": true,
       "order": 37
     },
     {
-      "path": "vegetation/grass/tufo_05.png",
-      "kind": "n",
-      "x": 756,
-      "y": 891,
-      "width": 53,
-      "height": 37,
+      "path": "vegetation/grass_refinada/curta_esquerda.png",
+      "kind": "v",
+      "x": 11,
+      "y": 724,
+      "width": 25,
+      "height": 19,
       "columns": 8,
-      "frames": 14,
-      "period": 4.56,
+      "frames": 64,
+      "period": 1.65,
       "driftX": 0,
       "driftY": 0,
       "opacity": 1,
       "delay": 0,
       "pivot": [
-        26,
-        18
+        12,
+        9
       ],
-      "fps": 3.0701754385964914,
-      "loop": true,
+      "fps": 168.42105263157896,
+      "start": 0.13,
+      "duration": 0.38,
+      "loop": false,
       "order": 38
     },
     {
-      "path": "vegetation/grass/tufo_06.png",
-      "kind": "n",
-      "x": 814,
-      "y": 895,
-      "width": 38,
-      "height": 40,
+      "path": "vegetation/grass_refinada/fina_pedra.png",
+      "kind": "v",
+      "x": 48,
+      "y": 724,
+      "width": 31,
+      "height": 22,
       "columns": 8,
-      "frames": 14,
-      "period": 4.75,
+      "frames": 64,
+      "period": 1.7799999999999998,
+      "driftX": 0,
+      "driftY": 0,
+      "opacity": 1,
+      "delay": 0,
+      "pivot": [
+        15,
+        11
+      ],
+      "fps": 156.09756097560975,
+      "start": 0.248,
+      "duration": 0.41000000000000003,
+      "loop": false,
+      "order": 39
+    },
+    {
+      "path": "vegetation/grass_refinada/arbusto_seco.png",
+      "kind": "v",
+      "x": 80,
+      "y": 738,
+      "width": 44,
+      "height": 32,
+      "columns": 8,
+      "frames": 64,
+      "period": 1.91,
+      "driftX": 0,
+      "driftY": 0,
+      "opacity": 1,
+      "delay": 0,
+      "pivot": [
+        22,
+        16
+      ],
+      "fps": 145.45454545454547,
+      "start": 0.366,
+      "duration": 0.44,
+      "loop": false,
+      "order": 40
+    },
+    {
+      "path": "vegetation/grass_refinada/capim_medio.png",
+      "kind": "v",
+      "x": 123,
+      "y": 764,
+      "width": 36,
+      "height": 23,
+      "columns": 8,
+      "frames": 64,
+      "period": 2.04,
+      "driftX": 0,
+      "driftY": 0,
+      "opacity": 1,
+      "delay": 0,
+      "pivot": [
+        18,
+        11
+      ],
+      "fps": 136.17021276595744,
+      "start": 0.484,
+      "duration": 0.47,
+      "loop": false,
+      "order": 41
+    },
+    {
+      "path": "vegetation/grass_refinada/folha_rente.png",
+      "kind": "v",
+      "x": 182,
+      "y": 768,
+      "width": 29,
+      "height": 17,
+      "columns": 8,
+      "frames": 64,
+      "period": 2.17,
+      "driftX": 0,
+      "driftY": 0,
+      "opacity": 1,
+      "delay": 0,
+      "pivot": [
+        14,
+        8
+      ],
+      "fps": 128.0,
+      "start": 0.602,
+      "duration": 0.5,
+      "loop": false,
+      "order": 42
+    },
+    {
+      "path": "vegetation/grass_refinada/ramo_partido.png",
+      "kind": "v",
+      "x": 223,
+      "y": 788,
+      "width": 32,
+      "height": 36,
+      "columns": 8,
+      "frames": 64,
+      "period": 2.3,
+      "driftX": 0,
+      "driftY": 0,
+      "opacity": 1,
+      "delay": 0,
+      "pivot": [
+        16,
+        18
+      ],
+      "fps": 168.42105263157896,
+      "start": 0.72,
+      "duration": 0.38,
+      "loop": false,
+      "order": 43
+    },
+    {
+      "path": "vegetation/grass_refinada/pontas_secas.png",
+      "kind": "v",
+      "x": 255,
+      "y": 827,
+      "width": 26,
+      "height": 20,
+      "columns": 8,
+      "frames": 64,
+      "period": 2.4299999999999997,
+      "driftX": 0,
+      "driftY": 0,
+      "opacity": 1,
+      "delay": 0,
+      "pivot": [
+        13,
+        10
+      ],
+      "fps": 156.09756097560975,
+      "start": 0.189,
+      "duration": 0.41000000000000003,
+      "loop": false,
+      "order": 44
+    },
+    {
+      "path": "vegetation/grass_refinada/capim_alto.png",
+      "kind": "v",
+      "x": 493,
+      "y": 810,
+      "width": 51,
+      "height": 48,
+      "columns": 8,
+      "frames": 64,
+      "period": 2.56,
+      "driftX": 0,
+      "driftY": 0,
+      "opacity": 1,
+      "delay": 0,
+      "pivot": [
+        25,
+        24
+      ],
+      "fps": 145.45454545454547,
+      "start": 0.307,
+      "duration": 0.44,
+      "loop": false,
+      "order": 45
+    },
+    {
+      "path": "vegetation/grass_refinada/folha_larga.png",
+      "kind": "v",
+      "x": 530,
+      "y": 861,
+      "width": 46,
+      "height": 37,
+      "columns": 8,
+      "frames": 64,
+      "period": 2.69,
+      "driftX": 0,
+      "driftY": 0,
+      "opacity": 1,
+      "delay": 0,
+      "pivot": [
+        23,
+        18
+      ],
+      "fps": 136.17021276595744,
+      "start": 0.425,
+      "duration": 0.47,
+      "loop": false,
+      "order": 46
+    },
+    {
+      "path": "vegetation/grass_refinada/tufos_pedras.png",
+      "kind": "v",
+      "x": 565,
+      "y": 871,
+      "width": 36,
+      "height": 25,
+      "columns": 8,
+      "frames": 64,
+      "period": 2.82,
+      "driftX": 0,
+      "driftY": 0,
+      "opacity": 1,
+      "delay": 0,
+      "pivot": [
+        18,
+        12
+      ],
+      "fps": 128.0,
+      "start": 0.5429999999999999,
+      "duration": 0.5,
+      "loop": false,
+      "order": 47
+    },
+    {
+      "path": "vegetation/grass_refinada/lanca_seca.png",
+      "kind": "v",
+      "x": 605,
+      "y": 855,
+      "width": 34,
+      "height": 29,
+      "columns": 8,
+      "frames": 64,
+      "period": 2.95,
+      "driftX": 0,
+      "driftY": 0,
+      "opacity": 1,
+      "delay": 0,
+      "pivot": [
+        17,
+        14
+      ],
+      "fps": 168.42105263157896,
+      "start": 0.6609999999999999,
+      "duration": 0.38,
+      "loop": false,
+      "order": 48
+    },
+    {
+      "path": "vegetation/grass_refinada/retorcida.png",
+      "kind": "v",
+      "x": 663,
+      "y": 865,
+      "width": 43,
+      "height": 32,
+      "columns": 8,
+      "frames": 64,
+      "period": 3.08,
+      "driftX": 0,
+      "driftY": 0,
+      "opacity": 1,
+      "delay": 0,
+      "pivot": [
+        21,
+        16
+      ],
+      "fps": 156.09756097560975,
+      "start": 0.13,
+      "duration": 0.41000000000000003,
+      "loop": false,
+      "order": 49
+    },
+    {
+      "path": "vegetation/grass_refinada/junco_duplo.png",
+      "kind": "v",
+      "x": 728,
+      "y": 880,
+      "width": 39,
+      "height": 39,
+      "columns": 8,
+      "frames": 64,
+      "period": 3.21,
+      "driftX": 0,
+      "driftY": 0,
+      "opacity": 1,
+      "delay": 0,
+      "pivot": [
+        19,
+        19
+      ],
+      "fps": 145.45454545454547,
+      "start": 0.248,
+      "duration": 0.44,
+      "loop": false,
+      "order": 50
+    },
+    {
+      "path": "vegetation/grass_refinada/capim_fino.png",
+      "kind": "v",
+      "x": 775,
+      "y": 883,
+      "width": 38,
+      "height": 41,
+      "columns": 8,
+      "frames": 64,
+      "period": 3.34,
       "driftX": 0,
       "driftY": 0,
       "opacity": 1,
@@ -880,53 +1246,83 @@
         19,
         20
       ],
-      "fps": 2.9473684210526314,
-      "loop": true,
-      "order": 39
+      "fps": 136.17021276595744,
+      "start": 0.366,
+      "duration": 0.47,
+      "loop": false,
+      "order": 51
     },
     {
-      "path": "vegetation/grass/tufo_07.png",
-      "kind": "n",
-      "x": 903,
+      "path": "vegetation/grass_refinada/folhas_agudas.png",
+      "kind": "v",
+      "x": 845,
       "y": 893,
-      "width": 76,
-      "height": 48,
+      "width": 49,
+      "height": 38,
       "columns": 8,
-      "frames": 14,
-      "period": 4.9399999999999995,
+      "frames": 64,
+      "period": 3.4699999999999998,
       "driftX": 0,
       "driftY": 0,
       "opacity": 1,
       "delay": 0,
       "pivot": [
-        38,
-        24
+        24,
+        19
       ],
-      "fps": 2.834008097165992,
-      "loop": true,
-      "order": 40
+      "fps": 128.0,
+      "start": 0.484,
+      "duration": 0.5,
+      "loop": false,
+      "order": 52
     },
     {
-      "path": "vegetation/grass/tufo_08.png",
-      "kind": "n",
-      "x": 966,
-      "y": 905,
+      "path": "vegetation/grass_refinada/ramo_frontal.png",
+      "kind": "v",
+      "x": 947,
+      "y": 889,
       "width": 54,
-      "height": 36,
+      "height": 47,
       "columns": 8,
-      "frames": 14,
-      "period": 5.13,
+      "frames": 64,
+      "period": 3.6,
       "driftX": 0,
       "driftY": 0,
       "opacity": 1,
       "delay": 0,
       "pivot": [
         27,
-        18
+        23
       ],
-      "fps": 2.729044834307992,
-      "loop": true,
-      "order": 41
+      "fps": 168.42105263157896,
+      "start": 0.602,
+      "duration": 0.38,
+      "loop": false,
+      "order": 53
+    },
+    {
+      "path": "vegetation/vines_refinadas/arco.png",
+      "kind": "v",
+      "x": 107,
+      "y": 0,
+      "width": 232,
+      "height": 191,
+      "columns": 8,
+      "frames": 64,
+      "period": 3.5,
+      "driftX": 0,
+      "driftY": 0,
+      "opacity": 1,
+      "delay": 0,
+      "pivot": [
+        116,
+        95
+      ],
+      "fps": 112.28070175438597,
+      "start": 0.49,
+      "duration": 0.57,
+      "loop": false,
+      "order": 54
     },
     {
       "path": "atmosphere/particles/particulas.png",
@@ -947,8 +1343,10 @@
         9
       ],
       "fps": 0,
+      "start": 0,
+      "duration": 0,
       "loop": false,
-      "order": 42
+      "order": 55
     },
     {
       "path": "foreground/title/lettering.png",
@@ -969,8 +1367,10 @@
         131
       ],
       "fps": 0,
+      "start": 0,
+      "duration": 0,
       "loop": false,
-      "order": 43
+      "order": 56
     },
     {
       "path": "foreground/title/ornamentos_superiores.png",
@@ -991,8 +1391,10 @@
         131
       ],
       "fps": 2.857142857142857,
+      "start": 0,
+      "duration": 0,
       "loop": true,
-      "order": 44
+      "order": 57
     },
     {
       "path": "foreground/title/ornamentos_inferiores.png",
@@ -1013,8 +1415,10 @@
         131
       ],
       "fps": 2.857142857142857,
+      "start": 0,
+      "duration": 0,
       "loop": true,
-      "order": 45
+      "order": 58
     },
     {
       "path": "foreground/title/espadas.png",
@@ -1035,8 +1439,10 @@
         131
       ],
       "fps": 2.857142857142857,
+      "start": 0,
+      "duration": 0,
       "loop": true,
-      "order": 46
+      "order": 59
     },
     {
       "path": "foreground/title/glow.png",
@@ -1057,8 +1463,10 @@
         131
       ],
       "fps": 0,
+      "start": 0,
+      "duration": 0,
       "loop": false,
-      "order": 47
+      "order": 60
     }
   ]
 }

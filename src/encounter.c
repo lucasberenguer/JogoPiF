@@ -840,7 +840,7 @@ static int ChoiceInput(int count, Rectangle (*choiceRect)(int, int)) {
         return selected;
     }
     for (int i=0; i<count; i++) {
-        if (IsKeyPressed(KEY_ONE+i)) return i;
+        if (KeyPressed(KEY_ONE+i)) return i;
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
             CheckCollisionPointRec(GetMousePosition(),choiceRect(i,count))) return i;
     }
@@ -1061,8 +1061,8 @@ bool AnswerEncounterSeal(Encounter *e, EnemyGroup *enemies, int *health, int cho
 
 bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing,
                      Vector2 player, int *health) {
-    bool interact = IsKeyPressed(KEY_E) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_LEFT);
-    bool advance = IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) || interact ||
+    bool interact = KeyPressed(KEY_E) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_LEFT);
+    bool advance = KeyPressed(KEY_SPACE) || KeyPressed(KEY_ENTER) || interact ||
                    PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     if (*health<=0) { e->phase=ENCOUNTER_DEFEAT; return false; }
     if (e->guardianIntroPending || GuardianLiberationPending(e) || GuardianPassagePending(e) ||
@@ -1104,7 +1104,7 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
             return false;
         }
         if (e->phase == ENCOUNTER_BASEMENT_PILLAR) {
-            if (IsKeyPressed(KEY_ESCAPE) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_RIGHT)) { e->phase = ENCOUNTER_FIGHT; return false; }
+            if (KeyPressed(KEY_ESCAPE) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_RIGHT)) { e->phase = ENCOUNTER_FIGHT; return false; }
             int sel = ReadRitualChoice(2);
             if (sel >= 0) {
                 static const int solution[4] = {0, 1, 0, 1}; /* NW=V(0), NE=F(1), SW=V(0), SE=F(1) */
@@ -1223,7 +1223,8 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
             return PutAwayVillageLetter(e,enemies,clearing,player);
     } else if (e->phase==ENCOUNTER_REWARD) {
         UpdateChoiceFocus(e->rewardCount, RewardCardRect);
-        if (PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_UP) && RerollEncounterReward(e, choiceFocus))
+        if ((PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_UP) || (UsingArcade() && interact)) &&
+            RerollEncounterReward(e, choiceFocus))
             return false;
         if (!IsEpicRewardStage(e) && !e->rerolled &&
             IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
@@ -1426,7 +1427,9 @@ static void DrawRewardScreen(const Encounter *e) {
     UpdateChoiceFocus(e->rewardCount, RewardCardRect);
     if (UsingGamepad())
         DrawGameTextIn(canReroll && !e->rerolled
-                       ? InputHint("", "Direcional: escolher  ·  [Cruz]: confirmar  ·  [Triângulo]: sortear")
+                       ? InputHint("", UsingArcade()
+                           ? "Alavanca: escolher  ·  [Cruz]: confirmar  ·  [Quadrado]: sortear"
+                           : "Direcional: escolher  ·  [Cruz]: confirmar  ·  [Triângulo]: sortear")
                        : InputHint("", "Direcional: escolher  ·  [Cruz]: confirmar"),
                        (Rectangle){0, GetScreenHeight()*.92f, GetScreenWidth(), 26},
                        18, GOLD, GAME_TEXT_BODY);

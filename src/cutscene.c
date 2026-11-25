@@ -110,13 +110,13 @@ void SetOpeningCutscenePaused(OpeningCutscene *scene, bool paused) {
 
 void UpdateOpeningCutscene(OpeningCutscene *scene, float dt) {
     if (scene->finished || scene->paused) return;
-    if (IsKeyPressed(KEY_ESCAPE) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_RIGHT)) {
+    if (KeyPressed(KEY_ESCAPE) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_RIGHT)) {
         scene->finished = true;
         return;
     }
     dt = fmaxf(0.0f, dt);
     bool advance = scene->beat < INTRO_BEAT_COUNT &&
-        (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN));
+        (KeyPressed(KEY_SPACE) || KeyPressed(KEY_ENTER) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN));
     if (advance) {
         if (scene->cues[scene->beat].stream.buffer) StopSound(scene->cues[scene->beat]);
         if (scene->beat == INTRO_BEAT_COUNT-1) scene->finalBeatAtAdvance = scene->elapsed;

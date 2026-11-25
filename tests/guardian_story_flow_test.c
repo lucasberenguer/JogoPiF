@@ -3,6 +3,7 @@
 #include "menu.h"
 #include "guardian_cutscene.h"
 #include "encounter.h"
+#include "game_input.h"
 #include <assert.h>
 #include <stdio.h>
 
@@ -51,8 +52,8 @@ static bool TestPassage(Encounter *e,EnemyGroup *enemies,Clearing *map,Vector2 *
 #define IsWindowFocused TestFocused
 #define SetTargetFPS IgnoreFps
 #define WindowShouldClose TestClose
-#define IsKeyPressed TestKey
-#define IsKeyDown TestKeyDown
+#define KeyPressed TestKey
+#define KeyDown TestKeyDown
 #define GetFrameTime TestDelta
 #define UpdateMenu TestMenu
 #define BeginEncounter TestBeginEncounter
@@ -70,8 +71,8 @@ static bool TestPassage(Encounter *e,EnemyGroup *enemies,Clearing *map,Vector2 *
 #undef IsWindowFocused
 #undef SetTargetFPS
 #undef WindowShouldClose
-#undef IsKeyPressed
-#undef IsKeyDown
+#undef KeyPressed
+#undef KeyDown
 #undef GetFrameTime
 #undef UpdateMenu
 #undef BeginEncounter

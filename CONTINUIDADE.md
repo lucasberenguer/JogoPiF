@@ -1,5 +1,15 @@
 # Jogo PIF — continuidade entre computadores e chats
 
+## Controles do arcade (25/11/2026)
+
+- Implementado no Windows. **Configurar arcade (F9)** no menu recebe e grava as quatro direções da alavanca, ataque/confirmar, esquiva/voltar, interação e Start/pausa. O botão extra é opcional e pode ser pulado pressionando Start novamente. A calibração aceita teclas, botões USB, eixos e direcionais mesmo quando o encoder não tem mapeamento de gamepad no GLFW. O perfil fica em `arcade_pif.cfg` ao lado do executável.
+- A alavanca move e determina a mira. Os botões calibrados são usados também nos menus, nas cenas, nos selamentos, nas recompensas e no ranking. A build Release compilou em `out/review/release/JogoPiF.exe`. O teste de entrada simulou calibração e leitura de encoder USB e teclado, botões simultâneos, diagonais, persistência e reconexão. A confirmação com o painel físico do Hexcade segue pendente.
+
+## Refinamento ambiental do menu (25/11/2026)
+
+- A capa do protagonista tem 272 quadros exclusivos em sete atlas encadeados, com ciclo de 18 s. O ombro fica fixo, e a cruz dourada acompanha as dobras e o movimento das pontas. As 16 plantas do primeiro plano e a trepadeira do arco respondem ao mesmo vento com atrasos, flexibilidade e recuperação individuais. Três novas famílias de nuvens usam 120 quadros ao todo.
+- **Validação:** build Release em `out/review/release/JogoPiF.exe` sobre `d988ece`. Capturas em 1280×720 e 800×450 conferidas após corrigir o contato de alguns tufos com o solo. A auditoria verificou a entrada pulável, a navegação, a transição de início e a configuração de movimento reduzido. As âncoras e as junções dos sete trechos da capa foram verificadas no gerador e nos atlas. Prévias e quadros da capa em `out/review/menu-ambiente`.
+
 ## Interface durante a partida (25/11/2026)
 
 - Retirado o quadro de instruções do canto superior esquerdo, incluindo as legendas de ataque e o nome da arma no mesmo bloco. Vida, esquiva, cronômetro, seta de navegação e atalhos de ferramentas continuam disponíveis. Os controles podem ser consultados no menu de pausa.

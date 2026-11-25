@@ -14,6 +14,13 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(raylib)
 
+# The desktop GLFW backend exposes USB encoders before an SDL mapping exists.
+if(PLATFORM STREQUAL "Desktop")
+    set_property(SOURCE src/game_input.c APPEND PROPERTY COMPILE_DEFINITIONS PIF_GLFW_ARCADE)
+    set_property(SOURCE src/game_input.c APPEND PROPERTY INCLUDE_DIRECTORIES
+                 "${raylib_SOURCE_DIR}/src/external/glfw/include")
+endif()
+
 # Fontes do projeto
 set(AUDIO_SOURCES src/game_audio.c src/boss_music.c)
 
