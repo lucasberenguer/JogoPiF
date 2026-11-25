@@ -4,7 +4,7 @@
 #include "clearing.h"
 #include "necromancer.h"
 
-#define ENEMY_COUNT 36
+#define ENEMY_COUNT 48
 enum {
     GUARDIAN_ROOT_DAMAGE = 30, GUARDIAN_WAVE_DAMAGE = 36,
     GUARDIAN_CURSE_DAMAGE = 42, GUARDIAN_MELEE_DAMAGE = 26
@@ -58,7 +58,7 @@ typedef enum TemplarRole {
 } TemplarRole;
 typedef enum EnemyState {
     ENEMY_IDLE, ENEMY_WALK, ENEMY_ATTACK, ENEMY_HURT, ENEMY_DIE, ENEMY_GONE,
-    ENEMY_SPAWNING, ENEMY_FALLEN
+    ENEMY_SPAWNING, ENEMY_FALLEN, ENEMY_QUEUED
 } EnemyState;
 enum { VILLAGE_HORDE_INITIAL = 30, VILLAGE_HORDE_REINFORCEMENTS = 34 };
 enum { VILLAGE_ZOMBIE_IDLE, VILLAGE_ZOMBIE_EMERGE, VILLAGE_ZOMBIE_WALK,
@@ -121,7 +121,7 @@ typedef struct EnemyGroup {
     NecromancerFight necromancer;
     Texture2D igrisArt[IGRIS_ART_COUNT], templarEffects, templarDust;
     Texture2D templarIdle[TEMPLAR_MARSHAL], templarWalk[TEMPLAR_MARSHAL], templarAttack[TEMPLAR_MARSHAL];
-    Texture2D bonelandGhoul, bonelandCultist;
+    Texture2D bonelandGhoul, bonelandCultist, boneShell[4];
     Texture2D boneLordSheets[BONE_SHEET_COUNT];
     Texture2D sealMarker;
     Texture2D bossSprites, bossWalk, bossAttack, roots, rootWave, curse, guardianMelee;

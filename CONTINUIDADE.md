@@ -1,8 +1,19 @@
 # Jogo PIF — continuidade entre computadores e chats
 
-Atualizado em 23/11/2026. Leia junto do código e de `git status` antes de retomar.
+Atualizado em 25/11/2026. Leia junto do código e de `git status` antes de retomar.
 
 ## Retomada rápida
+
+- **25/11 — Zumbi Gordão de Chã da Tristeza:** passa de 300 para 140 PV nas entradas iniciais e nos reforços.
+
+- **25/11 — Ajuste de vida e ondas da Terra dos Ossos para o evento:** 36 inimigos na primeira onda e 38 na segunda, seguidas do Rasga-Ossos. Carniçais com 40 PV, cultistas com 36 PV e Carapaças Ósseas com 145 PV em ambas as ondas. Teto de 22 simultâneos com reserva dinâmica.
+
+- **25/11 — Ajuste das ondas para o evento:** Clareira fica com 26/30 inimigos e Cemitério com 32/36, seguidos dos respectivos chefes. Terra dos Ossos mantém 26/34 e passa a usar a mesma reserva dinâmica, com teto de 22. Na Terra dos Ossos, os PV com poder padrão passam a 23/24 para carniçais, 17/18 para cultistas e 155 para a Carapaça Óssea nas duas ondas.
+
+- **25/11 — Limite simultâneo para o evento:** Clareira passa de 14 para 18 vagas e Cemitério de 16 para 20. A reserva segue preenchendo vagas abertas, com prioridade de surgimento perto do jogador entre os últimos 12 reforços.
+
+
+- **24/11 — Ondas da Clareira e do Cemitério para o evento:** Clareira com 28/40 inimigos e teto de 14 combatentes; Cemitério com 36/48 e teto de 16. Cada classe dobrou em quantidade e ficou com metade dos PV anteriores, arredondada para cima. Reservas ocupam vagas abertas e entram com aviso de surgimento. Entre as últimas 12, três em cada quatro priorizam posições livres a 240–380 unidades do jogador, com acesso direto e sem aglomeração. O contador inclui a reserva e os especiais ainda aguardando selamento. O ritmo em partida continua para teste.
 
 - **23/11 — Novo especial do Portão da Última Sentença (implementado):** a criatura substitui os dois carrascos da segunda onda com quatro direções e 4 quadros de espera, 4 de marcha e 5 de ataque. O porta-estandarte saiu da formação e deixou de ser carregado. As duas ondas têm cinco inimigos cada. A criatura avisa a direção e a área do golpe, faz uma investida de até 167 unidades que para em obstáculos e acerta no quarto quadro da animação. O dano base permanece 18. **Validação:** build Debug em `out/review`, prévia das três folhas conferida, `enemy_audit` e `clearing_encounter` aprovados. A auditoria cobre preparação, acerto, esquiva e bloqueio por obstáculo. Revisão em movimento durante partida pendente.
 
@@ -515,9 +526,16 @@ Na entrega do pós-boss de 18/11, build em `out/review` concluído e seis testes
 - A build `out/review/JogoPiF-Cutscene-Palacio.exe` compilou. A prévia isolada `out/review/Previa-Cutscene-Palacio.exe` carregou as sete artes, renderizou as legendas e confirmou que a sequência chega ao fim automaticamente. O teste do loop real da campanha passou, incluindo a travessia da Terra dos Ossos, os oito planos com as sete artes e a retomada na Onda 1. A mixagem foi validada pela configuração da trilha; a escuta em partida fica para revisão subjetiva.
 - A montagem segue a ordem do roteiro: queda do Cérbero, estrada ao norte, revelação do palácio, guarda imóvel, travessia do umbral, selo e porta da antessala, avanço dos soldados e fade para a Onda 1. Foram refeitas as artes da queda, da guarda, da travessia e do avanço. Igris tem sua própria apresentação após as ondas.
 
+## Carapaça Óssea na Terra dos Ossos
+
+- Inimigo especial de porte semelhante ao golem, com 145 PV. Uma Carapaça substitui um carniçal na onda 1 e duas substituem carniçais na onda 2. As ondas têm 36 e 38 inimigos, com 7 e 10 cultistas, respectivamente.
+- A pancada tem aviso de 0,70 s, raio de 92 unidades, 34 de dano base em um único impacto e recuperação. A esquiva e os obstáculos evitam o acerto. O golpe tem anel de impacto, poeira e fragmentos. O inimigo usa a barra comum e o fluxo de selamento dos especiais.
+- Os quatro atlas em `assets/carapaca_ossea/` têm seis quadros em quatro direções para espera, caminhada, pancada e queda. Build local `out/review/JogoPiF-Carapaca-Ossea.exe`. A auditoria de inimigos e o teste de encontros passaram.
+
 ## Transições de fase no HUD
 
 - As transições de fase dos chefes acionam um pulso violeta de 0,65 s no limiar correspondente do HUD, com brilho na moldura e uma caveira pixelada que se dissipa em partículas. A caveira fica junto à borda inferior para preservar a leitura do nome e dos PV. O efeito usa o relógio da transformação do próprio chefe.
+
 
 ## Refinamento das animações de Igris
 

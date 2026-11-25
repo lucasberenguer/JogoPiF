@@ -75,7 +75,7 @@ static void CheckVillageZombies(Encounter *encounter, EnemyGroup *enemies, Clear
         bool brute=i==10 || i==21;
         assert(zombie->type == (brute ? ENEMY_SPECIAL : ENEMY_COMMON_MELEE) && zombie->state == ENEMY_SPAWNING);
         assert(zombie->villageBrute==brute && !EnemyCanBeHit(zombie));
-        assert(zombie->health==(brute?300:90) && zombie->maxHealth==zombie->health);
+        assert(zombie->health==(brute?140:90) && zombie->maxHealth==zombie->health);
     }
     int health = 100;
     UpdateEnemies(enemies, map, map->spawn, .66f, false, &health, 100);
@@ -92,7 +92,7 @@ static void CheckVillageZombies(Encounter *encounter, EnemyGroup *enemies, Clear
     for (int i=0;i<36;i++) {
         bool brute=i==10 || i==21 || i==32;
         assert(enemies->list[i].villageBrute==brute);
-        assert(enemies->list[i].health==(brute?300:90));
+        assert(enemies->list[i].health==(brute?140:90));
     }
     VillageUpdateHorde(enemies,map,map->spawn,.66f);
     assert(enemies->villageSpawnRemaining==28);
@@ -107,7 +107,7 @@ static void CheckVillageZombies(Encounter *encounter, EnemyGroup *enemies, Clear
         assert(enemies->list[35].villageBrute==(number==44 || number==55));
     }
     Enemy *brute=&enemies->list[10];
-    assert(brute->villageBrute && brute->health==300 && brute->maxHealth==300);
+    assert(brute->villageBrute && brute->health==140 && brute->maxHealth==140);
     brute->state=ENEMY_ATTACK;
     brute->stateTime=.63f;
     VillageUpdateBruteAttack(enemies,map,brute,brute->position,false,&health);
@@ -612,7 +612,7 @@ static void CheckDevTools(Encounter *e, EnemyGroup *enemies, Clearing *map) {
             assert(StartDevEncounter(&tools,DEV_STAGE,e,enemies,map,&player,&health));
             assert(e->practice && e->progress.map==area && e->progress.stage==wave);
             assert(e->progress.weapon==2 && e->progress.weaponLevel[2]==3);
-            assert(health==100 && EnemiesRemaining(enemies)==(area==CLEARING_MAP ? 14+(wave-1)*6 : ((int[]){18,24})[wave-1]));
+            assert(health==100 && EnemiesRemaining(enemies)==(area==CLEARING_MAP ? 26+(wave-1)*4 : ((int[]){32,36})[wave-1]));
             assert(!IsMapActorBlocked(map,player));
             assert(e->presentation.areaEntry && EncounterPaused(e));
             UpdateStagePresentation(&e->presentation,e->presentation.remaining);
@@ -689,7 +689,7 @@ static void CheckDevTools(Encounter *e, EnemyGroup *enemies, Clearing *map) {
     tools.map = BONELAND_MAP;
     tools.wave = 1;
     assert(StartDevEncounter(&tools, DEV_STAGE, e, enemies, map, &player, &health));
-    assert(e->practice && map->boneland && enemies->boneland && EnemiesRemaining(enemies) == 26);
+    assert(e->practice && map->boneland && enemies->boneland && EnemiesRemaining(enemies) == 36);
     assert(e->presentation.areaEntry && e->presentation.waveTotal == 3 && EncounterPaused(e));
     assert(strcmp(e->presentation.mapName, "Terra dos Ossos") == 0);
     UpdateStagePresentation(&e->presentation, .8f);
@@ -936,41 +936,38 @@ int main(void) {
     Capture("audit/clearing_special_directions.png",&encounter,&meleePreview,&clearing,player);
     for (int wave=1;wave<=CLEARING_WAVES;wave++) {
         assert(encounter.progress.stage==wave);
-        assert(EnemiesRemaining(&enemies)==14+(wave-1)*6);
+        assert(EnemiesRemaining(&enemies)==26+(wave-1)*4);
         assert(EncounterPaused(&encounter));
         UpdateStagePresentation(&encounter.presentation,.1f);
         assert(EncounterPaused(&encounter));
         UpdateStagePresentation(&encounter.presentation,10);
         assert(!EncounterPaused(&encounter));
-        int specials=0;
-        for (int i=0;i<ENEMY_COUNT;i++) {
-            Enemy *enemy=&enemies.list[i];
-            if (enemy->state==ENEMY_GONE) continue;
-            assert(enemy->state==ENEMY_SPAWNING);
-            assert(!EnemyCanBeHit(enemy));
-            assert(!IsClearingBlocked(&clearing,enemy->position));
-            if (enemy->type==ENEMY_SPECIAL) specials++;
-            enemy->state=ENEMY_IDLE;
-            DamageEnemy(enemy,enemy->health);
-        }
-        assert(specials>=1+(wave-1)/2 && specials<=1+(wave-1)/2+(wave>=3));
-        UpdateEnemies(&enemies,&clearing,player,.9f,true,&health,100);
-        assert(EnemiesRemaining(&enemies)==specials);
-        for (int i=0;i<ENEMY_COUNT;i++) if (enemies.list[i].state==ENEMY_FALLEN) {
-            Enemy *enemy=&enemies.list[i];
-            assert(OpenEncounterSeal(&encounter,&enemies,enemy->position));
-            assert(EncounterPaused(&encounter));
-            int correct=encounter.answer;
-            if (wave==1) {
-                int old=enemy->maxHealth;
-                assert(AnswerEncounterSeal(&encounter,&enemies,&health,1-correct));
-                assert(enemy->maxHealth>old && EnemyCanBeHit(enemy));
+        for(int batch=0;batch<5 && EnemiesRemaining(&enemies)>0;batch++) {
+            for (int i=0;i<ENEMY_COUNT;i++) {
+                Enemy *enemy=&enemies.list[i];
+                if (enemy->state==ENEMY_GONE || enemy->state==ENEMY_QUEUED || enemy->state==ENEMY_FALLEN) continue;
+                if(enemy->state==ENEMY_SPAWNING) assert(!EnemyCanBeHit(enemy));
+                assert(!IsClearingBlocked(&clearing,enemy->position));
+                enemy->state=ENEMY_IDLE;
                 DamageEnemy(enemy,enemy->health);
-                UpdateEnemies(&enemies,&clearing,player,.9f,true,&health,100);
-                assert(OpenEncounterSeal(&encounter,&enemies,enemy->position));
-                correct=encounter.answer;
             }
-            assert(AnswerEncounterSeal(&encounter,&enemies,&health,correct));
+            UpdateEnemies(&enemies,&clearing,player,.9f,true,&health,100);
+            for (int i=0;i<ENEMY_COUNT;i++) if (enemies.list[i].state==ENEMY_FALLEN) {
+                Enemy *enemy=&enemies.list[i];
+                assert(OpenEncounterSeal(&encounter,&enemies,enemy->position));
+                assert(EncounterPaused(&encounter));
+                int correct=encounter.answer;
+                if (wave==1) {
+                    int old=enemy->maxHealth;
+                    assert(AnswerEncounterSeal(&encounter,&enemies,&health,1-correct));
+                    assert(enemy->maxHealth>old && EnemyCanBeHit(enemy));
+                    DamageEnemy(enemy,enemy->health);
+                    UpdateEnemies(&enemies,&clearing,player,.9f,true,&health,100);
+                    assert(OpenEncounterSeal(&encounter,&enemies,enemy->position));
+                    correct=encounter.answer;
+                }
+                assert(AnswerEncounterSeal(&encounter,&enemies,&health,correct));
+            }
         }
         assert(EnemiesRemaining(&enemies)==0);
         UpdateEncounter(&encounter,&enemies,&clearing,player,&health);
@@ -1191,23 +1188,26 @@ int main(void) {
     Capture("audit/cemetery_collision_updated.png",&encounter,&enemies,&clearing,player);
     for (int wave=1;wave<=CEMETERY_WAVES;wave++) {
         assert(encounter.progress.stage==wave);
-        assert(EnemiesRemaining(&enemies)==((int[]){18,24})[wave-1]);
+        assert(EnemiesRemaining(&enemies)==((int[]){32,36})[wave-1]);
         UpdateStagePresentation(&encounter.presentation,10);
-        for (int i=0;i<ENEMY_COUNT;i++) {
-            Enemy *enemy=&enemies.list[i];
-            if (enemy->state==ENEMY_GONE) continue;
-            assert(!IsMapActorBlocked(&clearing,enemy->position));
-            enemy->state=ENEMY_IDLE;
-            DamageEnemy(enemy,enemy->health);
+        for(int batch=0;batch<5 && EnemiesRemaining(&enemies)>0;batch++) {
+            for (int i=0;i<ENEMY_COUNT;i++) {
+                Enemy *enemy=&enemies.list[i];
+                if (enemy->state==ENEMY_GONE || enemy->state==ENEMY_QUEUED || enemy->state==ENEMY_FALLEN) continue;
+                assert(!IsMapActorBlocked(&clearing,enemy->position));
+                enemy->state=ENEMY_IDLE;
+                DamageEnemy(enemy,enemy->health);
+            }
+            UpdateEnemies(&enemies,&clearing,player,.9f,true,&health,encounter.progress.maxHealth);
+            if(batch==0) assert(enemies.list[0].type==ENEMY_SPECIAL && enemies.list[0].state==ENEMY_FALLEN);
+            for (int i=0;i<ENEMY_COUNT;i++) if (enemies.list[i].state==ENEMY_FALLEN) {
+                assert(OpenEncounterSeal(&encounter,&enemies,enemies.list[i].position));
+                assert(encounter.sealQuestion.score>=3 && encounter.sealQuestion.score<=4);
+                int correct=encounter.answer;
+                assert(AnswerEncounterSeal(&encounter,&enemies,&health,correct));
+            }
         }
-        UpdateEnemies(&enemies,&clearing,player,.9f,true,&health,encounter.progress.maxHealth);
-        assert(enemies.list[0].type==ENEMY_SPECIAL && enemies.list[0].state==ENEMY_FALLEN);
-        for (int i=0;i<ENEMY_COUNT;i++) if (enemies.list[i].state==ENEMY_FALLEN) {
-            assert(OpenEncounterSeal(&encounter,&enemies,enemies.list[i].position));
-            assert(encounter.sealQuestion.score>=3 && encounter.sealQuestion.score<=4);
-            int correct=encounter.answer;
-            assert(AnswerEncounterSeal(&encounter,&enemies,&health,correct));
-        }
+        assert(EnemiesRemaining(&enemies)==0);
         UpdateEncounter(&encounter,&enemies,&clearing,player,&health);
         assert(encounter.phase==ENCOUNTER_REWARD);
         assert(ChooseEncounterReward(&encounter,&enemies,&clearing,player,&health,0));
@@ -1280,12 +1280,12 @@ int main(void) {
     RunProgress boneProgress = NewRunProgress(0);
     int boneHealth = boneProgress.health;
     BeginEncounter(&boneEncounter, &enemies, &bones, boneProgress, bones.spawn);
-    assert(boneEncounter.progress.map == BONELAND_MAP && EnemiesRemaining(&enemies) == 26);
+    assert(boneEncounter.progress.map == BONELAND_MAP && EnemiesRemaining(&enemies) == 36);
     boneEncounter.practice = true;
     boneEncounter.phase = ENCOUNTER_REWARD;
     boneEncounter.rewardCount = 1;
     assert(ChooseEncounterReward(&boneEncounter, &enemies, &bones, bones.spawn, &boneHealth, 0));
-    assert(boneEncounter.progress.stage == 2 && EnemiesRemaining(&enemies) == 34);
+    assert(boneEncounter.progress.stage == 2 && EnemiesRemaining(&enemies) == 38);
     boneEncounter.phase = ENCOUNTER_REWARD;
     boneEncounter.rewardCount = 1;
     assert(ChooseEncounterReward(&boneEncounter, &enemies, &bones, bones.spawn, &boneHealth, 0));

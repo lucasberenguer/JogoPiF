@@ -10,8 +10,6 @@
 #define ENEMY_ATTACK_DAMAGE 12
 #define ENEMY_MELEE_ATTACK_DAMAGE 14
 /* Base das ondas da Clareira e referência para o Cemitério. */
-#define CLEARING_FIRST_WAVE_ENEMIES 14
-#define CLEARING_WAVE_ENEMY_STEP 6
 #define CLEARING_ENEMY_HEALTH_SCALE 1.10f
 #define CLEARING_ENEMY_DAMAGE_SCALE 1.15f
 #define ENEMY_HURT_RADIUS 20.0f
@@ -356,6 +354,7 @@ static void UnloadEnemyMapAssets(EnemyGroup *group) {
     }
     UnloadTexIfLoaded(&group->bonelandGhoul);
     UnloadTexIfLoaded(&group->bonelandCultist);
+    for (int i=0;i<4;i++) UnloadTexIfLoaded(&group->boneShell[i]);
     for (int i = 0; i < BONE_SHEET_COUNT; i++)
         UnloadTexIfLoaded(&group->boneLordSheets[i]);
     UnloadTexIfLoaded(&group->bossSprites);
@@ -530,6 +529,12 @@ static bool LoadVillageEnemyAssets(EnemyGroup *group) {
 static bool LoadBonelandEnemyAssets(EnemyGroup *group) {
     group->bonelandGhoul = LoadBonelandSprite("assets/terra_dos_ossos_carnical.png");
     group->bonelandCultist = LoadBonelandSprite("assets/terra_dos_ossos_cultista.png");
+    const char *shellSheets[] = {"idle","walk","slam","fall"};
+    for (int i=0;i<4;i++) {
+        group->boneShell[i] = LoadTexture(TextFormat("assets/carapaca_ossea/%s.png",shellSheets[i]));
+        if (!group->boneShell[i].id) return false;
+        SetTextureFilter(group->boneShell[i], TEXTURE_FILTER_POINT);
+    }
     const char *boneSheets[BONE_SHEET_COUNT] = {
         "assets/rasga_ossos/idle.png", "assets/rasga_ossos/marcha.png",
         "assets/rasga_ossos/garra.png", "assets/rasga_ossos/disparo.png",
@@ -687,32 +692,75 @@ static Vector2 SpawnPosition(const Clearing *clearing, Vector2 player) {
     return fallback;
 }
 
+enum { CLEARING_ACTIVE_LIMIT=18, CEMETERY_ACTIVE_LIMIT=20, BONELAND_ACTIVE_LIMIT=22, NEAR_RESERVE=12 };
+
+static Vector2 SpawnNearPlayer(const Clearing *map,const EnemyGroup *group,Vector2 player) {
+    for(int attempt=0;attempt<32;attempt++) {
+        float angle=GetRandomValue(0,359)*DEG2RAD;
+        float radius=(float)GetRandomValue(240,380);
+        Vector2 point=Vector2Add(player,Vector2Scale((Vector2){cosf(angle),sinf(angle)},radius));
+        if(IsMapActorBlocked(map,point) || !MapHasClearPath(map,point,player)) continue;
+        bool occupied=false;
+        for(int i=0;i<ENEMY_COUNT;i++) {
+            const Enemy *other=&group->list[i];
+            if(other->health>0 && other->state!=ENEMY_GONE && other->state!=ENEMY_QUEUED &&
+               Vector2DistanceSqr(point,other->position)<54*54) {
+                occupied=true;
+                break;
+            }
+        }
+        if(!occupied) return point;
+    }
+    return SpawnPosition(map,player);
+}
+
+static void DeployWaveReserve(EnemyGroup *group,const Clearing *map,Vector2 player) {
+    int active=0, reserve=0;
+    for(int i=0;i<ENEMY_COUNT;i++) {
+        const Enemy *enemy=&group->list[i];
+        if(enemy->state==ENEMY_QUEUED) reserve++;
+        else if(enemy->state!=ENEMY_GONE && enemy->health>0) active++;
+    }
+    int limit=map->boneland?BONELAND_ACTIVE_LIMIT:map->cemetery?CEMETERY_ACTIVE_LIMIT:CLEARING_ACTIVE_LIMIT;
+    int deployed=0;
+    for(int i=0;i<ENEMY_COUNT && reserve>0 && active<limit;i++) {
+        Enemy *enemy=&group->list[i];
+        if(enemy->state!=ENEMY_QUEUED) continue;
+        enemy->position=reserve<=NEAR_RESERVE && (reserve%4!=0 || active==0)
+            ? SpawnNearPlayer(map,group,player) : SpawnPosition(map,player);
+        enemy->state=ENEMY_SPAWNING;
+        enemy->stateTime=-.15f*deployed++;
+        reserve--;
+        active++;
+    }
+}
+
 static float WaveSpawnDelay(int wave, int index) {
     return index * (.22f - (wave - 1) * .02f);
 }
 
-static void StartBonelandWave(EnemyGroup *group, const Clearing *map, int wave,
-                              Vector2 player, float playerPower) {
+static void StartBonelandWave(EnemyGroup *group, const Clearing *map, int wave, Vector2 player) {
     static const struct {
-        int total, cultists, ghoulHealth, cultistHealth;
-    } waves[] = {
-        {26, 7, 49, 36}, {34, 10, 53, 39}
+        int total, cultists;
+    } waves[BONELAND_WAVES] = {
+        {36, 7}, {38, 10}
     };
     int index = (int)Clamp((float)wave, 1, sizeof(waves) / sizeof(waves[0])) - 1;
     int total = waves[index].total;
     int cultists = waves[index].cultists;
-    float adjustment = 1.0f + fminf(.15f, fmaxf(0, playerPower - 1.0f) * .05f);
     for (int i = 0; i < ENEMY_COUNT; i++) {
         group->list[i] = (Enemy){.state = ENEMY_GONE};
         if (i >= total) continue;
         bool cultist = (i + 1) * cultists / total > i * cultists / total;
-        int baseHealth = cultist ? waves[index].cultistHealth : waves[index].ghoulHealth;
-        int health = (int)ceilf(baseHealth * adjustment * .90f);
+        bool shell = !cultist && (i == 12 || (index == 1 && i == 24));
+        int health = shell ? 145 : cultist ? 36 : 40;
+        bool deploy=i<BONELAND_ACTIVE_LIMIT;
         group->list[i] = (Enemy){
-            .type = cultist ? ENEMY_COMMON_RANGED : ENEMY_COMMON_MELEE,
-            .position = SpawnPosition(map, player), .state = ENEMY_SPAWNING,
+            .type = shell ? ENEMY_SPECIAL : cultist ? ENEMY_COMMON_RANGED : ENEMY_COMMON_MELEE,
+            .position = deploy?SpawnPosition(map,player):(Vector2){0},
+            .state = deploy?ENEMY_SPAWNING:ENEMY_QUEUED,
             .health = health, .maxHealth = health, .stateTime = -WaveSpawnDelay(index + 1, i),
-            .speed = cultist ? 80 : index > 0 ? 125 : 118,
+            .speed = shell ? 74 : cultist ? 80 : index > 0 ? 125 : 118,
             .power = index > 0 ? 1.09f : 1.0f, .attackCooldown = .8f,
             .facing = 0, .lastKatanaSwing = -1
         };
@@ -774,7 +822,7 @@ void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
         return;
     }
     if (clearing->boneland) {
-        StartBonelandWave(group, clearing, wave, player, playerPower);
+        StartBonelandWave(group, clearing, wave, player);
         return;
     }
     if (clearing->chapel || clearing->basement || clearing->invertedChapel) {
@@ -782,19 +830,23 @@ void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
         return;
     }
     bool clearingWave = ClearingMapId(clearing) == CLEARING_MAP;
-    static const int cemeteryCounts[CEMETERY_WAVES] = {18,24};
+    static const int clearingCounts[CLEARING_WAVES] = {26,30};
+    static const int cemeteryCounts[CEMETERY_WAVES] = {32,36};
     int total = clearing->cemetery ? cemeteryCounts[(int)Clamp(wave,1,CEMETERY_WAVES)-1] :
-        clearingWave ? CLEARING_FIRST_WAVE_ENEMIES + (wave - 1) * CLEARING_WAVE_ENEMY_STEP :
-        7 + (wave - 1) * 4;
+        clearingWave ? clearingCounts[(int)Clamp(wave,1,CLEARING_WAVES)-1] : 7 + (wave - 1) * 4;
+    bool staggered=clearingWave || clearing->cemetery;
     if (total > ENEMY_COUNT) total = ENEMY_COUNT;
+    int initialLimit=!staggered?total:clearing->cemetery?CEMETERY_ACTIVE_LIMIT:CLEARING_ACTIVE_LIMIT;
     int minimumSpecials = 1 + (wave - 1) / 2;
     int specials = GetRandomValue(minimumSpecials, minimumSpecials + (wave >= 3));
     for (int i=0; i<ENEMY_COUNT; i++) {
         Enemy *enemy = &group->list[i];
         *enemy = (Enemy){.state = ENEMY_GONE};
         if (i >= total) continue;
-        enemy->position = SpawnPosition(clearing, player);
-        enemy->type = i < specials ? ENEMY_SPECIAL : i%3 == 0 ? ENEMY_COMMON_RANGED : ENEMY_COMMON_MELEE;
+        int formationIndex=staggered?i%(total/2):i;
+        enemy->type = formationIndex < specials ? ENEMY_SPECIAL :
+            formationIndex%3 == 0 ? ENEMY_COMMON_RANGED : ENEMY_COMMON_MELEE;
+        if(i<initialLimit) enemy->position = SpawnPosition(clearing, player);
         float adjustment = 1.0f + fminf(.15f, fmaxf(0, playerPower - 1.0f) * .05f);
         enemy->maxHealth = (int)((enemy->type == ENEMY_SPECIAL ? 100 : 45) *
                                 (1.0f + (wave-1)*.12f) * adjustment);
@@ -802,12 +854,13 @@ void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
             enemy->maxHealth=(int)ceilf(enemy->maxHealth*CLEARING_ENEMY_HEALTH_SCALE);
         if (clearing->cemetery) enemy->maxHealth+=90;
         enemy->maxHealth = (int)ceilf(enemy->maxHealth * .90f);
+        if(staggered) enemy->maxHealth=(enemy->maxHealth+1)/2;
         enemy->health = enemy->maxHealth;
         enemy->speed = ENEMY_SPEED * (1.0f + (wave-1)*.045f);
         enemy->power = 1.0f + (wave-1)*.09f;
         if (clearingWave || clearing->cemetery)
             enemy->damageScale = CLEARING_ENEMY_DAMAGE_SCALE * (clearing->cemetery ? 1.30f : 1.0f);
-        enemy->state = ENEMY_SPAWNING;
+        enemy->state = i<initialLimit?ENEMY_SPAWNING:ENEMY_QUEUED;
         enemy->stateTime = -WaveSpawnDelay(wave, i);
         enemy->facing = i%2 ? 2 : 3;
         enemy->lastKatanaSwing = -1;
@@ -869,7 +922,8 @@ float EnemyHurtRadius(const Enemy *enemy) {
 bool EnemyCanBeHit(const Enemy *enemy) {
     if (enemy->guardianPhase == GUARDIAN_PHASE_TRANSITION) return false;
     return enemy->state != ENEMY_DIE && enemy->state != ENEMY_GONE &&
-           enemy->state != ENEMY_SPAWNING && enemy->state != ENEMY_FALLEN && enemy->health > 0;
+           enemy->state != ENEMY_SPAWNING && enemy->state != ENEMY_QUEUED &&
+           enemy->state != ENEMY_FALLEN && enemy->health > 0;
 }
 
 Vector2 EnemyCenter(const Enemy *enemy) {
@@ -952,7 +1006,7 @@ static bool MoveEnemyTactically(const EnemyGroup *group, const Clearing *map,
         for (int j=0; j<ENEMY_COUNT; j++) {
             const Enemy *other = &group->list[j];
             if (j==index || other->state==ENEMY_GONE || other->state==ENEMY_FALLEN ||
-                other->state==ENEMY_DIE || other->state==ENEMY_SPAWNING) continue;
+                other->state==ENEMY_DIE || other->state==ENEMY_SPAWNING || other->state==ENEMY_QUEUED) continue;
             float gap = Vector2Distance(next,other->position);
             if (gap < spacing) score -= (spacing-gap)*2.2f;
         }
@@ -1278,6 +1332,47 @@ static void HurtByTemplar(EnemyGroup *group, Vector2 player, int *health, bool d
     group->templarBlood = (EnemyImpact){.position={player.x, player.y - 36}, .remaining=.36f};
 }
 
+#define BONE_SHELL_IMPACT .70f
+#define BONE_SHELL_DURATION 1.28f
+#define BONE_SHELL_RADIUS 92.0f
+
+static void UpdateBoneShell(EnemyGroup *group, const Clearing *map, Enemy *enemy, Vector2 player,
+                            float dt, bool dodging, int *health) {
+    if (enemy->state == ENEMY_ATTACK) {
+        if (enemy->stateTime >= BONE_SHELL_IMPACT && !enemy->attackConnected) {
+            enemy->attackConnected = true;
+            if (Vector2Distance(enemy->attackTarget,player) <= BONE_SHELL_RADIUS &&
+                MapHasClearPath(map,enemy->position,player))
+                HurtByTemplar(group,player,health,dodging,(int)roundf(34*enemy->power));
+        }
+        if (enemy->stateTime >= BONE_SHELL_DURATION) {
+            enemy->state = ENEMY_IDLE;
+            enemy->stateTime = 0;
+        }
+        return;
+    }
+    Vector2 offset = Vector2Subtract(player,enemy->position);
+    float distance = Vector2Length(offset);
+    if (distance <= .01f) return;
+    enemy->facing = fabsf(offset.x) > fabsf(offset.y) ? (offset.x < 0 ? 2 : 3) : (offset.y < 0 ? 1 : 0);
+    if (distance <= 145 && enemy->attackCooldown <= 0 && MapHasClearPath(map,enemy->position,player)) {
+        enemy->state = ENEMY_ATTACK;
+        enemy->stateTime = 0;
+        enemy->attackCooldown = 2.35f;
+        enemy->attackConnected = false;
+        enemy->attackTarget = Vector2Add(enemy->position,Vector2Scale(offset,fminf(52,distance)/distance));
+    } else if (distance > 118) {
+        Vector2 start = enemy->position;
+        MoveEnemy(map,enemy,Vector2Scale(offset,enemy->speed*dt/distance));
+        float traveled = Vector2Distance(start,enemy->position);
+        enemy->state = traveled > .01f ? ENEMY_WALK : ENEMY_IDLE;
+        enemy->walkTime += traveled/74;
+    } else if (enemy->state != ENEMY_IDLE) {
+        enemy->state = ENEMY_IDLE;
+        enemy->stateTime = 0;
+    }
+}
+
 static int IgrisHitDamage(const Enemy *boss, int baseDamage) {
     return (int)roundf(baseDamage*boss->power*1.10f);
 }
@@ -1577,6 +1672,8 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         CemeteryUpdateProjectiles(group, clearing, player, dt, playerDodging, playerHealth);
     if (group->village)
         VillageUpdateHorde(group, clearing, player, dt);
+    if (*playerHealth>0 && (group->boneland || group->cemetery || ClearingMapId(clearing)==CLEARING_MAP))
+        DeployWaveReserve(group,clearing,player);
     for (int i=0; i<ENEMY_COUNT; i++) {
         Enemy *enemy = &group->list[i];
         if (enemy->state == ENEMY_GONE && enemy->pickupAvailable &&
@@ -1587,7 +1684,7 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
             enemy->pickupAvailable = false;
         }
         if (enemy->state == ENEMY_GONE) continue;
-        if (enemy->state == ENEMY_FALLEN) continue;
+        if (enemy->state == ENEMY_FALLEN || enemy->state == ENEMY_QUEUED) continue;
         enemy->stateTime += dt;
         if (enemy->guardianPhase == GUARDIAN_PHASE_TRANSITION) {
             ClearEnemyAttacks(group);
@@ -1640,6 +1737,10 @@ void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,
         }
         if (group->cemetery && enemy->type == ENEMY_BOSS) {
             CemeteryUpdateBoss(group, clearing, enemy, player, dt, playerDodging, playerHealth);
+            continue;
+        }
+        if (group->boneland && enemy->type == ENEMY_SPECIAL) {
+            UpdateBoneShell(group, clearing, enemy, player, dt, playerDodging, playerHealth);
             continue;
         }
         if (group->cemetery && enemy->type == ENEMY_SPECIAL) {
@@ -2766,6 +2867,58 @@ void DrawHealthPickup(Vector2 position) {
     DrawHeartShape(drop, 0.90f, RED);
 }
 
+static void DrawBoneShell(const EnemyGroup *group, const Enemy *enemy) {
+    if (enemy->state == ENEMY_SPAWNING && enemy->stateTime < 0) return;
+    const int rows[] = {0,3,1,2};
+    float t = enemy->stateTime;
+    int sheet = 0, frame = (int)(t*4) % 6;
+    if (enemy->state == ENEMY_WALK) {
+        sheet = 1;
+        frame = (int)(enemy->walkTime*8) % 6;
+    } else if (enemy->state == ENEMY_ATTACK) {
+        sheet = 2;
+        frame = t < BONE_SHELL_IMPACT ? (int)Clamp(t/BONE_SHELL_IMPACT*3,0,2)
+             : 3+(int)Clamp((t-BONE_SHELL_IMPACT)/(BONE_SHELL_DURATION-BONE_SHELL_IMPACT)*3,0,2);
+    } else if (enemy->state == ENEMY_DIE || enemy->state == ENEMY_FALLEN) {
+        sheet = 3;
+        frame = enemy->state == ENEMY_FALLEN ? 5 : (int)Clamp(t/ENEMY_DEFEAT_DURATION*6,0,5);
+    }
+    Texture2D tex = group->boneShell[sheet];
+    if (!tex.id) return;
+    float cellW = tex.width/6.0f, cellH = tex.height/4.0f;
+    const float scale = .67f;
+    Color tint = enemy->state == ENEMY_HURT ? RED : WHITE;
+    if (enemy->state == ENEMY_SPAWNING) tint = Fade(WHITE,Clamp(t*2,0,1));
+    DrawTexturePro(tex,(Rectangle){frame*cellW,rows[enemy->facing]*cellH,cellW,cellH},
+                   (Rectangle){enemy->position.x,enemy->position.y,cellW*scale,cellH*scale},
+                   (Vector2){cellW*scale*.5f,246*scale},0,tint);
+    DrawEnemyHealthBar(enemy,enemy->position.y-142);
+}
+
+static void DrawBoneShellGround(const EnemyGroup *group) {
+    for (int i=0;i<ENEMY_COUNT;i++) {
+        const Enemy *enemy=&group->list[i];
+        if (enemy->type != ENEMY_SPECIAL || enemy->state != ENEMY_ATTACK) continue;
+        Vector2 target = enemy->attackTarget;
+        float age = enemy->stateTime - BONE_SHELL_IMPACT;
+        if (age < 0) {
+            DrawCircleV(target,BONE_SHELL_RADIUS,Fade(MAROON,.14f));
+            DrawRing(target,BONE_SHELL_RADIUS-2,BONE_SHELL_RADIUS,0,360,32,
+                     Fade(ORANGE,.28f+.55f*enemy->stateTime/BONE_SHELL_IMPACT));
+        } else if (age < .36f) {
+            float progress = age/.36f;
+            float radius = 16 + 78*progress;
+            DrawRing(target,radius,radius+3,0,360,24,Fade(BEIGE,1-progress));
+            DrawCircleGradient((int)target.x,(int)target.y,radius*.85f,Fade(BROWN,(1-progress)*.34f),BLANK);
+            for (int chip=0;chip<12;chip++) {
+                float angle = chip*PI/6.0f;
+                Vector2 offset = {cosf(angle)*radius,sinf(angle)*radius*.65f-15*sinf(progress*PI)};
+                DrawPoly(Vector2Add(target,offset),4,3.5f,chip*19,Fade(BEIGE,1-progress));
+            }
+        }
+    }
+}
+
 static Rectangle BoneFrame(Texture2D texture, int columns, int rows, int column, int row) {
     int left = column * texture.width / columns;
     int right = (column + 1) * texture.width / columns;
@@ -2944,7 +3097,10 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
     }
     if (!foreground) {
         DrawTemplarWarnings(group);
-        if (group->boneland) DrawBoneLordWarning(group, &group->list[0]);
+        if (group->boneland) {
+            DrawBoneLordWarning(group, &group->list[0]);
+            DrawBoneShellGround(group);
+        }
     }
     if (!foreground) for (int i=0; i<ENEMY_ROOT_COUNT; i++) {
         const EnemyRoot *root = &group->rootAttacks[i];
@@ -2972,6 +3128,11 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
             DrawHealthPickup(enemy->position);
         }
         if (enemy->state == ENEMY_GONE) continue;
+        if (enemy->state == ENEMY_QUEUED) continue;
+        if (group->boneland && enemy->type == ENEMY_SPECIAL) {
+            DrawBoneShell(group,enemy);
+            continue;
+        }
         if (group->boneland && enemy->type == ENEMY_BOSS) {
             DrawBoneLord(group, enemy);
             continue;
@@ -3066,7 +3227,7 @@ void DrawEnemies(const EnemyGroup *group, Vector2 player, bool foreground) {
 void DrawEnemyDebug(const EnemyGroup *group) {
     for (int i=0; i<ENEMY_COUNT; i++) {
         const Enemy *enemy = &group->list[i];
-        if (enemy->state == ENEMY_GONE) continue;
+        if (enemy->state == ENEMY_GONE || enemy->state == ENEMY_QUEUED) continue;
         Vector2 center = EnemyCenter(enemy);
         DrawCircleLines((int)center.x,(int)center.y,EnemyHurtRadius(enemy),GREEN);
         DrawCircleV(enemy->position,3.0f,YELLOW);

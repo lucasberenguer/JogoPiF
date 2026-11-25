@@ -340,6 +340,7 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
             if (enemy->pickupAvailable) DrawHealthPickup(enemy->position);
             continue;
         }
+        if (enemy->state == ENEMY_QUEUED) continue;
         if (enemy->state == ENEMY_SPAWNING && enemy->type != ENEMY_BOSS) {
             if (enemy->stateTime >= 0)
                 DrawCircleLines((int)enemy->position.x, (int)enemy->position.y,
