@@ -12,7 +12,7 @@ static Encounter *active;
 static GameAudio *activeAudio;
 static Vector2 igrisApproach;
 static int igrisStarts;
-static int aftermathStarts, aftermathLines;
+static int aftermathStarts, aftermathLines, igrisDefeatFrames;
 static bool igrisDefeated, igrisCardCleared;
 static bool skipBonelandPassage;
 static int checkedSceneStarts, checkedLastScene;
@@ -206,6 +206,16 @@ static bool TestEncounter(Encounter *e,EnemyGroup *enemies,const Clearing *map,V
         assert(!EncounterBossVisible(e,enemies) && !EnemyCanBeHit(&enemies->list[0]));
         return UpdateEncounter(e,enemies,map,p,health);
     }
+    if (mode==7 && igrisDefeated) {
+        Enemy *boss=&enemies->list[0];
+        assert(e->phase==ENCOUNTER_FIGHT && boss->state==ENEMY_DIE && !EnemyCanBeHit(boss));
+        bool changed=UpdateEncounter(e,enemies,map,p,health);
+        if (boss->stateTime < IGRIS_DEFEAT_DURATION) {
+            assert(e->phase==ENCOUNTER_FIGHT);
+            igrisDefeatFrames++;
+        } else assert(e->phase==ENCOUNTER_IGRIS_AFTERMATH);
+        return changed;
+    }
     if (mode >= 5) {
         assert(map->templarField && *health==83);
         if (e->phase==ENCOUNTER_IGRIS_APPROACH) {
@@ -242,7 +252,7 @@ static bool TestEncounter(Encounter *e,EnemyGroup *enemies,const Clearing *map,V
             DamageEnemy(boss,boss->health);
             assert(boss->igrisFinalForm && boss->health == 0);
             UpdateEncounter(e,enemies,map,p,health);
-            assert(e->phase == ENCOUNTER_IGRIS_AFTERMATH && !BeginIgrisAftermath(e,enemies,*health));
+            assert(e->phase == ENCOUNTER_FIGHT && boss->state==ENEMY_DIE);
             RunProgress saved={0};
             assert(LoadClearingCheckpoint(&saved) && saved.igrisAftermathPending);
             igrisDefeated=true;
@@ -353,9 +363,27 @@ static bool TestPassage(Encounter *e,EnemyGroup *enemies,Clearing *map,Vector2 *
     transported++;
     return true;
 }
-int main(void) {
+static void CheckIgrisDefeatFlow(void) {
+    for (mode=7;mode<=8;mode++) {
+        igrisCardCleared=false;
+        frames=transported=cinematicFrames=igrisStarts=aftermathStarts=aftermathLines=igrisDefeatFrames=0;
+        igrisDefeated=false;
+        active=NULL;
+        assert(ActualGameMain()==0);
+        assert(transported==1 && aftermathStarts==1);
+        assert(mode==7 ? igrisDefeated && igrisStarts==1 && igrisDefeatFrames>=20 :
+               aftermathLines==6 && igrisStarts==0);
+    }
+    puts("Igris defeat animation preceded the aftermath, and the saved aftermath resumed.");
+}
+
+int main(int argc, char **argv) {
     setvbuf(stdout,NULL,_IONBF,0);
     SetTraceLogLevel(LOG_WARNING);
+    if (argc==2 && !strcmp(argv[1],"--igris-defeat")) {
+        CheckIgrisDefeatFlow();
+        return 0;
+    }
     for (int i=0;i<(int)(sizeof(checkedScenes)/sizeof(*checkedScenes));i++) {
         for (int complete=0;complete<2;complete++) {
             mode=FIRST_NEW_MODE+2*i+complete;
@@ -395,15 +423,7 @@ int main(void) {
         assert(transported==1 && igrisStarts==1 && cinematicFrames>0);
         printf("Real Igris loop: %s restored gameplay after %d frames.\n",mode==5 ? "skip" : "complete",frames);
     }
-    for (mode=7;mode<=8;mode++) {
-        igrisCardCleared=false;
-        frames=transported=cinematicFrames=igrisStarts=aftermathStarts=aftermathLines=0;
-        igrisDefeated=false;
-        active=NULL;
-        assert(ActualGameMain()==0);
-        assert(transported==1 && aftermathStarts==1);
-        assert(mode==7 ? igrisDefeated && igrisStarts==1 : aftermathLines==6 && igrisStarts==0);
-    }
+    CheckIgrisDefeatFlow();
     puts("The campaign entered the Templar Field and reached the Necromancer arena.");
     return 0;
 }

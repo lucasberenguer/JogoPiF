@@ -39,7 +39,7 @@ static void SpawnNecroticVillager(Enemy *enemy, const Clearing *clearing,
         .health = health,
         .maxHealth = health,
         .villageBrute = brute,
-        .speed = brute ? 82.0f : 112.0f,
+        .speed = NON_BOSS_SPEED_SCALE * (brute ? 82.0f : 112.0f),
         .power = 1.05f,
         .attackCooldown = 0.45f,
         .lastKatanaSwing = -1
@@ -56,7 +56,7 @@ void StartVillageHorde(EnemyGroup *group, const Clearing *clearing,
     for (int i = 0; i < VILLAGE_HORDE_INITIAL; i++) {
         SpawnNecroticVillager(&group->list[i], clearing, player, i);
         if (!group->list[i].villageBrute)
-            group->list[i].speed = 104.0f + 4.0f * (float)(i % 5);
+            group->list[i].speed = NON_BOSS_SPEED_SCALE * (104.0f + 4.0f * (float)(i % 5));
         group->list[i].attackCooldown = 0.35f + 0.08f * (float)(i % 6);
     }
     group->villageSpawnRemaining = VILLAGE_HORDE_REINFORCEMENTS;

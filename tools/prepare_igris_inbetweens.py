@@ -19,6 +19,7 @@ SHEETS = {
     "final_idle": (4, 4, 3, True, False),
     "final_walk": (4, 4, 3, True, False),
     "final_melee": (4, 4, 4, False, False),
+    "final_fall": (6, 4, 3, False, False),
     "abyss_grab": (6, 4, 3, False, False),
     "echoes": (6, 4, 3, False, False),
     **{f"z_{side}": (4, 3, 3, False, True) for side in ("down", "up", "left", "right")},

@@ -358,16 +358,21 @@ bool BeginIgrisAftermath(Encounter *e, EnemyGroup *enemies, int health) {
     const Enemy *boss = &enemies->list[0];
     if (e->phase != ENCOUNTER_FIGHT || e->progress.map != TEMPLAR_FIELD_MAP ||
         e->progress.stage != CLEARING_BOSS_STAGE || boss->templarRole != TEMPLAR_MARSHAL ||
-        !boss->igrisFinalForm || boss->state != ENEMY_DIE || boss->health > 0 || health <= 0)
+        !boss->igrisFinalForm || boss->health > 0 || health <= 0 ||
+        (boss->state != ENEMY_DIE &&
+         !(boss->state == ENEMY_FALLEN && e->progress.igrisAftermathPending)))
         return false;
+    if (!e->progress.igrisAftermathPending) {
+        e->progress.igrisAftermathPending = true;
+        e->progress.health = health;
+        if (!e->practice && !SaveClearingCheckpoint(&e->progress))
+            TraceLog(LOG_WARNING, "Nao foi possivel salvar a derrota de Igris.");
+    }
+    if (boss->state == ENEMY_DIE && boss->stateTime < IGRIS_DEFEAT_DURATION) return false;
     ClearEnemyAttacks(enemies);
     enemies->list[0].state = ENEMY_GONE;
     enemies->list[0].pickupAvailable = false;
     e->phase = ENCOUNTER_IGRIS_AFTERMATH;
-    e->progress.igrisAftermathPending = true;
-    e->progress.health = health;
-    if (!e->practice && !SaveClearingCheckpoint(&e->progress))
-        TraceLog(LOG_WARNING, "Nao foi possivel salvar a derrota de Igris.");
     return true;
 }
 
@@ -923,7 +928,7 @@ bool AnswerEncounterSeal(Encounter *e, EnemyGroup *enemies, int *health, int cho
             enemy->attackBurst = 0;
             enemy->bossAttack = enemy->templarRole == TEMPLAR_MARSHAL ? IGRIS_MELEE :
                 enemies->boneland ? BONE_DASH :
-                (enemies->cemetery ? COVEIRO_ATTACK_COUNT : GUARDIAN_ATTACK_COUNT) - 1;
+                (enemies->cemetery ? COVEIRO_CHARGE : GUARDIAN_ATTACK_COUNT - 1);
             if (enemy->templarRole == TEMPLAR_MARSHAL) enemy->attackCooldown = .25f;
             e->progress.bossPower=fminf(100,e->progress.bossPower*1.2f);
             e->progress.health=*health;

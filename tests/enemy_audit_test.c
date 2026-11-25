@@ -109,6 +109,86 @@ static void CheckCoveiroChoices(void) {
     }
 }
 
+static void CheckCoveiroShovelReturn(void) {
+    for (int scenario=0; scenario<3; scenario++) {
+        Clearing map={.cemetery=true,.background={.width=1600,.height=1200},
+                      .playableBounds={0,0,1600,1200}};
+        EnemyGroup group={0};
+        Vector2 player={800,500};
+        group.list[0]=(Enemy){.position={560,500},.type=ENEMY_BOSS,.health=100,
+            .hasPlayerPosition=true,.previousPlayerPosition={800,scenario==1 ? 496 : 500}};
+        CemeteryProjectile *shot=&group.cemeteryProjectiles[0];
+        *shot=(CemeteryProjectile){.active=true,.position={1000,500},.velocity={620,0},
+            .life=2.1f,.phaseTime=.575f,.damage=38};
+        int health=100;
+        CemeteryUpdateProjectiles(&group,&map,player,.02f,false,&health);
+        assert(shot->phase==CEM_SHOVEL_WARNING);
+        if (scenario==1) assert(shot->returnTarget.y>player.y+40);
+        Vector2 turn=shot->position, locked=shot->returnTarget;
+        if (scenario==1) player.y-=115;
+        if (scenario==2) {
+            map.obstacleCount=1;
+            map.obstacles[0]=(Rectangle){890,455,24,90};
+        }
+        for (int i=0;i<19;i++) CemeteryUpdateProjectiles(&group,&map,player,.02f,false,&health);
+        assert(shot->phase==CEM_SHOVEL_WARNING && health==100);
+        assert(Vector2Distance(shot->position,turn)<.01f && Vector2Distance(shot->returnTarget,locked)<.01f);
+        for (int i=0;i<30;i++) CemeteryUpdateProjectiles(&group,&map,player,.02f,false,&health);
+        assert(health==(scenario==0 ? 62 : 100));
+        if (scenario==2) assert(!shot->active && shot->position.x>914);
+    }
+}
+
+static void CheckCoveiroBuriedCharge(void) {
+    for (int scenario=0; scenario<4; scenario++) {
+        Clearing map = {.cemetery=true,.background={.width=1600,.height=1200},
+                        .playableBounds={0,0,1600,1200}};
+        EnemyGroup group={0};
+        Vector2 player={900,600}, origin={580,600};
+        int health=100;
+        StartArenaBoss(&group,&map,player,1);
+        Enemy *boss=&group.list[0];
+        boss->position=origin;
+        boss->state=ENEMY_IDLE;
+        boss->guardianPhase=GUARDIAN_PHASE_TWO;
+        boss->attackCooldown=0;
+        boss->bossAttack=COVEIRO_CHARGE;
+        UpdateEnemies(&group,&map,player,.02f,false,&health,100);
+        assert(boss->state==ENEMY_ATTACK && boss->bossAttack==COVEIRO_BURIED_CHARGE);
+        CemeteryPose pose=CemeteryAnimationPose(boss);
+        assert(pose.atlas==CEM_BOSS_MARK_THROW && pose.columns==6 && pose.rows==4 && pose.frame==0);
+        Vector2 landing=boss->attackTarget;
+        assert(fabsf(Vector2Distance(landing,player)-105)<.01f);
+        for (int i=0; i<44; i++) UpdateEnemies(&group,&map,player,.02f,false,&health,100);
+        assert(!EnemyCanBeHit(boss) && Vector2Distance(boss->position,origin)<.01f);
+        if (scenario==2 || scenario==3) {
+            float x=landing.x+(scenario==2 ? -12 : 70);
+            map.obstacles[0]=(Rectangle){x,550,24,100};
+            map.obstacleCount=1;
+        }
+        for (int i=0; i<9; i++) UpdateEnemies(&group,&map,player,.02f,false,&health,100);
+        assert(EnemyCanBeHit(boss) && health==100);
+        if (scenario==2) {
+            assert(boss->state==ENEMY_IDLE && Vector2Distance(boss->position,origin)<.01f);
+            continue;
+        }
+        assert(Vector2Distance(boss->position,landing)<.01f);
+        pose=CemeteryAnimationPose(boss);
+        assert(pose.atlas==CEM_BOSS_MARK_EMERGE && pose.columns==4 && pose.rows==4);
+        Vector2 direction=boss->attackDirection;
+        if (scenario==1) player.y+=115;
+        for (int i=0; i<10; i++) UpdateEnemies(&group,&map,player,.02f,false,&health,100);
+        assert(health==100 && Vector2Distance(boss->position,landing)<.01f);
+        assert(Vector2Distance(boss->attackDirection,direction)<.01f);
+        for (int i=0; i<31; i++) UpdateEnemies(&group,&map,player,.02f,false,&health,100);
+        int damage=(int)roundf(GUARDIAN_CURSE_DAMAGE*1.15f*COVEIRO_DAMAGE_BOOST);
+        assert(health==(scenario==0 ? 100-damage : 100));
+        assert(boss->state==ENEMY_IDLE && boss->attackCooldown>.5f);
+        if (scenario==3) assert(boss->position.x<map.obstacles[0].x);
+        else assert(boss->position.x>landing.x+200);
+    }
+}
+
 static void CheckBossPrediction(void) {
     const struct { float distance; int previous; } cases[] = {
         {200, GUARDIAN_CURSE}, {220, COVEIRO_SHOVEL},
@@ -224,6 +304,16 @@ static void CheckBoneLordAttacks(void) {
                     .playableBounds = {0, 0, 1200, 900}, .spawn = {600, 750}};
     EnemyGroup group = {0};
     Vector2 origin = {400, 400};
+    StartArenaBoss(&group,&map,origin,1);
+    Enemy *fallen = &group.list[0];
+    fallen->state = ENEMY_IDLE;
+    fallen->guardianPhase = GUARDIAN_PHASE_TWO;
+    int healthBeforeSeal = 100;
+    DamageEnemy(fallen,fallen->health);
+    UpdateEnemies(&group,&map,origin,BONE_LORD_DEFEAT_DURATION-.05f,false,&healthBeforeSeal,100);
+    assert(fallen->state == ENEMY_DIE && !EnemyCanBeHit(fallen));
+    UpdateEnemies(&group,&map,origin,.06f,false,&healthBeforeSeal,100);
+    assert(fallen->state == ENEMY_FALLEN && healthBeforeSeal == 100);
     const struct { int attack, previous, damage; float distance; bool evade; } scenarios[] = {
         {BONE_CLAW, BONE_BLAST, 22, 85, false},
         {BONE_RANGED, BONE_RAIN, 25, 500, false},
@@ -334,7 +424,7 @@ static void CheckGuardianAttacks(Clearing *map, EnemyGroup *group) {
 static void CheckGuardianMelee(Clearing *map, EnemyGroup *group) {
     const Vector2 origin = {400, 400};
     const Vector2 player = {500, 400};
-    // Hit, move behind, dodge, leave the range, or interrupt with a phase change.
+    // Hit, move sideways, dodge, walk out of reach, or interrupt with a phase change.
     for (int scenario = 0; scenario < 5; scenario++) {
         int health = 100;
         StartArenaBoss(group, map, player, 1.0f);
@@ -344,16 +434,20 @@ static void CheckGuardianMelee(Clearing *map, EnemyGroup *group) {
         UpdateEnemies(group, map, player, .01f, false, &health, 100);
         assert(boss->state == ENEMY_ATTACK && boss->guardianMelee && boss->facing == 3);
         assert(boss->bossAttack == GUARDIAN_ATTACK_COUNT - 1);
-        UpdateEnemies(group, map, player, .35f, false, &health, 100);
-        assert(health == 100 && EnemyAnimationFrame(boss) == 3);
-        assert(boss->position.x > origin.x && boss->position.x <= origin.x+16);
         Vector2 impactPosition = player;
-        if (scenario == 1) impactPosition.x = origin.x - 100;
-        if (scenario == 3) impactPosition.x = origin.x + 135;
+        for (int frame = 0; frame < 39; frame++) {
+            if (scenario == 1 && frame > 5) MoveMapPlayer(map,&impactPosition,(Vector2){-1.8f,2.4f});
+            if (scenario == 3 && frame > 5) MoveMapPlayer(map,&impactPosition,(Vector2){3,0});
+            UpdateEnemies(group, map, impactPosition, 1.0f/60, false, &health, 100);
+        }
+        assert(health == 100 && EnemyAnimationFrame(boss) == 3);
+        assert(Vector2Distance(boss->position,origin) < .01f && boss->attackDirection.x > .99f);
+        if (scenario == 1) assert(Vector2Distance(origin,impactPosition) < 118 && impactPosition.y > 475);
+        if (scenario == 3) assert(Vector2Distance(origin,impactPosition) > 118);
         if (scenario == 4) DamageEnemy(boss, boss->health);
         UpdateEnemies(group, map, impactPosition, .07f, scenario == 2, &health, 100);
         assert(health == (scenario == 0 ? 74 : 100));
-        UpdateEnemies(group, map, player, .2f, false, &health, 100);
+        UpdateEnemies(group, map, player, .35f, false, &health, 100);
         assert(health == (scenario == 0 ? 74 : 100));
     }
 }
@@ -370,16 +464,26 @@ static void CheckGuardianClosePressure(Clearing *map, EnemyGroup *group) {
     assert(boss->state == ENEMY_WALK && boss->position.x > origin.x);
     UpdateEnemies(group,map,player,.01f,false,&health,100);
     assert(boss->state == ENEMY_ATTACK && boss->guardianMelee);
-    UpdateEnemies(group,map,player,.41f,false,&health,100);
-    assert(health == 74);
-    UpdateEnemies(group,map,player,.40f,false,&health,100);
-    Vector2 feet = boss->position;
-    UpdateEnemies(group,map,player,.10f,false,&health,100);
-    assert(boss->state == ENEMY_IDLE && Vector2Distance(feet,boss->position) < .01f);
-    UpdateEnemies(group,map,player,.26f,false,&health,100);
-    assert(boss->state == ENEMY_ATTACK && boss->guardianMelee);
-    UpdateEnemies(group,map,player,.41f,false,&health,100);
-    assert(health == 48);
+    for (int phase = 0; phase < 2; phase++) {
+        if (phase) {
+            boss->guardianPhase = GUARDIAN_PHASE_TWO;
+            boss->state = ENEMY_IDLE;
+            boss->guardianMeleeCooldown = 0;
+            health = 100;
+            group->playerHitCooldown = 0;
+            UpdateEnemies(group,map,player,.01f,false,&health,100);
+            assert(boss->state == ENEMY_ATTACK && boss->guardianMelee);
+        }
+        float interval = phase ? 3.90f : 4.60f;
+        assert(fabsf(boss->guardianMeleeCooldown-interval) < .01f);
+        UpdateEnemies(group,map,player,.69f,false,&health,100);
+        assert(health == 74);
+        UpdateEnemies(group,map,player,.40f,false,&health,100);
+        UpdateEnemies(group,map,player,interval-1.14f,false,&health,100);
+        assert(boss->state == ENEMY_IDLE && health == 74);
+        UpdateEnemies(group,map,player,.07f,false,&health,100);
+        assert(boss->state == ENEMY_ATTACK && boss->guardianMelee);
+    }
 }
 
 static void CheckGuardianDodge(Clearing *map, EnemyGroup *group) {
@@ -780,6 +884,8 @@ int main(void) {
     CheckNecromancerCombos();
     CheckTemplarBalance();
     CheckBossPrediction();
+    CheckCoveiroShovelReturn();
+    CheckCoveiroBuriedCharge();
     const int expected[] = {20, 25, 45, 65, 100};
     for (int type=0; type<5; type++) {
         assert(EnemyOptionalDropChance((EnemyType)type) == expected[type]);
@@ -928,6 +1034,8 @@ int main(void) {
     assert(health==62); /* Enlarged blade still hits only once per leg. */
     DamageEnemy(coveiro, coveiro->health);
     UpdateEnemies(&group, &map, target, .9f, true, &health, 100);
+    assert(coveiro->state == ENEMY_DIE && !group.cemeteryProjectiles[0].active);
+    UpdateEnemies(&group, &map, target, .5f, true, &health, 100);
     assert(coveiro->state == ENEMY_FALLEN && !group.cemeteryProjectiles[0].active);
     StartEnemyWave(&group,&map,1,target,1);
     for (int i=0;i<ENEMY_COUNT;i++) group.list[i]=(Enemy){.state=ENEMY_GONE};

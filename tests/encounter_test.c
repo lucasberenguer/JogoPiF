@@ -1058,6 +1058,14 @@ int main(void) {
     UpdateEnemies(&enemies,&clearing,player,2.0f/60,false,&health,100);
     assert(boss->state==ENEMY_IDLE && EnemyCanBeHit(boss) && health==100);
     Capture("audit/guardian_spawn_idle.png",&encounter,&enemies,&clearing,player);
+    Enemy guardianBeforePreview = *boss;
+    boss->state = ENEMY_ATTACK;
+    boss->guardianMelee = true;
+    boss->facing = 3;
+    boss->attackDirection = (Vector2){1,0};
+    boss->stateTime = .48f;
+    Capture("audit/guardian_melee_warning.png",&encounter,&enemies,&clearing,player);
+    *boss = guardianBeforePreview;
     boss->attackCooldown=0;
     UpdateEnemies(&enemies,&clearing,player,.05f,false,&health,100);
     assert(boss->state==ENEMY_ATTACK);
@@ -1198,6 +1206,20 @@ int main(void) {
         .position={850+i*150,350+i*110},.velocity={740,(i-1)*180},.life=1.9f-i*.08f};
     Capture("audit/cemetery_attack_poses_shovel_v4.png",&encounter,&enemies,&clearing,(Vector2){30,30});
     ClearEnemyAttacks(&enemies);
+    for (int i=0;i<4;i++) {
+        assert(enemies.coveiroMark[i].id && enemies.coveiroMark[i].height==4*240);
+        assert(enemies.coveiroMark[i].width==(i==0 || i==3 ? 6 : 4)*300);
+    }
+    assert(enemies.coveiroMarkShovel.id);
+    enemies.list[0]=(Enemy){.position={580,520},.type=ENEMY_BOSS,.state=ENEMY_ATTACK,
+        .bossAttack=COVEIRO_BURIED_CHARGE,.guardianPhase=GUARDIAN_PHASE_TWO,.coveiroBuried=true,
+        .facing=3,.stateTime=.87f,.attackTarget={800,520},.health=1300,.maxHealth=2600};
+    Capture("audit/cemetery_attack_poses_buried_shovel.png",&encounter,&enemies,&clearing,(Vector2){920,520});
+    enemies.list[0].position=(Vector2){800,520};
+    enemies.list[0].attackTarget=(Vector2){1016,520};
+    enemies.list[0].stateTime=1.16f;
+    enemies.list[0].coveiroBuried=false;
+    Capture("audit/cemetery_attack_poses_buried_dash.png",&encounter,&enemies,&clearing,(Vector2){920,520});
     for(int i=0;i<ENEMY_COUNT;i++) enemies.list[i]=(Enemy){.state=ENEMY_GONE};
     for(int face=0;face<4;face++) for(int beat=0;beat<4;beat++) {
         enemies.list[face*4+beat]=(Enemy){.position={380+beat*270,250+face*155},
@@ -1263,8 +1285,13 @@ int main(void) {
     UpdateEnemies(&enemies,&clearing,player,1.0f,true,&health,encounter.progress.maxHealth);
     assert(enemies.list[0].guardianPhase==GUARDIAN_PHASE_TWO);
     DamageEnemy(&enemies.list[0],enemies.list[0].health);
-    UpdateEnemies(&enemies,&clearing,player,.9f,true,&health,encounter.progress.maxHealth);
+    UpdateEnemies(&enemies,&clearing,player,1.03f,true,&health,encounter.progress.maxHealth);
+    assert(enemies.list[0].state==ENEMY_DIE);
+    assert(!OpenEncounterSeal(&encounter,&enemies,enemies.list[0].position));
+    Capture("audit/coveiro_impacto_queda.png",&encounter,&enemies,&clearing,player);
+    UpdateEnemies(&enemies,&clearing,player,.33f,true,&health,encounter.progress.maxHealth);
     assert(enemies.list[0].state==ENEMY_FALLEN);
+    Capture("audit/coveiro_queda_selamento.png",&encounter,&enemies,&clearing,player);
     assert(OpenEncounterSeal(&encounter,&enemies,enemies.list[0].position));
     assert(AnswerEncounterSeal(&encounter,&enemies,&health,encounter.answer));
     UpdateEncounter(&encounter,&enemies,&clearing,player,&health);
@@ -1504,6 +1531,12 @@ int main(void) {
     UpdateEnemies(&enemies, &field, target, .38f, false, &clawHealth, 100);
     assert(clawHealth == 60 && marshal->attackConnected);
     DamageEnemy(marshal, marshal->health);
+    assert(enemies.igrisArt[IGRIS_FINAL_FALL].width==6*240 &&
+           enemies.igrisArt[IGRIS_FINAL_FALL].height==4*3*192);
+    marshal->stateTime=.34f;
+    Capture("audit/igris_queda_inicio.png",&templars,&enemies,&field,target);
+    marshal->stateTime=1.0f;
+    Capture("audit/igris_queda_ajoelhado.png",&templars,&enemies,&field,target);
     UpdateEnemies(&enemies, &field, field.spawn, 1.5f, true, &fieldHealth, 100);
     assert(marshal->state == ENEMY_FALLEN && !EnemyCanBeHit(marshal));
     templars.presentation = (StagePresentation){0};

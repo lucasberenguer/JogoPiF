@@ -1,6 +1,8 @@
 #ifndef ENEMY_H
 #define ENEMY_H
 #include "raylib.h"
+#define BONE_LORD_DEFEAT_DURATION 1.35f
+#define NON_BOSS_SPEED_SCALE 1.20f
 #include "clearing.h"
 #include "necromancer.h"
 
@@ -16,7 +18,8 @@ typedef enum GuardianAttack {
     GUARDIAN_ROOTS, GUARDIAN_ROOT_WAVE, GUARDIAN_CURSE, GUARDIAN_ATTACK_COUNT
 } GuardianAttack;
 #define COVEIRO_DAMAGE_BOOST 1.10f
-enum { COVEIRO_ROOTS, COVEIRO_SHOVEL, COVEIRO_CHARGE, COVEIRO_ATTACK_COUNT };
+#define COVEIRO_DEFEAT_DURATION 1.35f
+enum { COVEIRO_ROOTS, COVEIRO_SHOVEL, COVEIRO_CHARGE, COVEIRO_BURIED_CHARGE };
 typedef enum CoveiroCombo {
     COVEIRO_COMBO_NONE, COVEIRO_COMBO_TO_CHARGE, COVEIRO_COMBO_TO_ROOTS,
     COVEIRO_COMBO_FINISHER, COVEIRO_COMBO_RECOVERY
@@ -26,9 +29,10 @@ enum { IGRIS_IDLE_ART, IGRIS_WALK_ART, IGRIS_MELEE_ART, IGRIS_ECLIPSE_ART, IGRIS
        IGRIS_ERUPTION_ART, IGRIS_ERUPTION_FX, IGRIS_SPEARS_ART, IGRIS_SPEARS_FX,
        IGRIS_VORTEX_ART, IGRIS_VORTEX_FX, IGRIS_FINAL_IDLE, IGRIS_FINAL_WALK,
        IGRIS_FINAL_MELEE, IGRIS_Z_DOWN, IGRIS_Z_UP, IGRIS_Z_LEFT, IGRIS_Z_RIGHT,
-       IGRIS_GRAB_ART, IGRIS_GRAB_FX, IGRIS_ECHO_ART, IGRIS_ECHO_FX, IGRIS_ART_COUNT };
+       IGRIS_GRAB_ART, IGRIS_GRAB_FX, IGRIS_ECHO_ART, IGRIS_ECHO_FX, IGRIS_FINAL_FALL, IGRIS_ART_COUNT };
 #define IGRIS_TITLE "IGRIS — O COMANDANTE"
 #define IGRIS_FINAL_HEALTH_PERCENT 25
+#define IGRIS_DEFEAT_DURATION 1.20f
 enum { BONE_CLAW, BONE_RANGED, BONE_RAIN, BONE_DASH, BONE_BLAST, BONE_ATTACK_COUNT };
 enum { BONE_IDLE_SHEET, BONE_WALK_SHEET, BONE_CLAW_SHEET, BONE_RANGED_SHEET,
        BONE_RAIN_SHEET, BONE_RAIN_FX_SHEET, BONE_DASH_SHEET, BONE_BLAST_SHEET,
@@ -100,6 +104,8 @@ typedef struct Enemy {
     unsigned igrisEchoHits;
     bool guardianMelee;
     bool coveiroPhaseOpening;
+    bool coveiroBuried;
+    float coveiroBuriedChargeCooldown;
     CoveiroCombo coveiroCombo;
     float guardianMeleeCooldown;
     float guardianDodgeCooldown, guardianDodgeTime;
@@ -110,12 +116,16 @@ typedef struct Enemy {
     Vector2 previousPlayerPosition;
     bool hasPlayerPosition;
 } Enemy;
+typedef enum CemeteryShovelPhase {
+    CEM_SHOVEL_OUTBOUND, CEM_SHOVEL_WARNING, CEM_SHOVEL_RETURN, CEM_SHOVEL_RECALL
+} CemeteryShovelPhase;
 typedef struct CemeteryProjectile {
     bool active;
-    Vector2 position,velocity;
-    float life;
+    Vector2 position, velocity, returnTarget, returnOffset;
+    float life, phaseTime;
     int damage;
-    bool returning, hitPlayer;
+    CemeteryShovelPhase phase;
+    bool hitPlayer;
 } CemeteryProjectile;
 typedef struct EnemyGroup {
     Texture2D sprites;
@@ -151,6 +161,7 @@ typedef struct EnemyGroup {
     Texture2D villageZombie[VILLAGE_ZOMBIE_ATLAS_COUNT];
     Texture2D cemeteryZombie[3], cemeteryLantern[3], cemeterySpecial[3], cemeterySpell;
     Texture2D coveiroIdle,coveiroWalk,coveiroMelee,coveiroEmerge,coveiroFall,boss[3],effects[3];
+    Texture2D coveiroMark[4], coveiroMarkShovel;
     EnemyImpact impacts[16], templarBlood;
     CemeteryProjectile cemeteryProjectiles[CEMETERY_PROJECTILE_COUNT];
     int loadedMap;
@@ -182,6 +193,7 @@ void KnockbackEnemy(Enemy *enemy, const Clearing *clearing,
                     Vector2 source, float distance);
 void MoveEnemy(const Clearing *clearing, Enemy *enemy, Vector2 delta);
 Vector2 SampleBossPlayerVelocity(Enemy *boss, Vector2 player, float dt);
+Vector2 ReadBossPlayerVelocity(const Enemy *boss, Vector2 player, float dt);
 Vector2 PredictBossTarget(const Clearing *map, Vector2 origin, Vector2 player,
                           Vector2 velocity, float lead);
 void DrawEnemyHealthBar(const Enemy *enemy, float top);
@@ -196,7 +208,8 @@ enum { CEM_BOSS_WALK,CEM_BOSS_SLAM,CEM_BOSS_THROW,CEM_BOSS_CHARGE,CEM_BOSS_MELEE
        CEM_ZOMBIE_IDLE,CEM_ZOMBIE_WALK,CEM_ZOMBIE_ATTACK,
        CEM_LANTERN_IDLE,CEM_LANTERN_WALK,CEM_LANTERN_ATTACK,
        CEM_SPECIAL_IDLE,CEM_SPECIAL_WALK,CEM_SPECIAL_ATTACK,
-       CEM_BOSS_IDLE,CEM_BOSS_EMERGE,CEM_BOSS_FALL };
+       CEM_BOSS_IDLE,CEM_BOSS_EMERGE,CEM_BOSS_FALL,
+       CEM_BOSS_MARK_THROW,CEM_BOSS_MARK_SINK,CEM_BOSS_MARK_EMERGE,CEM_BOSS_MARK_DASH };
 #define CEM_ZOMBIE_HIT_TIME .41f
 #define CEM_LANTERN_RELEASE_TIME .55f
 #define CEM_SPECIAL_IMPACT_TIME .52f
