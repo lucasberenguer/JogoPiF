@@ -3,7 +3,11 @@
 
 #include "raylib.h"
 
-typedef enum GameTrack { TRACK_MENU, TRACK_COMBAT, TRACK_MINIBOSS, TRACK_CHAPEL, TRACK_NECROMANCER, TRACK_COUNT, TRACK_SILENT } GameTrack;
+typedef enum GameTrack {
+    TRACK_MENU, TRACK_COMBAT, TRACK_MINIBOSS, TRACK_CHAPEL, TRACK_NECROMANCER_LEGACY,
+    TRACK_GUARDIAN, TRACK_COVEIRO, TRACK_VILLAGE_LEADER, TRACK_BONE_LORD,
+    TRACK_IGRIS, TRACK_NECROMANCER, TRACK_COUNT, TRACK_SILENT
+} GameTrack;
 typedef enum AudioChannel { AUDIO_MUSIC, AUDIO_EFFECTS, AUDIO_MASTER, AUDIO_CHANNELS } AudioChannel;
 typedef enum GameSfx {
 #define SFX(id, ...) SFX_##id,
@@ -22,7 +26,9 @@ typedef struct SfxVoice {
 
 typedef struct GameAudio {
     Music tracks[TRACK_COUNT];
+    unsigned char *musicData[TRACK_COUNT];
     float gain[TRACK_COUNT];
+    float musicPitch[TRACK_COUNT];
     bool playing[TRACK_COUNT];
     Sound villageEmergence;
     SfxVoice voices[SFX_COUNT][SFX_VARIANTS];
@@ -35,15 +41,18 @@ typedef struct GameAudio {
 } GameAudio;
 
 void InitGameAudio(GameAudio *audio);
-void UpdateGameMusic(GameAudio *audio, GameTrack track, float strength, float dt);
+void UpdateBossMusic(GameAudio *audio, GameTrack track, int phase, float strength, float dt);
+GameTrack BossTrackForMap(int map);
 void StopGameMusic(GameAudio *audio);
+bool GameMusicPlaying(const GameAudio *audio);
 void PlayVillageEmergence(const GameAudio *audio, bool initialGroup);
 void PlayAudioFeedback(GameAudio *audio);
 void SetGameAudioContext(GameAudio *audio, Vector2 listener, bool gesture, bool suspended, bool combatPaused);
 void PlaySfx(GameSfx id);
 void EmitSfx(GameSfx id, Vector2 position, float volume, float pitch);
 void EmitSfxTimed(GameSfx id, Vector2 position, float duration);
-void DrawAudioDebug(GameAudio *audio);
+void DrawAudioDebug(GameAudio *audio, float dt);
+void ResetAudioDebugMusic(void);
 void SaveAudioSettings(const GameAudio *audio);
 void UnloadGameAudio(GameAudio *audio);
 

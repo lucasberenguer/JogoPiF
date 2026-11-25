@@ -1,4 +1,6 @@
 #include "game_audio.h"
+#include "boss_music.h"
+#include "run_progress.h"
 #include <math.h>
 #include <stdio.h>
 
@@ -25,23 +27,49 @@ static float RandomBipolar(unsigned *state) {
     return (float)(*state >> 16)/32767.5f-1.0f;
 }
 
-static Sound MakeSound(const SfxPreset *p, unsigned seed, int variant) {
+static Sound MakeSound(GameSfx id, const SfxPreset *p, unsigned seed, int variant) {
     enum { RATE = 22050 };
     unsigned count = (unsigned)(p->duration*RATE);
     short *samples=MemAlloc(count*sizeof(*samples));
     if (!samples) return (Sound){0};
-    float phase=0, low=0;
+    float phase=0, low=0, air=0;
     float base = p->frequency*(.97f+.03f*variant);
     bool rising = p->sweep > 1.0f;
+    bool weapon = id==SFX_GUN || id==SFX_GUN_HIT || id==SFX_KATANA ||
+        id==SFX_KATANA_HIT || id==SFX_KATANA_WAVE || id==SFX_BIBLE ||
+        id==SFX_BIBLE_HIT || id==SFX_BIBLE_BLOCK || id==SFX_HOLY_WATER;
     for (unsigned i=0; i<count; i++) {
         float t=(float)i/count;
+        float seconds=(float)i/RATE;
         phase += (2*3.14159265f/RATE)*base*(1+(p->sweep-1)*t);
-        low += (.12f+.22f*p->noise)*(RandomBipolar(&seed)-low);
+        float noise=RandomBipolar(&seed);
+        low += (.12f+.22f*p->noise)*(noise-low);
         float envelope = fminf(t*(rising ? 7 : 54),1.0f)*(1-t);
         envelope *= rising ? .34f+.66f*t : (1-t)*(1-t);
         float tone = sinf(phase) + .26f*p->tone*sinf(phase*2.01f) +
                      .18f*p->tone*sinf(phase*1.50f);
-        samples[i]=(short)(11500*envelope*((1-p->noise)*tone+1.5f*p->noise*low));
+        float signal=envelope*((1-p->noise)*tone+1.5f*p->noise*low);
+        if (id==SFX_GUN || id==SFX_GUN_HIT) {
+            float end=1-t;
+            float crack=(.68f*noise+.32f*low)*expf(-seconds*(id==SFX_GUN ? 71 : 120));
+            float body=sinf(phase)*expf(-seconds*38);
+            float action=seconds>.052f ? .13f*(noise-low)*expf(-(seconds-.052f)*143) : 0;
+            signal=fminf(1,seconds*1700)*end*(1.13f*crack+.57f*body+action+.13f*low*end);
+        } else if (id==SFX_KATANA || id==SFX_KATANA_HIT || id==SFX_KATANA_WAVE) {
+            air+=.048f*(noise-air);
+            float edge=.44f*sinf(phase*2.71f)+.31f*sinf(phase*4.23f)+.25f*sinf(phase*6.13f);
+            float sweep=sinf(3.14159265f*t);
+            signal=(1-t)*(sweep*sweep*(1.14f*low+.6f*air)+
+                           edge*(id==SFX_KATANA_HIT ? .70f : .28f)*envelope);
+            if (id==SFX_KATANA_HIT) signal+=.47f*noise*fminf(1,seconds*2200)*expf(-seconds*93)*(1-t);
+        } else if (id==SFX_BIBLE || id==SFX_BIBLE_HIT || id==SFX_BIBLE_BLOCK || id==SFX_HOLY_WATER) {
+            float choir=.53f*sinf(phase)+.30f*sinf(phase*1.334f)+.24f*sinf(phase*1.500f)+.16f*sinf(phase*.503f);
+            float chime=.36f*sinf(phase*2.397f)+.20f*sinf(phase*3.83f);
+            float paper=(noise-low)*expf(-seconds*60)*fminf(1,seconds*300)*.24f;
+            signal=(1-t)*(envelope*(choir*(id==SFX_BIBLE ? 1.24f : .68f)+chime)+paper);
+            if (id==SFX_HOLY_WATER) signal+=.36f*low*sinf(phase*.55f)*envelope;
+        }
+        samples[i]=(short)((weapon ? 21000 : 11500)*fmaxf(-1,fminf(1,signal)));
     }
     Wave wave = {count, RATE, 16, 1, samples};
     Sound sound=LoadSoundFromWave(wave);
@@ -75,7 +103,7 @@ static void LoadSfx(GameAudio *audio) {
         for (int variant=0; variant<SFX_VARIANTS; variant++) {
             audio->voices[id][variant].sound = override.stream.buffer ?
                 (variant == 0 ? override : LoadSoundAlias(override)) :
-                MakeSound(&presets[id], 7819u + 541u*id + 1693u*variant, variant);
+                MakeSound((GameSfx)id, &presets[id], 7819u + 541u*id + 1693u*variant, variant);
             audio->voices[id][variant].started = -1000;
             audio->voices[id][variant].alias = override.stream.buffer && variant > 0;
         }
@@ -152,6 +180,13 @@ void SetGameAudioContext(GameAudio *audio, Vector2 listener, bool gesture, bool 
         }
         if (audio->villageEmergence.stream.buffer) StopSound(audio->villageEmergence);
     }
+    if (suspended!=audio->suspended) {
+        for (int i=0; i<TRACK_COUNT; i++) {
+            if (!audio->playing[i]) continue;
+            if (suspended) PauseMusicStream(audio->tracks[i]);
+            else ResumeMusicStream(audio->tracks[i]);
+        }
+    }
     audio->combatPaused=combatPaused;
     audio->suspended=suspended;
     if (IsAudioDeviceReady())
@@ -170,9 +205,26 @@ void EmitSfxTimed(GameSfx id, Vector2 position, float duration) {
     PlayCue(activeAudio,id,position,true,1,1,duration);
 }
 
-void DrawAudioDebug(GameAudio *audio) {
+static GameTrack debugTheme=TRACK_GUARDIAN;
+static int debugPhase=1;
+static bool debugMusic;
+
+void ResetAudioDebugMusic(void) { debugMusic=false; }
+
+void DrawAudioDebug(GameAudio *audio, float dt) {
     static int selected;
     static AudioChannel channel=AUDIO_EFFECTS;
+    if (IsKeyPressed(KEY_B)) {
+        debugTheme=debugTheme==TRACK_NECROMANCER ? TRACK_GUARDIAN : debugTheme+1;
+        debugPhase=1;
+    }
+    if (IsKeyPressed(KEY_P)) debugMusic=!debugMusic;
+    if (IsKeyPressed(KEY_H)) {
+        int phases=debugTheme==TRACK_NECROMANCER || debugTheme==TRACK_IGRIS ? 3 :
+            debugTheme==TRACK_VILLAGE_LEADER ? 1 : 2;
+        debugPhase=debugPhase%phases+1;
+    }
+    UpdateBossMusic(audio,debugMusic ? debugTheme : TRACK_SILENT,debugPhase,1,dt);
     if (IsKeyPressed(KEY_UP)) selected=(selected+SFX_COUNT-1)%SFX_COUNT;
     if (IsKeyPressed(KEY_DOWN)) selected=(selected+1)%SFX_COUNT;
     if (IsKeyPressed(KEY_TAB)) channel=(channel+1)%AUDIO_CHANNELS;
@@ -191,10 +243,12 @@ void DrawAudioDebug(GameAudio *audio) {
     static const char *channels[] = {"Musica","Efeitos","Geral"};
     DrawText(TextFormat("%s %d%%   |   Vozes %d/%d   |   Ultimo: %s",
              channels[channel],audio->volume[channel],playing,SFX_VOICE_BUDGET,last),20,54,18,LIGHTGRAY);
-    int rows=(GetScreenHeight()-96)/23;
+    DrawText(TextFormat("B  Trocar chefe   |   P  Tocar/parar   |   H  Fase   |   %s (%d) %s",
+                       BossThemeName(debugTheme),debugPhase,debugMusic ? "[tocando]" : ""),20,80,16,RAYWHITE);
+    int rows=(GetScreenHeight()-122)/23;
     int first=selected>=rows ? selected-rows+1 : 0;
     for (int i=first; i<SFX_COUNT && i<first+rows; i++) {
-        Rectangle row={20,86+23.0f*(i-first),420,23};
+        Rectangle row={20,112+23.0f*(i-first),420,23};
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(GetMousePosition(),row)) {
             selected=i;
             PlaySfx((GameSfx)i);
@@ -234,43 +288,76 @@ void InitGameAudio(GameAudio *audio) {
         [TRACK_COMBAT] = "assets/audio/combate.ogg",
         [TRACK_MINIBOSS] = "assets/audio/miniboss.ogg",
         [TRACK_CHAPEL] = "assets/audio/capela.wav",
-        [TRACK_NECROMANCER] = "assets/audio/necromante_rock.wav"
+        [TRACK_NECROMANCER_LEGACY] = "assets/audio/necromante_rock.wav"
     };
     for (int i = 0; i < TRACK_COUNT; i++) {
-        if (!FileExists(paths[i])) continue;
-        audio->tracks[i] = LoadMusicStream(paths[i]);
+        if (i>=TRACK_GUARDIAN) audio->tracks[i]=LoadBossTheme((GameTrack)i,&audio->musicData[i]);
+        else if (FileExists(paths[i])) audio->tracks[i]=LoadMusicStream(paths[i]);
         audio->tracks[i].looping = true;
     }
     const char *emergence="assets/cutscenes/village_aftermath/audio/emergencia.wav";
     if (FileExists(emergence)) audio->villageEmergence=LoadSound(emergence);
 }
 
-void UpdateGameMusic(GameAudio *audio, GameTrack track, float strength, float dt) {
+GameTrack BossTrackForMap(int map) {
+    switch (map) {
+        case CLEARING_MAP: return TRACK_GUARDIAN;
+        case CEMETERY_MAP: return TRACK_COVEIRO;
+        case VILLAGE_MAP: return TRACK_VILLAGE_LEADER;
+        case BONELAND_MAP: return TRACK_BONE_LORD;
+        case TEMPLAR_FIELD_MAP: return TRACK_IGRIS;
+        case NECROMANCER_MAP: return TRACK_NECROMANCER;
+        default: return TRACK_SILENT;
+    }
+}
+
+void UpdateBossMusic(GameAudio *audio, GameTrack track, int phase, float strength, float dt) {
     static const float mix[TRACK_COUNT] = {
         [TRACK_MENU]=.66f, [TRACK_COMBAT]=.66f, [TRACK_MINIBOSS]=.61f,
-        [TRACK_CHAPEL]=.66f, [TRACK_NECROMANCER]=.64f
+        [TRACK_CHAPEL]=.66f, [TRACK_NECROMANCER_LEGACY]=.55f,
+        [TRACK_GUARDIAN]=.66f,[TRACK_COVEIRO]=.69f,[TRACK_VILLAGE_LEADER]=.66f,
+        [TRACK_BONE_LORD]=.62f,[TRACK_IGRIS]=.65f,[TRACK_NECROMANCER]=.66f
     };
-    float step = fminf(1.0f, dt*2.5f);
+    if (audio->suspended) return;
+    if (track>=TRACK_GUARDIAN && track<=TRACK_NECROMANCER && !audio->tracks[track].stream.buffer)
+        track=track==TRACK_NECROMANCER ? TRACK_NECROMANCER_LEGACY : TRACK_MINIBOSS;
+    float step = fminf(1.0f, dt*(track==TRACK_SILENT ? 4.0f : 2.5f));
+    float intensity=fmaxf(0,fminf(2,phase-1));
     for (int i = 0; i < TRACK_COUNT; i++) {
         Music stream = audio->tracks[i];
         if (!stream.stream.buffer) continue;
         bool selected = i == (int)track;
         if (selected && !audio->playing[i]) {
             SetMusicVolume(stream, 0.0f);
+            audio->musicPitch[i]=1;
+            SetMusicPitch(stream,1);
             PlayMusicStream(stream);
             audio->playing[i] = true;
         }
         if (!audio->playing[i]) continue;
-        float target = selected ? strength : 0.0f;
+        float target = selected ? strength*(1+.065f*intensity) : 0.0f;
         audio->gain[i] += fmaxf(-step, fminf(step, target-audio->gain[i]));
         if (!selected && audio->gain[i] <= 0.0f) {
             StopMusicStream(stream);
             audio->playing[i] = false;
             continue;
         }
+        if (selected && phase>0) {
+            float desired=1+intensity*.044f;
+            float change=fmaxf(-dt*.12f,fminf(dt*.12f,desired-audio->musicPitch[i]));
+            if (change!=0) {
+                audio->musicPitch[i]+=change;
+                SetMusicPitch(stream,audio->musicPitch[i]);
+            }
+        }
         SetMusicVolume(stream, mix[i]*audio->gain[i]*(audio->volume[AUDIO_MUSIC]/100.0f));
         UpdateMusicStream(stream);
     }
+}
+
+bool GameMusicPlaying(const GameAudio *audio) {
+    for (int i=0; i<TRACK_COUNT; i++) if (audio->playing[i]) return true;
+    return false;
 }
 
 void PlayVillageEmergence(const GameAudio *audio, bool initialGroup) {
@@ -304,8 +391,10 @@ void SaveAudioSettings(const GameAudio *audio) {
 }
 
 void UnloadGameAudio(GameAudio *audio) {
-    for (int i = 0; i < TRACK_COUNT; i++)
+    for (int i = 0; i < TRACK_COUNT; i++) {
         if (audio->tracks[i].stream.buffer) UnloadMusicStream(audio->tracks[i]);
+        if (audio->musicData[i]) MemFree(audio->musicData[i]);
+    }
     if (activeAudio == audio) {
         DetachAudioMixedProcessor(LimitMix);
         activeAudio=NULL;

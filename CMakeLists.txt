@@ -15,6 +15,8 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(raylib)
 
 # Fontes do projeto
+set(AUDIO_SOURCES src/game_audio.c src/boss_music.c)
+
 set(SOURCES
     src/game.c
     src/game_text.c
@@ -29,7 +31,7 @@ set(SOURCES
     src/menu_video.c
     src/cutscene.c
     src/guardian_cutscene.c
-    src/game_audio.c
+    ${AUDIO_SOURCES}
     src/weapon_select.c
     src/bible.c
     src/gun.c
@@ -50,7 +52,7 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
-    add_executable(game_audio_test tests/game_audio_test.c)
+    add_executable(game_audio_test tests/game_audio_test.c src/boss_music.c)
     target_link_libraries(game_audio_test PRIVATE raylib)
     file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/audit/game-audio/assets/audio/sfx")
     add_test(NAME game_audio COMMAND game_audio_test)
@@ -70,7 +72,7 @@ if(BUILD_TESTING)
     add_test(NAME speedrun COMMAND speedrun_test)
     add_executable(enemy_audit_test tests/enemy_audit_test.c src/enemy.c src/necromancer.c src/cemetery_enemy.c src/village_enemy.c src/clearing.c src/game_text.c)
     target_include_directories(enemy_audit_test PRIVATE src)
-    target_sources(enemy_audit_test PRIVATE src/game_audio.c)
+    target_sources(enemy_audit_test PRIVATE ${AUDIO_SOURCES})
     target_link_libraries(enemy_audit_test PRIVATE raylib)
     add_test(NAME enemy_audit COMMAND enemy_audit_test)
     add_executable(map_connectivity_test tests/map_connectivity_test.c src/clearing.c)
@@ -81,7 +83,7 @@ if(BUILD_TESTING)
     target_include_directories(player_collision_test PRIVATE src)
     target_link_libraries(player_collision_test PRIVATE raylib)
     add_test(NAME player_collision COMMAND player_collision_test)
-    add_executable(encounter_test tests/encounter_test.c src/encounter.c src/logica.c src/presentation.c src/enemy.c src/necromancer.c src/cemetery_enemy.c src/village_enemy.c src/clearing.c src/menu.c src/menu_video.c src/game_audio.c src/game_text.c src/dev_tools.c src/bible.c src/gun.c src/video_settings.c)
+    add_executable(encounter_test tests/encounter_test.c src/encounter.c src/logica.c src/presentation.c src/enemy.c src/necromancer.c src/cemetery_enemy.c src/village_enemy.c src/clearing.c src/menu.c src/menu_video.c ${AUDIO_SOURCES} src/game_text.c src/dev_tools.c src/bible.c src/gun.c src/video_settings.c)
     target_sources(encounter_test PRIVATE src/hud.c)
     target_sources(encounter_test PRIVATE src/speedrun.c)
     target_sources(encounter_test PRIVATE src/menu_scene.c)

@@ -2,8 +2,9 @@
 
 ## Efeitos sonoros (25/11/2026)
 
+- Pistola com estalo grave e ação mecânica, Katana com corte metálico e Bíblia com timbre de coro e sino. Seis temas autorais de rock e metal para Guardião, Coveiro, Líder da Vila, Rasga-Ossos, Igris e Necromante. `src/boss_music.c` gera os loops na abertura ou carrega OGGs opcionais. As fases aumentam a intensidade sem voltar ao começo da música. **F10** tem prévia musical com **B**, **P** e **H**. A tabela com estilos e caminhos está em `docs/audio-sfx.md`.
 - Etapa 1 de áudio implementada. Katana, Arma de Fogo, Bíblia, esquiva, inimigos e habilidades de chefes emitem sons nos eventos existentes. `src/sfx_presets.h` define os sons procedurais e os nomes de substituição em `assets/audio/sfx/`. O misturador tem atenuação estéreo, limite de 14 vozes e limitador de pico. Configurações de Áudio têm volume geral e mudo persistentes. **F10** abre o painel de audição.
-- Inventário de habilidades, sons compartilhados e instruções de substituição em `docs/audio-sfx.md`. Build Release em `out/review`, dez testes aprovados e abertura do executável com dispositivo de áudio confirmada. Escuta de timbres e medição de FPS em horda pendentes. As trilhas individuais ficam para a etapa 2.
+- Inventário de habilidades, sons compartilhados e instruções de substituição em `docs/audio-sfx.md`. A build Release em `out/review` abriu e fechou com o áudio ativo. Os dez testes passaram, incluindo os seis loops musicais, transição de volume, pausa, retomada e início da trilha de Igris após a apresentação. Escuta em combate e medição de FPS em horda pendentes.
 
 ## Remaster de mapas e atmosfera (25/11/2026)
 

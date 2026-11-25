@@ -240,7 +240,7 @@ static bool TestEncounter(Encounter *e,EnemyGroup *enemies,const Clearing *map,V
         }
         assert(e->phase==ENCOUNTER_FIGHT && !EncounterPaused(e) && EncounterBossVisible(e,enemies));
         assert(igrisStarts==1 && enemies->list[0].state==ENEMY_IDLE && enemies->list[0].attackCooldown>1);
-        if (activeAudio->tracks[TRACK_MINIBOSS].stream.buffer) assert(activeAudio->playing[TRACK_MINIBOSS]);
+        if (activeAudio->tracks[TRACK_IGRIS].stream.buffer) assert(activeAudio->playing[TRACK_IGRIS]);
         if (mode == 7) {
             Enemy *boss=&enemies->list[0];
             DamageEnemy(boss,boss->health);

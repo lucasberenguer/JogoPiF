@@ -12,6 +12,54 @@ static int ActiveVoices(const GameAudio *audio) {
     return count;
 }
 
+static void VerifyBossMusic(GameAudio *audio) {
+    assert(BossTrackForMap(CLEARING_MAP)==TRACK_GUARDIAN);
+    assert(BossTrackForMap(CEMETERY_MAP)==TRACK_COVEIRO);
+    assert(BossTrackForMap(VILLAGE_MAP)==TRACK_VILLAGE_LEADER);
+    assert(BossTrackForMap(BONELAND_MAP)==TRACK_BONE_LORD);
+    assert(BossTrackForMap(TEMPLAR_FIELD_MAP)==TRACK_IGRIS);
+    assert(BossTrackForMap(NECROMANCER_MAP)==TRACK_NECROMANCER);
+    assert(BossTrackForMap(CHAPEL_MAP)==TRACK_SILENT);
+    assert(BossTrackForMap(INVERTED_CHAPEL_MAP)==TRACK_SILENT);
+    for (int i=TRACK_GUARDIAN; i<=TRACK_NECROMANCER; i++) {
+        Music theme=audio->tracks[i];
+        assert(theme.stream.buffer && theme.looping && audio->musicData[i]);
+        assert(GetMusicTimeLength(theme)>12);
+        for (int j=TRACK_GUARDIAN; j<i; j++)
+            assert(audio->tracks[j].frameCount!=theme.frameCount);
+        size_t bytes=(size_t)theme.frameCount*4;
+        int peak=0;
+        for (size_t at=0; at<bytes; at+=2) {
+            const unsigned char *pcm=audio->musicData[i]+44+at;
+            int sample=pcm[0]+256*pcm[1];
+            if (sample>=32768) sample-=65536;
+            if (sample<0) sample=-sample;
+            if (sample>peak) peak=sample;
+        }
+        assert(peak>5000 && peak<30000);
+    }
+    UpdateBossMusic(audio,TRACK_GUARDIAN,1,1,.4f);
+    assert(audio->playing[TRACK_GUARDIAN] && audio->gain[TRACK_GUARDIAN]==1);
+    UpdateBossMusic(audio,TRACK_COVEIRO,1,1,.12f);
+    assert(audio->playing[TRACK_GUARDIAN] && audio->playing[TRACK_COVEIRO]);
+    assert(audio->gain[TRACK_COVEIRO]>0 && audio->gain[TRACK_GUARDIAN]<1);
+    UpdateBossMusic(audio,TRACK_COVEIRO,2,1,.44f);
+    assert(!audio->playing[TRACK_GUARDIAN] && audio->musicPitch[TRACK_COVEIRO]>1.03f);
+    UpdateBossMusic(audio,TRACK_COVEIRO,2,.42f,.4f);
+    assert(audio->gain[TRACK_COVEIRO]<.5f);
+    SetGameAudioContext(audio,(Vector2){0},false,true,true);
+    assert(!IsMusicStreamPlaying(audio->tracks[TRACK_COVEIRO]));
+    SetGameAudioContext(audio,(Vector2){0},false,false,false);
+    assert(IsMusicStreamPlaying(audio->tracks[TRACK_COVEIRO]));
+    UpdateBossMusic(audio,TRACK_SILENT,0,0,.30f);
+    assert(!GameMusicPlaying(audio));
+    UpdateBossMusic(audio,TRACK_NECROMANCER,3,1,.4f);
+    assert(audio->playing[TRACK_NECROMANCER] && audio->musicPitch[TRACK_NECROMANCER]>1.04f);
+    StopGameMusic(audio);
+    assert(!GameMusicPlaying(audio));
+    puts("Boss music: six different loops, phase intensity, fade, pause and resume verified.");
+}
+
 int main(void) {
     unsigned seed=25;
     float min=1, max=-1;
@@ -80,6 +128,8 @@ int main(void) {
     }
     SetGameAudioContext(&audio,(Vector2){0},false,false,true);
     assert(ActiveVoices(&audio)<=2);
+    SetGameAudioContext(&audio,(Vector2){0},false,false,false);
+    VerifyBossMusic(&audio);
     UnloadGameAudio(&audio);
     assert(remove(override)==0);
     CloseAudioDevice();

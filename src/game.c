@@ -315,14 +315,16 @@ int main(void) {
                 if (IsKeyPressed(key)) { gesture=true; break; }
             }
         }
-        if (IsKeyPressed(KEY_F10)) audioDebug=!audioDebug;
+        if (IsKeyPressed(KEY_F10)) {
+            audioDebug=!audioDebug;
+            if (!audioDebug) ResetAudioDebugMusic();
+        }
         SetGameAudioContext(&menu.audio,player,gesture,!IsWindowFocused() || IsWindowMinimized(),
                             screen==3 || devTools.open || audioDebug);
         if (audioDebug) {
-            UpdateGameMusic(&menu.audio,TRACK_SILENT,0,GetFrameTime());
             BeginDrawing();
             ClearBackground((Color){24,17,27,255});
-            DrawAudioDebug(&menu.audio);
+            DrawAudioDebug(&menu.audio,GetFrameTime());
             EndDrawing();
             continue;
         }
@@ -368,35 +370,31 @@ int main(void) {
             if (screen==GUARDIAN_SCREEN) SetGuardianCutscenePaused(&guardianIntro,true);
         }
         GameTrack track = TRACK_SILENT;
-        float musicStrength = 1.0f;
-        if (screen == 0) track = TRACK_MENU;
-        else if ((screen == 2 || screen == 3) && playerHealth > 0 &&
-                 (clearing.chapel || clearing.basement || clearing.invertedChapel)) {
-            track = TRACK_CHAPEL;
-            if (screen == 3 || EncounterPaused(&encounter)) musicStrength = 0.42f;
-        } else if ((screen == 2 || screen == 3) && clearing.necromancerArena) {
-            const Enemy *boss = &enemies.list[0];
-            if (playerHealth > 0 && boss->type == ENEMY_BOSS && boss->health > 0 &&
-                encounter.phase == ENCOUNTER_FIGHT &&
-                !(boss->state == ENEMY_SPAWNING && encounter.presentation.remaining > 0)) {
-                track = TRACK_NECROMANCER;
-                if (screen == 3 || EncounterPaused(&encounter)) musicStrength = 0.42f;
+        int musicPhase=0;
+        float musicStrength=1;
+        if (screen==0) track=TRACK_MENU;
+        else if ((screen==2 || screen==3) && playerHealth>0) {
+            int map=ClearingMapId(&clearing);
+            const Enemy *boss=&enemies.list[0];
+            if (clearing.chapel || clearing.basement || clearing.invertedChapel) {
+                if (encounter.phase!=ENCOUNTER_ANGEL_CINEMATIC) track=TRACK_CHAPEL;
+            } else if (!encounter.guardianIntroPending &&
+                       (encounter.phase==ENCOUNTER_FIGHT || encounter.phase==ENCOUNTER_REWARD ||
+                        encounter.phase==ENCOUNTER_SEAL)) {
+                if (encounter.phase==ENCOUNTER_FIGHT && EncounterBossVisible(&encounter,&enemies)) {
+                    track=BossTrackForMap(map);
+                    musicPhase=clearing.necromancerArena ? boss->necromancerForm :
+                        boss->igrisFinalForm ? 3 : boss->guardianPhase==GUARDIAN_PHASE_ONE ? 1 : 2;
+                } else if (!clearing.necromancerArena &&
+                           (encounter.progress.stage<CLEARING_BOSS_STAGE ||
+                            (clearing.village && encounter.villageHordeStarted))) {
+                    track=TRACK_COMBAT;
+                }
             }
-        } else if ((screen == 2 || screen == 3) && playerHealth > 0 &&
-                 encounter.progress.stage <= CLEARING_BOSS_STAGE) {
-            track = (encounter.guardianIntroPending || encounter.phase==ENCOUNTER_VILLAGE_CINEMATIC ||
-                encounter.phase==ENCOUNTER_LETTER || encounter.phase==ENCOUNTER_VILLAGE_LETTER_READY ||
-                encounter.phase==ENCOUNTER_IGRIS_APPROACH || encounter.phase==ENCOUNTER_IGRIS_CINEMATIC ||
-                encounter.phase==ENCOUNTER_IGRIS_AFTERMATH) ? TRACK_SILENT :
-                encounter.progress.stage == CLEARING_BOSS_STAGE ? TRACK_MINIBOSS : TRACK_COMBAT;
-            if (encounter.progress.map == TEMPLAR_FIELD_MAP &&
-                encounter.progress.stage == CLEARING_BOSS_STAGE &&
-                (encounter.presentation.remaining > 0 || enemies.list[0].state == ENEMY_SPAWNING))
-                track = TRACK_SILENT;
-            if (screen == 3 || EncounterPaused(&encounter)) musicStrength = 0.42f;
+            if (screen==3 || EncounterPaused(&encounter)) musicStrength=.42f;
         }
         if (devTools.open) musicStrength*=.15f;
-        UpdateGameMusic(&menu.audio, track, musicStrength, GetFrameTime());
+        UpdateBossMusic(&menu.audio,track,musicPhase,musicStrength,GetFrameTime());
         if (devTools.open) {
             if (screen==2 || screen==3 || screen==GUARDIAN_SCREEN) SpeedrunInvalidate();
             bool inPractice=encounter.practice && (screen==2 || screen==3);
@@ -945,7 +943,7 @@ int main(void) {
             continue;
         }
         if (encounter.phase==ENCOUNTER_VILLAGE_CINEMATIC) {
-            if (!menu.audio.playing[TRACK_MINIBOSS]) {
+            if (!GameMusicPlaying(&menu.audio)) {
                 guardianStory=VILLAGE_STORY_AFTERMATH;
                 ResetGun(&gun);
                 ResetBible(&bible);
@@ -999,7 +997,7 @@ int main(void) {
             ResetBible(&bible);
             ClearEnemyAttacks(&enemies);
             katanaAttackRemaining=katanaAttackCooldown=dodgeRemaining=dodgeCooldown=0;
-            if ((clearing.cemetery || clearing.boneland) && menu.audio.playing[TRACK_COMBAT]) {
+            if ((clearing.cemetery || clearing.boneland) && GameMusicPlaying(&menu.audio)) {
                 BeginGameFrame();
                 ClearBackground(BLACK);
                 EndGameFrame();
