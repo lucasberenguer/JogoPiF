@@ -63,7 +63,7 @@ static Vector2 RotateVector2(Vector2 dir, float radians) {
 #define KATANA_SHOCKWAVE_COOLDOWN 2.5f
 #define KATANA_L5_SHOCKWAVE_COOLDOWN 1.8f
 #define KATANA_L5_FAN_ANGLE_DEG 20.0f
-#define KATANA_SHOCKWAVE_DAMAGE 22
+#define KATANA_SHOCKWAVE_DAMAGE 16
 #define KATANA_SHOCKWAVE_SPEED 620.0f
 #define KATANA_SHOCKWAVE_LIFE 0.95f
 #define KATANA_SHOCKWAVE_RADIUS 32.0f
@@ -1276,10 +1276,20 @@ int main(void) {
         if (!entering && nearPedestal && interactPressed) pedestalMessageTime = 3.0f;
         if (pedestalMessageTime > 0.0f) pedestalMessageTime -= deltaTime;
 
-        BeginGameFrame();
+        SceneLights scene = {0};
+        if (GetVideoSettings()->dynamicLighting) {
+            CollectMapLights(&clearing, altarOpen, (float)GetTime(), &scene);
+            CollectEnemyLights(&enemies, &scene);
+            if (clearing.boneland) {
+                float lift = dodging ? sinf(PI*Clamp(dodgeRemaining/dodgeDuration,0,1)) : 0;
+                CollectBonelandActorShadows(&enemies, player, lift, &scene);
+            }
+        }
+        BeginWorldFrame();
             ClearBackground(BLACK);
             BeginMode2D(camera);
                 DrawClearing(&clearing);
+                if (clearing.boneland) DrawWorldContactShadows(&scene);
                 if (clearing.templarField && clearing.exitLocked) {
                     Vector2 left = {clearing.exit.x, clearing.exit.y + clearing.exit.height};
                     Vector2 right = {left.x + clearing.exit.width, left.y};
@@ -1437,6 +1447,7 @@ int main(void) {
                              (int)player.x-55, (int)player.y-100, 12, WHITE);
                 }
             EndMode2D();
+            DrawWorldFrame(camera, &scene);
 
             DrawRectangle(12, 12, 490, 130, Fade(BLACK, 0.72f));
             DrawGameText("WASD: mover  |  Espaço/botão direito: esquiva", 24, 23, 17, RAYWHITE);

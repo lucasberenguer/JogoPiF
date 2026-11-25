@@ -234,7 +234,7 @@ static void CheckBonelandWaves(void) {
     Clearing map = {.boneland = true, .background = {.width = 1672, .height = 941},
                     .playableBounds = {0, 0, 1672, 941}, .spawn = {835, 840}};
     EnemyGroup group = {0};
-    const int totals[] = {36, 38};
+    const int totals[] = {46, 48};
     const int rangedCounts[] = {7, 10};
     for (int wave = 1; wave <= BONELAND_WAVES; wave++) {
         StartEnemyWave(&group, &map, wave, map.spawn, 1);
@@ -242,18 +242,18 @@ static void CheckBonelandWaves(void) {
         for (int i = 0; i < ENEMY_COUNT; i++) {
             const Enemy *enemy = &group.list[i];
             if (enemy->state == ENEMY_GONE) continue;
-            assert(enemy->state == (i<22?ENEMY_SPAWNING:ENEMY_QUEUED));
-            if(i<22) assert(!IsMapActorBlocked(&map, enemy->position));
+            assert(enemy->state == (i<30?ENEMY_SPAWNING:ENEMY_QUEUED));
+            if(i<30) assert(!IsMapActorBlocked(&map, enemy->position));
             if (i > 0) assert(enemy->stateTime < group.list[i - 1].stateTime);
             if (enemy->type == ENEMY_COMMON_MELEE) {
                 ghouls++;
-                assert(enemy->maxHealth == 40);
+                assert(enemy->maxHealth == 32);
             } else if (enemy->type == ENEMY_SPECIAL) {
                 shells++;
-                assert(enemy->maxHealth == 145);
+                assert(enemy->maxHealth == 116);
             } else {
                 cultists++;
-                assert(enemy->type == ENEMY_COMMON_RANGED && enemy->maxHealth == 36);
+                assert(enemy->type == ENEMY_COMMON_RANGED && enemy->maxHealth == 29);
             }
         }
         assert(EnemiesRemaining(&group) == totals[wave - 1]);
@@ -263,7 +263,7 @@ static void CheckBonelandWaves(void) {
     group.list[0].state=ENEMY_GONE;
     int reserveHealth=100;
     UpdateEnemies(&group,&map,map.spawn,.01f,true,&reserveHealth,100);
-    assert(group.list[22].state==ENEMY_SPAWNING && group.list[23].state==ENEMY_QUEUED);
+    assert(group.list[30].state==ENEMY_SPAWNING && group.list[31].state==ENEMY_QUEUED);
     for (int i = 0; i < ENEMY_COUNT; i++) group.list[i].state = ENEMY_GONE;
     Enemy *shell = &group.list[0];
     *shell = (Enemy){.type=ENEMY_SPECIAL,.state=ENEMY_IDLE,.position={500,400},.power=1,.health=310};
@@ -509,8 +509,8 @@ static void CheckTemplarBalance(void) {
                     .playableBounds = {0, 0, 1672, 941}, .spawn = {835, 840}};
     EnemyGroup group = {0};
     const int health[] = {
-        [TEMPLAR_SHIELD] = 218, [TEMPLAR_EXECUTIONER] = 280,
-        [TEMPLAR_CROSSBOW] = 156, [TEMPLAR_STANDARD] = 187,
+        [TEMPLAR_SHIELD] = 175, [TEMPLAR_EXECUTIONER] = 224,
+        [TEMPLAR_CROSSBOW] = 125, [TEMPLAR_STANDARD] = 187,
     };
     for (int wave = 1; wave <= 2; wave++) {
         StartEnemyWave(&group, &map, wave, map.spawn, 1);
@@ -523,7 +523,7 @@ static void CheckTemplarBalance(void) {
             assert(enemy->maxHealth == enemy->health);
             count++;
         }
-        assert(count == 5);
+        assert(count == 8);
     }
 
     const TemplarRole roles[] = {TEMPLAR_SHIELD, TEMPLAR_EXECUTIONER, TEMPLAR_CROSSBOW};
@@ -926,7 +926,7 @@ int main(void) {
     map.playableBounds=(Rectangle){0,0,1670,942};
     EnemyGroup group={0};
     ResetEnemies(&group,&map);
-    assert(EnemiesRemaining(&group)==26); /* Clareira, onda 1 */
+    assert(EnemiesRemaining(&group)==34); /* Clareira, onda 1 */
     CheckGuardianAttacks(&map, &group);
     CheckGuardianMelee(&map, &group);
     CheckGuardianClosePressure(&map, &group);
@@ -967,7 +967,7 @@ int main(void) {
     }
     map.cemetery=true;
     ResetEnemies(&group,&map);
-    assert(EnemiesRemaining(&group)==32);
+    assert(EnemiesRemaining(&group)==42);
     assert(group.list[3].type==ENEMY_COMMON_RANGED);
     int health=100;
     StartArenaBoss(&group,&map,(Vector2){800,400},1);
@@ -1165,15 +1165,15 @@ int main(void) {
         if (poseEnemy.state==ENEMY_FALLEN) assert(pose.frame==7);
     }
     Clearing arena=map;arena.cemetery=false;
-    /* Clareira: 2 ondas de 14/20, vida +10% e dano +15% sobre a base. */
+    /* Vida final por classe e dano por mapa para as ondas da Clareira. */
     for (int wave=1;wave<=CLEARING_WAVES;wave++) {
         StartEnemyWave(&group,&arena,wave,target,1);
-        assert(EnemiesRemaining(&group)==26+(wave-1)*4);
+        assert(EnemiesRemaining(&group)==34+(wave-1)*6);
         for (int i=0;i<ENEMY_COUNT;i++) {
             const Enemy *enemy=&group.list[i];
             if (enemy->state==ENEMY_GONE) continue;
             int base=(int)((enemy->type==ENEMY_SPECIAL ? 100 : 45)*(1.0f+(wave-1)*.12f)*1.0f);
-            assert(enemy->maxHealth==((int)ceilf(ceilf(base*1.10f)*.90f)+1)/2);
+            assert(enemy->maxHealth==(int)ceilf(((int)ceilf(ceilf(base*1.10f)*.90f)+1)/2 * .80));
             assert(fabsf(enemy->damageScale-1.15f)<.001f);
             assert(fabsf(enemy->power-(1.0f+(wave-1)*.09f))<.001f);
         }
@@ -1192,7 +1192,7 @@ int main(void) {
             if (group.list[i].state==ENEMY_GONE) continue;
             const Enemy *enemy=&group.list[i];
             int base=(int)((enemy->type==ENEMY_SPECIAL ? 100 : 45)*(1.0f+(wave-1)*.12f));
-            assert(enemy->maxHealth==((int)ceilf((ceilf(base*1.10f)+90)*.90f)+1)/2);
+            assert(enemy->maxHealth==(int)ceilf(((int)ceilf((ceilf(base*1.10f)+90)*.90f)+1)/2 * .80));
             assert(fabsf(enemy->damageScale-1.15f*1.30f)<.001f);
             assert(fabsf(enemy->power-(1.0f+(wave-1)*.09f))<.001f);
             if (group.list[i].type==ENEMY_COMMON_MELEE) melee++;
@@ -1200,12 +1200,12 @@ int main(void) {
             if (group.list[i].type==ENEMY_SPECIAL) specials++;
         }
         assert(melee>0 && ranged>0 && specials==2);
-        assert(melee+ranged+specials==((int[]){32,36})[wave-1]);
+        assert(melee+ranged+specials==((int[]){42,46})[wave-1]);
     }
     for(int cemetery=0;cemetery<2;cemetery++) {
         const Clearing *waveMap=cemetery?&map:&arena;
-        int limit=cemetery?20:18;
-        int total=cemetery?32:26;
+        int limit=cemetery?27:24;
+        int total=cemetery?42:34;
         StartEnemyWave(&group,waveMap,1,target,1);
         UpdateEnemies(&group,waveMap,target,.01f,true,&health,100);
         assert(group.list[limit-1].state==ENEMY_SPAWNING);

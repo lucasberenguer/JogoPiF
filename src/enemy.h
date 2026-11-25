@@ -2,7 +2,7 @@
 #define ENEMY_H
 #include "raylib.h"
 #define BONE_LORD_DEFEAT_DURATION 1.35f
-#define NON_BOSS_SPEED_SCALE 1.20f
+#define NON_BOSS_SPEED_SCALE 1.38f
 #include "clearing.h"
 #include "necromancer.h"
 
@@ -68,7 +68,7 @@ typedef enum EnemyState {
     ENEMY_IDLE, ENEMY_WALK, ENEMY_ATTACK, ENEMY_HURT, ENEMY_DIE, ENEMY_GONE,
     ENEMY_SPAWNING, ENEMY_FALLEN, ENEMY_QUEUED
 } EnemyState;
-enum { VILLAGE_HORDE_INITIAL = 30, VILLAGE_HORDE_REINFORCEMENTS = 34 };
+enum { VILLAGE_HORDE_INITIAL = 38, VILLAGE_HORDE_REINFORCEMENTS = 44 };
 enum { VILLAGE_ZOMBIE_IDLE, VILLAGE_ZOMBIE_EMERGE, VILLAGE_ZOMBIE_WALK,
        VILLAGE_ZOMBIE_ATTACK, VILLAGE_ZOMBIE_ATLAS_COUNT };
 #define VILLAGE_ZOMBIE_EMERGE_TIME 1.0f
@@ -176,6 +176,9 @@ void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
 void StartArenaBoss(EnemyGroup *group, const Clearing *clearing, Vector2 player,
                        float power);
 void ClearEnemyAttacks(EnemyGroup *group);
+void CollectEnemyLights(const EnemyGroup *group, SceneLights *scene);
+void CollectBonelandActorShadows(const EnemyGroup *group, Vector2 player, float dodgeLift, SceneLights *scene);
+void CollectCoveiroLights(const EnemyGroup *group, SceneLights *scene);
 int EnemiesRemaining(const EnemyGroup *group);
 float EnemyHurtRadius(const Enemy *enemy);
 void UpdateEnemies(EnemyGroup *group, const Clearing *clearing,

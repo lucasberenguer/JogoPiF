@@ -166,7 +166,7 @@ static bool TestCutsceneEncounter(Encounter *e,EnemyGroup *enemies,const Clearin
         assert(LoadClearingCheckpoint(&saved) && saved.villageAftermath==VILLAGE_SCENE_SEEN);
         assert(!e->villageHordeStarted);
         assert(InteractInEncounter(e,enemies,map,p,health));
-        assert(e->villageHordeStarted && EnemiesRemaining(enemies)==64);
+        assert(e->villageHordeStarted && EnemiesRemaining(enemies)==82);
     } else {
         if (e->phase==ENCOUNTER_REWARD) {
             assert(ChooseEncounterReward(e,enemies,map,p,health,0));
@@ -276,7 +276,7 @@ static bool TestEncounter(Encounter *e,EnemyGroup *enemies,const Clearing *map,V
             if (mode == 2) {
                 assert(cinematicFrames >= (skipBonelandPassage ? 1 : 8));
                 assert(e->progress.stage == 1 && saved.stage == 1);
-                assert(map->exitLocked && EnemiesRemaining(enemies) == 5);
+                assert(map->exitLocked && EnemiesRemaining(enemies) == 8);
                 assert(p.x == map->spawn.x && p.y == map->spawn.y);
             } else {
                 assert(saved.stage == CLEARING_COMPLETE_STAGE && e->phase == ENCOUNTER_CLEAR);

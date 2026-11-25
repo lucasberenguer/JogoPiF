@@ -6,10 +6,11 @@
 
 enum { VILLAGE_AXE_SLASH, VILLAGE_CHARGE, VILLAGE_SEAL_PULSE, VILLAGE_ATTACK_COUNT };
 enum {
-    VILLAGE_ACTIVE_LIMIT = 36, VILLAGE_ZOMBIE_HEALTH = 90, VILLAGE_BRUTE_HEALTH = 140,
+    VILLAGE_ACTIVE_LIMIT = 44, VILLAGE_ZOMBIE_HEALTH = 72, VILLAGE_BRUTE_HEALTH = 112,
     VILLAGE_BRUTE_DAMAGE = 32, VILLAGE_COMMON_PER_BRUTE = 10
 };
 static const float bruteImpact=.64f, bruteRecoveryEnd=1.23f, bruteRadius=118;
+static const float hordeReinforcementInterval = .42f;
 
 static Vector2 VillageHordeSpot(const Clearing *clearing, Vector2 player) {
     float w = (float)clearing->background.width, h = (float)clearing->background.height;
@@ -60,7 +61,7 @@ void StartVillageHorde(EnemyGroup *group, const Clearing *clearing,
         group->list[i].attackCooldown = 0.35f + 0.08f * (float)(i % 6);
     }
     group->villageSpawnRemaining = VILLAGE_HORDE_REINFORCEMENTS;
-    group->villageSpawnTimer = 0.65f;
+    group->villageSpawnTimer = hordeReinforcementInterval;
 }
 
 void VillageUpdateHorde(EnemyGroup *group, const Clearing *clearing,
@@ -91,7 +92,7 @@ void VillageUpdateHorde(EnemyGroup *group, const Clearing *clearing,
                 group->villageSpawnRemaining;
             SpawnNecroticVillager(&group->list[i],clearing,player,spawnIndex);
             group->villageSpawnRemaining--;
-            group->villageSpawnTimer = 0.65f;
+            group->villageSpawnTimer = hordeReinforcementInterval;
             return;
         }
     }

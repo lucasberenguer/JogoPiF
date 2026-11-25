@@ -714,7 +714,7 @@ static Vector2 SpawnPosition(const Clearing *clearing, Vector2 player) {
     return fallback;
 }
 
-enum { CLEARING_ACTIVE_LIMIT=18, CEMETERY_ACTIVE_LIMIT=20, BONELAND_ACTIVE_LIMIT=22, NEAR_RESERVE=12 };
+enum { CLEARING_ACTIVE_LIMIT=24, CEMETERY_ACTIVE_LIMIT=27, BONELAND_ACTIVE_LIMIT=30, NEAR_RESERVE=12 };
 
 static Vector2 SpawnNearPlayer(const Clearing *map,const EnemyGroup *group,Vector2 player) {
     for(int attempt=0;attempt<32;attempt++) {
@@ -751,21 +751,25 @@ static void DeployWaveReserve(EnemyGroup *group,const Clearing *map,Vector2 play
         enemy->position=reserve<=NEAR_RESERVE && (reserve%4!=0 || active==0)
             ? SpawnNearPlayer(map,group,player) : SpawnPosition(map,player);
         enemy->state=ENEMY_SPAWNING;
-        enemy->stateTime=-.15f*deployed++;
+        enemy->stateTime=-.08f*deployed++;
         reserve--;
         active++;
     }
 }
 
 static float WaveSpawnDelay(int wave, int index) {
-    return index * (.22f - (wave - 1) * .02f);
+    return index * fmaxf(.08f, .12f - (wave - 1) * .02f);
+}
+
+static int SwarmEnemyHealth(int health) {
+    return (health * 4 + 4) / 5;
 }
 
 static void StartBonelandWave(EnemyGroup *group, const Clearing *map, int wave, Vector2 player) {
     static const struct {
         int total, cultists;
     } waves[BONELAND_WAVES] = {
-        {36, 7}, {38, 10}
+        {46, 7}, {48, 10}
     };
     int index = (int)Clamp((float)wave, 1, sizeof(waves) / sizeof(waves[0])) - 1;
     int total = waves[index].total;
@@ -775,7 +779,7 @@ static void StartBonelandWave(EnemyGroup *group, const Clearing *map, int wave, 
         if (i >= total) continue;
         bool cultist = (i + 1) * cultists / total > i * cultists / total;
         bool shell = !cultist && (i == 12 || (index == 1 && i == 24));
-        int health = shell ? 145 : cultist ? 36 : 40;
+        int health = SwarmEnemyHealth(shell ? 145 : cultist ? 36 : 40);
         bool deploy=i<BONELAND_ACTIVE_LIMIT;
         group->list[i] = (Enemy){
             .type = shell ? ENEMY_SPECIAL : cultist ? ENEMY_COMMON_RANGED : ENEMY_COMMON_MELEE,
@@ -789,17 +793,20 @@ static void StartBonelandWave(EnemyGroup *group, const Clearing *map, int wave, 
     }
 }
 
-static void StartTemplarWave(EnemyGroup *group, int wave) {
+static void StartTemplarWave(EnemyGroup *group, const Clearing *map, int wave) {
     static const struct {
         TemplarRole role;
         Vector2 position;
-    } formations[][5] = {
+    } formations[][8] = {
         {{TEMPLAR_SHIELD, {750, 445}}, {TEMPLAR_SHIELD, {835, 470}},
          {TEMPLAR_SHIELD, {920, 445}}, {TEMPLAR_CROSSBOW, {470, 365}},
-         {TEMPLAR_CROSSBOW, {1200, 365}}},
+         {TEMPLAR_CROSSBOW, {1200, 365}}, {TEMPLAR_SHIELD, {575, 460}},
+         {TEMPLAR_SHIELD, {1100, 460}}, {TEMPLAR_CROSSBOW, {835, 340}}},
         {{TEMPLAR_EXECUTIONER, {670, 473}},
          {TEMPLAR_EXECUTIONER, {1000, 473}}, {TEMPLAR_SHIELD, {755, 402}},
-         {TEMPLAR_SHIELD, {915, 402}}, {TEMPLAR_CROSSBOW, {1090, 350}}},
+         {TEMPLAR_SHIELD, {915, 402}}, {TEMPLAR_CROSSBOW, {1090, 350}},
+         {TEMPLAR_SHIELD, {525, 445}}, {TEMPLAR_SHIELD, {1150, 445}},
+         {TEMPLAR_CROSSBOW, {580, 350}}},
     };
     static const struct {
         EnemyType type;
@@ -816,14 +823,16 @@ static void StartTemplarWave(EnemyGroup *group, int wave) {
         group->list[i] = (Enemy){.state = ENEMY_GONE};
         if (i >= count) continue;
         TemplarRole role = formations[formation][i].role;
+        Vector2 position = formations[formation][i].position;
+        if (IsMapActorBlocked(map, position)) FindFreeMapPosition(map, position, &position);
+        int health = SwarmEnemyHealth((int)ceilf(stats[role].health * .90f));
         group->list[i] = (Enemy){
             .templarRole = role, .type = stats[role].type, .state = ENEMY_SPAWNING,
-            .position = formations[formation][i].position,
-            .health = (int)ceilf(stats[role].health * .90f),
-            .maxHealth = (int)ceilf(stats[role].health * .90f),
+            .position = position,
+            .health = health, .maxHealth = health,
             .speed = NON_BOSS_SPEED_SCALE * stats[role].speed, .power = stats[role].power,
             .attackCooldown = role == TEMPLAR_CROSSBOW ? .65f + .1f * i : .8f,
-            .stateTime = -.12f * i, .lastKatanaSwing = -1
+            .stateTime = -.08f * i, .lastKatanaSwing = -1
         };
     }
 }
@@ -840,7 +849,7 @@ void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
     ClearEnemyAttacks(group);
     group->playerHitCooldown = 0;
     if (clearing->templarField) {
-        StartTemplarWave(group, wave);
+        StartTemplarWave(group, clearing, wave);
         return;
     }
     if (clearing->boneland) {
@@ -852,8 +861,8 @@ void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
         return;
     }
     bool clearingWave = ClearingMapId(clearing) == CLEARING_MAP;
-    static const int clearingCounts[CLEARING_WAVES] = {26,30};
-    static const int cemeteryCounts[CEMETERY_WAVES] = {32,36};
+    static const int clearingCounts[CLEARING_WAVES] = {34,40};
+    static const int cemeteryCounts[CEMETERY_WAVES] = {42,46};
     int total = clearing->cemetery ? cemeteryCounts[(int)Clamp(wave,1,CEMETERY_WAVES)-1] :
         clearingWave ? clearingCounts[(int)Clamp(wave,1,CLEARING_WAVES)-1] : 7 + (wave - 1) * 4;
     bool staggered=clearingWave || clearing->cemetery;
@@ -877,6 +886,7 @@ void StartEnemyWave(EnemyGroup *group, const Clearing *clearing, int wave,
         if (clearing->cemetery) enemy->maxHealth+=90;
         enemy->maxHealth = (int)ceilf(enemy->maxHealth * .90f);
         if(staggered) enemy->maxHealth=(enemy->maxHealth+1)/2;
+        enemy->maxHealth = SwarmEnemyHealth(enemy->maxHealth);
         enemy->health = enemy->maxHealth;
         enemy->speed = NON_BOSS_SPEED_SCALE * ENEMY_SPEED * (1.0f + (wave-1)*.045f);
         enemy->power = 1.0f + (wave-1)*.09f;
@@ -1237,6 +1247,75 @@ static const struct {
     [BONE_DASH]   = {440, .83f, 1.10f, 1.37f,  64, 32},
     [BONE_BLAST]  = {220, .72f, 1.03f, 1.40f, 220, 38},
 };
+
+void CollectEnemyLights(const EnemyGroup *group, SceneLights *scene) {
+    const Vector3 amber = {1.0f,.67f,.38f};
+    const Vector3 violet = {.63f,.36f,1.0f};
+    const Vector3 green = {.47f,1.0f,.34f};
+    const Enemy *boss = &group->list[0];
+    if (group->cemetery) CollectCoveiroLights(group, scene);
+    if (boss->type == ENEMY_BOSS && boss->state == ENEMY_ATTACK) {
+        if (group->boneland && boss->bossAttack == BONE_BLAST) {
+            float elapsed = boss->stateTime - boneAttacks[BONE_BLAST].windup;
+            if (elapsed >= 0 && elapsed < .38f) {
+                float tail = 1 - elapsed / .38f;
+                static const Vector2 forward[] = {{0,1},{0,-1},{-1,0},{1,0}};
+                // O clarão nasce à frente das patas, permitindo uma sombra atrás do corpo.
+                Vector2 origin = Vector2Add(boss->position, Vector2Scale(forward[boss->facing], 56));
+                int previousCount = scene->count;
+                AddSceneLight(scene,origin,224 + 120 * (1 - tail),tail*tail*.84f,amber);
+                if (scene->count > previousCount) scene->shadowLightSlot = scene->count;
+            }
+        } else if (boss->templarRole == TEMPLAR_MARSHAL) {
+            int skill = boss->bossAttack;
+            if (skill == IGRIS_ERUPTION || skill == IGRIS_VORTEX || skill == IGRIS_ECLIPSE) {
+                float elapsed = boss->stateTime - igrisSkills[skill].impact;
+                if (elapsed >= 0 && elapsed < .35f) {
+                    Vector2 impact = skill == IGRIS_ERUPTION ? boss->attackTarget : boss->position;
+                    AddSceneLight(scene,impact,195,.61f*(1-elapsed/.35f),violet);
+                }
+            }
+        }
+    }
+    for (int i = 0; i < ENEMY_ROOT_COUNT && scene->count < SCENE_LIGHT_LIMIT; i++) {
+        const EnemyRoot *root = &group->rootAttacks[i];
+        if (!root->active) continue;
+        float impact = group->cemetery ? .8f : guardianHazards[root->attack].hitStart;
+        float age = root->age - impact;
+        if (age >= 0 && age < .35f)
+            AddSceneLight(scene,root->position,145,.44f*(1-age/.35f),
+                          group->cemetery || root->attack == GUARDIAN_CURSE ? violet : amber);
+    }
+    for (int i = 0; i < NECROMANCER_SHOTS && scene->count < SCENE_LIGHT_LIMIT; i++) {
+        const NecromancerShot *shot = &group->necromancer.shots[i];
+        if (shot->life > 0)
+            AddSceneLight(scene,shot->position,110,.37f*fminf(1,shot->life/.15f),violet);
+    }
+    for (int i = 0; i < ENEMY_PROJECTILE_COUNT && scene->count < SCENE_LIGHT_LIMIT; i++) {
+        const EnemyProjectile *shot = &group->projectiles[i];
+        if (shot->remaining <= 0) continue;
+        float fade = fminf(1,shot->remaining/.15f);
+        if (shot->boneShot) AddSceneLight(scene,shot->position,105,.42f*fade,amber);
+        else if (shot->umbraSpear) AddSceneLight(scene,shot->position,115,.43f*fade,violet);
+        else if (group->cemetery) AddSceneLight(scene,shot->position,110,.39f*fade,green);
+    }
+}
+
+static bool BoneLordHidden(const Enemy *boss) {
+    return boss->state == ENEMY_ATTACK && boss->bossAttack == BONE_DASH &&
+           boss->stateTime >= BONE_DASH_HIDE && boss->stateTime < BONE_DASH_REAPPEAR;
+}
+
+void CollectBonelandActorShadows(const EnemyGroup *group, Vector2 player, float dodgeLift, SceneLights *scene) {
+    if (!group->boneland) return;
+    AddSceneCaster(scene, player, 24 + 5*dodgeLift, 91, .65f - .31f*dodgeLift);
+    const Enemy *boss = &group->list[0];
+    if (boss->type == ENEMY_BOSS && boss->state != ENEMY_GONE && boss->state != ENEMY_QUEUED &&
+        boss->state != ENEMY_DIE && boss->state != ENEMY_FALLEN && !BoneLordHidden(boss)) {
+        float reveal = boss->state == ENEMY_SPAWNING ? Clamp(boss->stateTime, 0, 1) : 1;
+        AddSceneCaster(scene,boss->position,46,136,.55f*reveal);
+    }
+}
 
 static void MoveEnemyStraight(const Clearing *map, Enemy *boss, float distance) {
     int steps = (int)ceilf(distance / 4.0f);
@@ -3148,8 +3227,9 @@ static void DrawBoneLordWarning(const EnemyGroup *group, const Enemy *boss) {
         bool rain = attack == BONE_RAIN;
         Vector2 center = rain ? boss->attackTarget : boss->position;
         if (t < windup) {
-            DrawCircleV(center, radius, Fade(RED, strength * .19f));
-            DrawRing(center, radius - 3, radius, 0, 360, 64, Fade(ORANGE, strength));
+            Color ivory = {255, 226, 175, 255};
+            DrawCircleV(center, radius, Fade(RED, strength * .14f));
+            DrawRing(center, radius - 3, radius, 0, 360, 64, Fade(ivory, strength));
         }
         int frame;
         if (rain) {
@@ -3271,7 +3351,7 @@ static void DrawBoneLord(const EnemyGroup *group, const Enemy *boss) {
                 columns = 6;
                 if (t < BONE_DASH_HIDE) {
                     pose = BoneBodyPoseAt(t, 0, BONE_DASH_HIDE, 4);
-                } else if (t < BONE_DASH_REAPPEAR) {
+                } else if (BoneLordHidden(boss)) {
                     return;
                 } else {
                     pose = t < windup ? 7 + BoneBodyPoseAt(t, BONE_DASH_REAPPEAR, windup, 4) :
@@ -3286,8 +3366,21 @@ static void DrawBoneLord(const EnemyGroup *group, const Enemy *boss) {
     Texture2D texture = group->boneLordSheets[sheet];
     Rectangle source = BoneBodyFrame(texture, columns, rows, row, pose);
     float reveal = boss->state == ENEMY_SPAWNING ? Clamp(t, 0, 1) : 1;
-    const float scale = .62f / .75f;
-    float heightScale = scale;
+    // Calibra pelo corpo dos quadros neutros, sem usar o tamanho dos efeitos.
+    // Um fator por folha preserva o agachamento e a extensão naturais do golpe.
+    static const float bodySize[BONE_SHEET_COUNT] = {
+        [BONE_IDLE_SHEET] = 1.0f,  [BONE_WALK_SHEET] = 1.0f,
+        [BONE_CLAW_SHEET] = 1.25f, [BONE_RANGED_SHEET] = 1.04f,
+        [BONE_RAIN_SHEET] = 1.13f, [BONE_DASH_SHEET] = 1.04f,
+        [BONE_BLAST_SHEET] = 1.19f,
+    };
+    float scale = (.62f / .75f) * bodySize[sheet];
+    float ground = source.height - BONE_BODY_BOTTOM_PAD * .75f;
+    if (sheet == BONE_BLAST_SHEET) {
+        // O chão da explosão varia entre preparação, impacto e recuperação.
+        static const float blastGround[] = {160, 165, 195};
+        ground = blastGround[row];
+    }
     float width = source.width * scale;
     Color tint = Fade(WHITE, reveal);
     DrawEllipse((int)boss->position.x, (int)boss->position.y - 9, 54, 19, Fade(BLACK, .38f * reveal));
@@ -3300,8 +3393,8 @@ static void DrawBoneLord(const EnemyGroup *group, const Enemy *boss) {
     }
     if (lateral && boss->facing == 2) source.width = -source.width;
     DrawTexturePro(texture, source,
-        (Rectangle){boss->position.x, boss->position.y + 28 * (1 - reveal), width, source.height * heightScale},
-        (Vector2){width * .5f, (source.height - BONE_BODY_BOTTOM_PAD * .75f) * heightScale},
+        (Rectangle){boss->position.x, boss->position.y + 28 * (1 - reveal), width, source.height * scale},
+        (Vector2){width * .5f, ground * scale},
         0, tint);
 }
 

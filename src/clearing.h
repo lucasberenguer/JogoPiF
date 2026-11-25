@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include "raylib.h"
+#include "scene_lighting.h"
 
 enum { CLEARING_ALTAR_RADIUS = 72 };
 
@@ -54,6 +55,7 @@ bool InitTemplarField(Clearing *map);
 bool InitCampaignMap(Clearing *map, int mapId);
 int ClearingMapId(const Clearing *map);
 void DrawClearing(const Clearing *clearing);
+void CollectMapLights(const Clearing *map, bool altarOpen, float time, SceneLights *scene);
 void DrawClearingAltarGlow(const Clearing *clearing, float time);
 void DrawClearingForeground(const Clearing *clearing, Vector2 player);
 void DrawClearingCollisionGuide(const Clearing *clearing);

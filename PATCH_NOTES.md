@@ -26,7 +26,7 @@
 - **Dano Base do Golpe Principal (`WeaponBaseDamage(arma)` em `src/run_progress.h`)**:
   - Arma de fogo (`0`): `5` (tiro — `SHOT_DAMAGE` em `src/gun.c`)
   - Bíblia (`1`): `12` (contato — `BibleContactDamage()` em `src/bible.c`)
-  - Katana (`2`): `17` (golpe principal — `WeaponBaseDamage(WEAPON_KATANA)` em `src/game.c`)
+  - Katana (`2`): `13` (golpe principal — `WeaponBaseDamage(WEAPON_KATANA)` em `src/game.c`)
 - **Fórmula de Dano (`EncounterDamage` em `src/encounter.c`)**:
   $$\text{EncounterDamage} = \text{damage} \times (1 + 0{,}2 \times \text{nivel} + 0{,}5 \times \text{epicDamageStacks} + \text{bonusDaArma})$$
 
@@ -37,7 +37,7 @@
 | Bônus por acúmulo épico de dano | `+0.50` (`+50%` por stack) | `EPIC_DAMAGE_STACK_BONUS` | `src/run_progress.h` |
 | `bonusDaArma` (Bíblia `nivel >= 1`) | `+0.15` (`+15%`) | `BIBLE_L1_DAMAGE_BONUS` | `src/run_progress.h` |
 | `bonusDaArma` (Arma de fogo `nivel >= 2`) | `+0.25` (`+25%`) | `GUN_L2_DAMAGE_BONUS` | `src/run_progress.h` |
-| Dano base por arma (`{5, 12, 17}`) | `5` / `12` / `17` | `WeaponBaseDamage(int weapon)` | `src/run_progress.h` |
+| Dano base por arma (`{5, 12, 13}`) | `5` / `12` / `13` | `WeaponBaseDamage(int weapon)` | `src/run_progress.h` |
 
 Todo o cálculo é aditivo, acumulativo e sem teto. O dano final aplicado em cada acerto é `ceil(danoBaseDoGolpe * EncounterDamage)`.
 
@@ -49,7 +49,7 @@ Todo o cálculo é aditivo, acumulativo e sem teto. O dano final aplicado em cad
 
 | Nível | Efeito / Regra | Valor | Constante / Identificador | Arquivo |
 | --- | --- | --- | --- | --- |
-| Base (N0) | Dano base do golpe | `17` | `WeaponBaseDamage(WEAPON_KATANA)` | `src/run_progress.h` / `src/game.c` |
+| Base (N0) | Dano base do golpe | `13` | `WeaponBaseDamage(WEAPON_KATANA)` | `src/run_progress.h` / `src/game.c` |
 | Base (N0) | Arco de corte (`127°`, `cos(63,5°)`) | `+0.4462f` | `KATANA_BASE_ARC_DOT` | `src/game.c` |
 | Base (N0) | Alcance base | `105.0f px` | `KATANA_BASE_RANGE` | `src/game.c` |
 | Base (N0) | Recuperação entre golpes | `0.45f s` | `KATANA_BASE_RECOVERY` | `src/game.c` |
@@ -59,7 +59,7 @@ Todo o cálculo é aditivo, acumulativo e sem teto. O dano final aplicado em cad
 | Nível 2 | Redução da recarga da esquiva ao acertar `>= 1` inimigo (1x por golpe) | `0.8f s` | `KATANA_L2_DODGE_REDUCTION` | `src/game.c` |
 | Nível 3 | Arco ampliado (`127° -> 145°`, `cos(72,5°)`) | `+0.3007f` | `KATANA_L3_ARC_DOT` | `src/game.c` |
 | Nível 3 | Recuo nos inimigos atingidos | `42.0f px` | `KATANA_L3_KNOCKBACK` | `src/game.c` |
-| Nível 4 | Onda de choque frontal — dano base | `22` | `KATANA_SHOCKWAVE_DAMAGE` | `src/game.c` |
+| Nível 4 | Onda de choque frontal — dano base | `16` | `KATANA_SHOCKWAVE_DAMAGE` | `src/game.c` |
 | Nível 4 | Onda de choque — recarga / vel. / vida / raio | `2.5f s` / `620.0f` / `0.95f s` / `32.0f` | `KATANA_SHOCKWAVE_COOLDOWN`, `KATANA_SHOCKWAVE_SPEED`, `KATANA_SHOCKWAVE_LIFE`, `KATANA_SHOCKWAVE_RADIUS` | `src/game.c` |
 | Nível 5 | Onda tripla em leque (`-20°`, `0°`, `+20°`) | `20.0f°` (máx. `12` ondas) | `KATANA_L5_FAN_ANGLE_DEG`, `KATANA_MAX_SHOCKWAVES` | `src/game.c` |
 | Nível 5 | Recarga da onda tripla | `2.5 -> 1.8f s` | `KATANA_L5_SHOCKWAVE_COOLDOWN` | `src/game.c` |
@@ -301,7 +301,7 @@ Todo o cálculo é aditivo, acumulativo e sem teto. O dano final aplicado em cad
 
 ### Estimativas teóricas de DPS contra 1 alvo (estimativas, não medidas em partida)
 Base única para todas as armas: `damage = 1.0`, `epicDamageStacks = 0` e no Nível 5 o multiplicador de `EncounterDamage` da própria arma (`2,00x` na Katana, `2,15x` na Bíblia e `2,25x` na Arma de fogo):
-- **Katana (Nível 0 -> Nível 5)**: `~37,8 DPS` (`17` dano / `0,45 s`) -> `~58 a 75 DPS` (no N5, `EncounterDamage = 2,00x`: corte de `ceil(17 * 2,00) = 34` de dano com recuperação de `0,40 s` + onda de choque de `ceil(22 * 2,00) = 44` de dano a cada `1,8 s` = `24,4 DPS` da onda; considerando `~1,0 a 1,5` cortes efetivos/s na janela de aproximação + `1` onda atingindo o alvo).
+- **Katana (Nível 0 -> Nível 5)**: `~28,9 DPS` (`13` dano / `0,45 s`) -> `~44 a 57 DPS` (no N5, `EncounterDamage = 2,00x`: corte de `ceil(13 * 2,00) = 26` de dano com recuperação de `0,40 s` + onda de choque de `ceil(16 * 2,00) = 32` de dano a cada `1,8 s` = `17,8 DPS` da onda; considerando `~1,0 a 1,5` cortes efetivos/s na janela de aproximação + `1` onda atingindo o alvo).
 - **Bíblia (Nível 0 -> Nível 5)**: `~12 DPS` (`12` de dano de contato orbital base sem boost, `~1` acerto/s) -> `~41 a 51 DPS` (no N5, `EncounterDamage = 2,15x`: contato de `ceil(12 * 2,15) = 26` de dano com recarga de `0,45 s` por inimigo e ciclo de boost `1,65 s / 2,8 s` + poça de água benta causando `ceil(8 * 2,15) = 18` de dano a cada `0,45 s` = `40,0 DPS` da poça; variando conforme a permanência do alvo na poça e na órbita de `102 px`).
 - **Arma de Fogo (Nível 0 -> Nível 5)**: `25 DPS` (`5` dano / `0,20 s`, `1` tiro por disparo) -> `~179 DPS` (no N5, `EncounterDamage = 2,25x`: cada tiro causa `ceil(5 * 2,25) = 12` de dano a cada `0,14 s` = `7,14` disparos/s; acertando `~2,1` dos `4` tiros por disparo contra um único alvo = `~179 DPS`, podendo chegar a `342,9 DPS` à queima-roupa se os `4` tiros acertarem o mesmo chefe largo).
 
@@ -341,7 +341,7 @@ Base única para todas as armas: `damage = 1.0`, `epicDamageStacks = 0` e no Ní
 - Katana N1 (`105 -> 123 px` e `0.45 -> 0.40 s`) e N2 (`-0.8 s` na esquiva ao acertar) invertidos em relação à versão inicial.
 - Arma de fogo N4 (tiros perfurantes): **dano integral no 2º inimigo atingido** (`GunHitEnemyCircle` em `src/gun.c`).
 - Intervalo da Arma de Fogo no Nível 1: **`0.20 -> 0.14 s`** (`GUN_L1_SHOT_INTERVAL` em `src/gun.h`).
-- Dano base da onda de choque da Katana (N4/N5): **`22` de dano** (`KATANA_SHOCKWAVE_DAMAGE` em `src/game.c`).
+- Dano base da onda de choque da Katana (N4/N5): **`16` de dano** (`KATANA_SHOCKWAVE_DAMAGE` em `src/game.c`).
 - Inimigos de ondas comuns com **`-10%` de vida final** e dano base corpo a corpo **`14`**.
 
 ### Em espera

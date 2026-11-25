@@ -407,6 +407,22 @@ void CemeteryUpdateBoss(EnemyGroup *group, const Clearing *map, Enemy *boss, Vec
     } else boss->state = ENEMY_IDLE;
 }
 
+void CollectCoveiroLights(const EnemyGroup *group, SceneLights *scene) {
+    const Enemy *boss = &group->list[0];
+    Vector3 violet = {.63f,.36f,1.0f};
+    if (boss->type == ENEMY_BOSS && boss->state == ENEMY_ATTACK && !boss->guardianMelee &&
+        boss->bossAttack == COVEIRO_ROOTS) {
+        float elapsed = boss->stateTime - COVEIRO_WINDUP;
+        if (elapsed >= 0 && elapsed < .4f)
+            AddSceneLight(scene,boss->attackTarget,170,.55f*(1-elapsed/.4f),violet);
+    }
+    for (int i = 0; i < CEMETERY_PROJECTILE_COUNT && scene->count < SCENE_LIGHT_LIMIT; i++) {
+        const CemeteryProjectile *shot = &group->cemeteryProjectiles[i];
+        if (shot->active && shot->phase == CEM_SHOVEL_RETURN)
+            AddSceneLight(scene,shot->position,95,.27f,violet);
+    }
+}
+
 void CemeteryUpdateSpecial(EnemyGroup *group, const Clearing *map, Enemy *enemy, Vector2 player,
                            float dt, bool dodging, int *health) {
     if (enemy->state == ENEMY_ATTACK) {

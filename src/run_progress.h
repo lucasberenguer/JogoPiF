@@ -66,7 +66,7 @@ static inline void SetRunWeaponLevel(RunProgress *p, int level) {
 }
 
 static inline int WeaponBaseDamage(int weapon) {
-    static const int baseDamages[3] = {5, 12, 17};
+    static const int baseDamages[3] = {5, 12, 13};
     return (weapon >= 0 && weapon < 3) ? baseDamages[weapon] : 0;
 }
 

@@ -102,17 +102,17 @@ static void CheckSinglePhaseBossHud(void) {
 
 static void CheckVillageZombies(Encounter *encounter, EnemyGroup *enemies, Clearing *map) {
     StartVillageHorde(enemies, map, map->spawn);
-    assert(EnemiesRemaining(enemies) == 64 && enemies->villageSpawnRemaining == 34);
+    assert(EnemiesRemaining(enemies) == 82 && enemies->villageSpawnRemaining == 44);
     for (int i = 0; i < VILLAGE_HORDE_INITIAL; i++) {
         const Enemy *zombie = &enemies->list[i];
-        bool brute=i==10 || i==21;
+        bool brute=(i+1)%11==0;
         assert(zombie->type == (brute ? ENEMY_SPECIAL : ENEMY_COMMON_MELEE) && zombie->state == ENEMY_SPAWNING);
         assert(zombie->villageBrute==brute && !EnemyCanBeHit(zombie));
-        assert(zombie->health==(brute?140:90) && zombie->maxHealth==zombie->health);
+        assert(zombie->health==(brute?112:72) && zombie->maxHealth==zombie->health);
     }
     int health = 100;
     UpdateEnemies(enemies, map, map->spawn, .66f, false, &health, 100);
-    assert(enemies->villageSpawnRemaining == 33 && health == 100);
+    assert(enemies->villageSpawnRemaining == 43 && health == 100);
     assert(enemies->list[VILLAGE_HORDE_INITIAL].state == ENEMY_SPAWNING &&
            !EnemyCanBeHit(&enemies->list[VILLAGE_HORDE_INITIAL]));
     UpdateEnemies(enemies, map, map->spawn, .32f, false, &health, 100);
@@ -121,26 +121,26 @@ static void CheckVillageZombies(Encounter *encounter, EnemyGroup *enemies, Clear
     assert(enemies->list[0].state == ENEMY_IDLE && EnemyCanBeHit(&enemies->list[0]));
 
     for (int i=0;i<7;i++) VillageUpdateHorde(enemies,map,map->spawn,.66f);
-    assert(enemies->villageSpawnRemaining==28);
-    for (int i=0;i<36;i++) {
-        bool brute=i==10 || i==21 || i==32;
+    assert(enemies->villageSpawnRemaining==38);
+    for (int i=0;i<44;i++) {
+        bool brute=(i+1)%11==0;
         assert(enemies->list[i].villageBrute==brute);
-        assert(enemies->list[i].health==(brute?140:90));
+        assert(enemies->list[i].health==(brute?112:72));
     }
     VillageUpdateHorde(enemies,map,map->spawn,.66f);
-    assert(enemies->villageSpawnRemaining==28);
-    enemies->list[35].state=ENEMY_GONE;
+    assert(enemies->villageSpawnRemaining==38);
+    enemies->list[43].state=ENEMY_GONE;
     VillageUpdateHorde(enemies,map,map->spawn,.66f);
-    assert(enemies->villageSpawnRemaining==27 && enemies->list[35].health==90);
+    assert(enemies->villageSpawnRemaining==37 && enemies->list[43].health==72);
 
-    for (int number=38;number<=64;number++) {
-        enemies->list[35].state=ENEMY_GONE;
+    for (int number=46;number<=82;number++) {
+        enemies->list[43].state=ENEMY_GONE;
         VillageUpdateHorde(enemies,map,map->spawn,.66f);
-        assert(enemies->villageSpawnRemaining==64-number);
-        assert(enemies->list[35].villageBrute==(number==44 || number==55));
+        assert(enemies->villageSpawnRemaining==82-number);
+        assert(enemies->list[43].villageBrute==(number%11==0));
     }
     Enemy *brute=&enemies->list[10];
-    assert(brute->villageBrute && brute->health==140 && brute->maxHealth==140);
+    assert(brute->villageBrute && brute->health==112 && brute->maxHealth==112);
     brute->state=ENEMY_ATTACK;
     brute->stateTime=.63f;
     VillageUpdateBruteAttack(enemies,map,brute,brute->position,false,&health);
@@ -208,7 +208,7 @@ static void CheckLegacyCheckpoints(void) {
         assert(LoadClearingCheckpoint(&restored) && restored.guardianAftermath==state);
     }
     /* Fase 1: Migração PIF-RUN-7 -> PIF-RUN-8, nível único, strongWeapon -> epicDamageStacks, EncounterDamage e WeaponBaseDamage */
-    assert(WeaponBaseDamage(0) == 5 && WeaponBaseDamage(1) == 12 && WeaponBaseDamage(2) == 17);
+    assert(WeaponBaseDamage(0) == 5 && WeaponBaseDamage(1) == 12 && WeaponBaseDamage(2) == 13);
     assert(SaveFileText(path, "PIF-RUN-7 1 3 80 120 1.3 255 1 1 4 2 1 1 0 4\n"));
     RunProgress mig7 = {0};
     assert(LoadClearingCheckpoint(&mig7));
@@ -537,7 +537,7 @@ static void CheckLegacyCheckpoints(void) {
 
     /* Fase 4: Renderização visual das 3 raridades (comum, raro com 2 buffs, épico de +50% antes->depois) e reroll ativo/desativado */
     rTest = (Encounter){.progress = NewRunProgress(2), .phase = ENCOUNTER_REWARD, .rewardCount = 3, .sealEnemy = -1};
-    SetRunWeaponLevel(&rTest.progress, 1); /* N1: mult = 1.2 => ceil(17 * 1.2) = 21; após +50% => mult = 1.7 => ceil(17 * 1.7) = 29 */
+    SetRunWeaponLevel(&rTest.progress, 1); /* Corte de 16 no N1 e de 23 com um bônus épico. */
     rTest.progress.stage = 2;
     rTest.rewards[0] = (Reward){.kind = REWARD_DAMAGE, .rarity = RARITY_COMMON};
     rTest.rewards[1] = (Reward){.kind = REWARD_SWAP, .rarity = RARITY_RARE, .weapon = 1, .bonus = {REWARD_HEALTH, REWARD_SPEED}};
@@ -645,7 +645,7 @@ static void CheckDevTools(Encounter *e, EnemyGroup *enemies, Clearing *map) {
             assert(StartDevEncounter(&tools,DEV_STAGE,e,enemies,map,&player,&health));
             assert(e->practice && e->progress.map==area && e->progress.stage==wave);
             assert(e->progress.weapon==2 && e->progress.weaponLevel[2]==3);
-            assert(health==100 && EnemiesRemaining(enemies)==(area==CLEARING_MAP ? 26+(wave-1)*4 : ((int[]){32,36})[wave-1]));
+            assert(health==100 && EnemiesRemaining(enemies)==(area==CLEARING_MAP ? 34+(wave-1)*6 : ((int[]){42,46})[wave-1]));
             assert(!IsMapActorBlocked(map,player));
             assert(e->presentation.areaEntry && EncounterPaused(e));
             UpdateStagePresentation(&e->presentation,e->presentation.remaining);
@@ -722,7 +722,7 @@ static void CheckDevTools(Encounter *e, EnemyGroup *enemies, Clearing *map) {
     tools.map = BONELAND_MAP;
     tools.wave = 1;
     assert(StartDevEncounter(&tools, DEV_STAGE, e, enemies, map, &player, &health));
-    assert(e->practice && map->boneland && enemies->boneland && EnemiesRemaining(enemies) == 36);
+    assert(e->practice && map->boneland && enemies->boneland && EnemiesRemaining(enemies) == 46);
     assert(e->presentation.areaEntry && e->presentation.waveTotal == 3 && EncounterPaused(e));
     assert(strcmp(e->presentation.mapName, "Terra dos Ossos") == 0);
     UpdateStagePresentation(&e->presentation, .8f);
@@ -970,7 +970,15 @@ int main(void) {
     Capture("audit/clearing_special_directions.png",&encounter,&meleePreview,&clearing,player);
     for (int wave=1;wave<=CLEARING_WAVES;wave++) {
         assert(encounter.progress.stage==wave);
-        assert(EnemiesRemaining(&enemies)==26+(wave-1)*4);
+        assert(EnemiesRemaining(&enemies)==34+(wave-1)*6);
+        Enemy target = enemies.list[1];
+        assert(target.type == ENEMY_COMMON_MELEE);
+        Encounter katana = {.progress=NewRunProgress(2)};
+        for (int bonus = 0; bonus <= 1; bonus++) {
+            katana.progress.damage = bonus ? 1.20f : 1.0f;
+            int damage = (int)ceilf(WeaponBaseDamage(2) * EncounterDamage(&katana));
+            assert(damage < target.maxHealth && 2 * damage >= target.maxHealth);
+        }
         assert(EncounterPaused(&encounter));
         UpdateStagePresentation(&encounter.presentation,.1f);
         assert(EncounterPaused(&encounter));
@@ -1244,7 +1252,7 @@ int main(void) {
     Capture("audit/cemetery_collision_updated.png",&encounter,&enemies,&clearing,player);
     for (int wave=1;wave<=CEMETERY_WAVES;wave++) {
         assert(encounter.progress.stage==wave);
-        assert(EnemiesRemaining(&enemies)==((int[]){32,36})[wave-1]);
+        assert(EnemiesRemaining(&enemies)==((int[]){42,46})[wave-1]);
         UpdateStagePresentation(&encounter.presentation,10);
         for(int batch=0;batch<5 && EnemiesRemaining(&enemies)>0;batch++) {
             for (int i=0;i<ENEMY_COUNT;i++) {
@@ -1341,12 +1349,12 @@ int main(void) {
     RunProgress boneProgress = NewRunProgress(0);
     int boneHealth = boneProgress.health;
     BeginEncounter(&boneEncounter, &enemies, &bones, boneProgress, bones.spawn);
-    assert(boneEncounter.progress.map == BONELAND_MAP && EnemiesRemaining(&enemies) == 36);
+    assert(boneEncounter.progress.map == BONELAND_MAP && EnemiesRemaining(&enemies) == 46);
     boneEncounter.practice = true;
     boneEncounter.phase = ENCOUNTER_REWARD;
     boneEncounter.rewardCount = 1;
     assert(ChooseEncounterReward(&boneEncounter, &enemies, &bones, bones.spawn, &boneHealth, 0));
-    assert(boneEncounter.progress.stage == 2 && EnemiesRemaining(&enemies) == 38);
+    assert(boneEncounter.progress.stage == 2 && EnemiesRemaining(&enemies) == 48);
     boneEncounter.phase = ENCOUNTER_REWARD;
     boneEncounter.rewardCount = 1;
     assert(ChooseEncounterReward(&boneEncounter, &enemies, &bones, bones.spawn, &boneHealth, 0));
@@ -1409,7 +1417,7 @@ int main(void) {
     DamageEnemyFrom(&shield, 20, (Vector2){100, 140});
     assert(shield.health == 50);
     for (int wave = 1; wave <= TEMPLAR_FIELD_WAVES; wave++) {
-        assert(templars.progress.stage == wave && EnemiesRemaining(&enemies) == 5);
+        assert(templars.progress.stage == wave && EnemiesRemaining(&enemies) == 8);
         assert(enemies.list[0].templarRole == (wave == 1 ? TEMPLAR_SHIELD : TEMPLAR_EXECUTIONER));
         if (wave == 1) {
             Encounter waveView = templars;
@@ -1430,7 +1438,7 @@ int main(void) {
             enemies.list[4].walkTime = .23f;
             Capture("audit/portao_espadachim_arqueiro.png",&waveView,&enemies,&field,field.spawn);
         }
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 8; i++) {
             Enemy *enemy = &enemies.list[i];
             assert(enemy->templarRole != TEMPLAR_STANDARD);
             assert(!IsMapActorBlocked(&field, enemy->position));
@@ -1565,7 +1573,7 @@ int main(void) {
     DevTools fieldTools = {.map = TEMPLAR_FIELD_MAP, .wave = 2, .weapon = 2};
     Vector2 fieldPlayer;
     assert(StartDevEncounter(&fieldTools, DEV_STAGE, &templars, &enemies, &field, &fieldPlayer, &fieldHealth));
-    assert(templars.practice && EnemiesRemaining(&enemies) == 5);
+    assert(templars.practice && EnemiesRemaining(&enemies) == 8);
     assert(templars.presentation.areaEntry && templars.presentation.wave == 2);
     assert(templars.presentation.waveTotal == 3);
     for (int phase = 1; phase <= 2; phase++) {
@@ -1720,7 +1728,7 @@ int main(void) {
     assert(encounter.phase==ENCOUNTER_LETTER && enemies.list[0].health==0);
     assert(!encounter.villageHordeStarted && enemies.villageSpawnRemaining==0);
     assert(PutAwayVillageLetter(&encounter,&enemies,&clearing,clearing.spawn));
-    assert(encounter.villageHordeStarted && EnemiesRemaining(&enemies)==64);
+    assert(encounter.villageHordeStarted && EnemiesRemaining(&enemies)==82);
     assert(!PutAwayVillageLetter(&encounter,&enemies,&clearing,clearing.spawn));
     CheckVillageZombies(&encounter,&enemies,&clearing);
     UnloadClearing(&clearing);

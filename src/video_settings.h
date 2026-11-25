@@ -1,6 +1,8 @@
 #ifndef VIDEO_SETTINGS_H
 #define VIDEO_SETTINGS_H
 #include <stdbool.h>
+#include "raylib.h"
+#include "scene_lighting.h"
 
 /* Opções de vídeo escolhidas nas Configurações e salvas em video_pif.cfg,
    ao lado do executável. */
@@ -13,6 +15,7 @@ typedef struct VideoSettings {
     int renderScale;   /* porcentagem da resolução de renderização: 50, 75 ou 100 */
     int fpsLimit;      /* 30 ou 60 */
     bool showFps;      /* contador de FPS no canto da tela */
+    bool dynamicLighting;
 } VideoSettings;
 
 VideoSettings *GetVideoSettings(void);
@@ -29,6 +32,10 @@ void CycleVideoFpsLimit(VideoSettings *video, int direction);
    desenhado numa imagem menor e ampliado para a tela; a 100% o caminho é o mesmo de antes.
    EndGameFrame também desenha o contador de FPS, quando ligado. */
 void BeginGameFrame(void);
+/* Renderiza o cenário numa textura e o compõe antes do HUD. */
+void BeginWorldFrame(void);
+void DrawWorldContactShadows(const SceneLights *scene);
+void DrawWorldFrame(Camera2D camera, const SceneLights *scene);
 void EndGameFrame(void);
 /* BeginScissorMode em coordenadas de tela, correto também com renderização reduzida. */
 void BeginGameScissor(int x, int y, int width, int height);

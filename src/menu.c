@@ -382,10 +382,10 @@ static Vector2 SettingsMouse(Rectangle canvas) {
 
 /* Abas das Configurações e linhas da aba Vídeo, em coordenadas da arte (1672x941). */
 static const Rectangle settingsTabs[2] = {{566, 288, 260, 56}, {846, 288, 260, 56}};
-enum { VIDEO_ROW_FULLSCREEN, VIDEO_ROW_RENDER, VIDEO_ROW_FPS, VIDEO_ROW_COUNTER, VIDEO_ROWS };
+enum { VIDEO_ROW_FULLSCREEN, VIDEO_ROW_RENDER, VIDEO_ROW_FPS, VIDEO_ROW_COUNTER, VIDEO_ROW_LIGHTING, VIDEO_ROWS };
 
 static Rectangle VideoRow(int row) {
-    return (Rectangle){455, 382 + row*62.0f, 762, 50};
+    return (Rectangle){455, 382 + row*55.0f, 762, 49};
 }
 
 static Rectangle VideoValue(int row) {
@@ -403,6 +403,7 @@ static void ChangeVideoOption(int row, int direction) {
             SetTargetFPS(video->fpsLimit);
             break;
         case VIDEO_ROW_COUNTER: video->showFps = !video->showFps; break;
+        case VIDEO_ROW_LIGHTING: video->dynamicLighting = !video->dynamicLighting; break;
     }
     SaveVideoSettings(video);
 }
@@ -640,7 +641,7 @@ static void DrawSettingsTabs(const Menu *menu, Rectangle canvas) {
 
 static void DrawVideoSettings(const Menu *menu, Rectangle canvas) {
     static const char *labels[VIDEO_ROWS] = {
-        "Tela cheia", "Renderização", "Limite de FPS", "Contador de FPS"
+        "Tela cheia", "Renderização", "Limite de FPS", "Contador de FPS", "Iluminação dinâmica"
     };
     const VideoSettings *video = GetVideoSettings();
     float scale = canvas.width/1672.0f;
@@ -660,6 +661,7 @@ static void DrawVideoSettings(const Menu *menu, Rectangle canvas) {
                 break;
             case VIDEO_ROW_FPS: value = TextFormat("%d FPS", video->fpsLimit); break;
             case VIDEO_ROW_COUNTER: value = video->showFps ? "Ligado" : "Desligado"; break;
+            case VIDEO_ROW_LIGHTING: value = video->dynamicLighting ? "Ligada" : "Desligada"; break;
         }
         DrawGameTextIn(TextFormat("<   %s   >", value), PauseRect(canvas, VideoValue(row)),
                        31*scale, focused ? GOLD : RAYWHITE, GAME_TEXT_BODY);
@@ -667,6 +669,8 @@ static void DrawVideoSettings(const Menu *menu, Rectangle canvas) {
     const char *hint = "Setas ou clique alteram  ·  Tab troca de aba";
     if (menu->videoFocus == VIDEO_ROW_RENDER)
         hint = "Abaixo de 100%, a imagem fica menos nítida e mais leve";
+    if (menu->videoFocus == VIDEO_ROW_LIGHTING)
+        hint = "Luzes do cenário e dos ataques";
     DrawPauseText(canvas, hint, 660, 27, LIGHTGRAY);
 }
 
