@@ -1,3 +1,4 @@
+#include "game_input.h"
 #include "game_text.h"
 #include "encounter.h"
 #include "hud.h"
@@ -655,6 +656,28 @@ static void DrawRitualText(const char *text, Rectangle area, float size, Color c
     DrawGameTextIn(wrapped,area,size,color,GAME_TEXT_BODY);
 }
 
+static int choiceFocus;
+static int choiceCount;
+static unsigned choiceFrame;
+static Rectangle (*choiceLayout)(int, int);
+
+static void UpdateChoiceFocus(int count, Rectangle (*layout)(int, int)) {
+    unsigned frame = GameInputFrame();
+    if (choiceCount != count || choiceLayout != layout ||
+        (frame != choiceFrame && frame != choiceFrame + 1)) choiceFocus = 0;
+    bool newFrame = frame != choiceFrame || choiceCount != count || choiceLayout != layout;
+    choiceFrame = frame;
+    choiceCount = count;
+    choiceLayout = layout;
+    if (!newFrame || count <= 0) return;
+
+    int step = (int)(PadNavigate(GAMEPAD_BUTTON_LEFT_FACE_RIGHT) ||
+                     PadNavigate(GAMEPAD_BUTTON_LEFT_FACE_DOWN)) -
+               (int)(PadNavigate(GAMEPAD_BUTTON_LEFT_FACE_LEFT) ||
+                     PadNavigate(GAMEPAD_BUTTON_LEFT_FACE_UP));
+    choiceFocus = (choiceFocus + step + count) % count;
+}
+
 void DrawRitualQuestion(const char *title, const char *prompt, const char *detail,
                         const char *const choices[], int count) {
     if (!ritualFramesAttempted) {
@@ -679,12 +702,16 @@ void DrawRitualQuestion(const char *title, const char *prompt, const char *detai
     if (detail && detail[0])
         DrawRitualText(detail,RitualArea(question,.17f,.57f,.66f,.09f),font*.72f,GOLD);
 
+    UpdateChoiceFocus(count, ChoiceRect);
+    if (UsingGamepad())
+        DrawRitualText(InputHint("", "Direcional: escolher  ·  [Cruz]: confirmar"),
+                       RitualArea(question,.16f,.665f,.68f,.055f),font*.65f,GOLD);
     for (int i = 0; i < count; i++) {
         Rectangle box = ChoiceRect(i,count);
-        bool hover = CheckCollisionPointRec(GetMousePosition(),box);
+        bool hover = UsingGamepad() ? i == choiceFocus : CheckCollisionPointRec(GetMousePosition(),box);
         DrawRectangleRec(box,hover ? (Color){87,34,91,245} : (Color){44,20,42,239});
         DrawRectangleLinesEx(box,hover ? 2 : 1,hover ? (Color){246,156,250,255} : (Color){149,83,122,255});
-        DrawRitualText(TextFormat("%d. %s",i+1,choices[i]),
+        DrawRitualText(UsingGamepad() ? choices[i] : TextFormat("%d. %s",i+1,choices[i]),
                        (Rectangle){box.x+6,box.y+3,box.width-12,box.height-6},font*.86f,RAYWHITE);
     }
 }
@@ -719,6 +746,13 @@ bool RerollEncounterReward(Encounter *e, int slot) {
 }
 
 static int ChoiceInput(int count, Rectangle (*choiceRect)(int, int)) {
+    if (count <= 0) return -1;
+    UpdateChoiceFocus(count, choiceRect);
+    if (PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN)) {
+        int selected = choiceFocus;
+        choiceCount = 0;
+        return selected;
+    }
     for (int i=0; i<count; i++) {
         if (IsKeyPressed(KEY_ONE+i)) return i;
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
@@ -941,6 +975,9 @@ bool AnswerEncounterSeal(Encounter *e, EnemyGroup *enemies, int *health, int cho
 
 bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing,
                      Vector2 player, int *health) {
+    bool interact = IsKeyPressed(KEY_E) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_LEFT);
+    bool advance = IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) || interact ||
+                   PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     if (*health<=0) { e->phase=ENCOUNTER_DEFEAT; return false; }
     if (e->guardianIntroPending || GuardianLiberationPending(e) || GuardianPassagePending(e) ||
         e->presentation.remaining>0) return false;
@@ -954,13 +991,12 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
         BeginIgrisAftermath(e,enemies,*health)) return false;
     if (e->progress.map == 3) {
         if (e->phase == ENCOUNTER_CHAPEL_TEXT) {
-            if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_E) ||
-                IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            if (advance) {
                 e->phase = ENCOUNTER_FIGHT;
             }
             return false;
         }
-        if (IsKeyPressed(KEY_E)) {
+        if (interact) {
             float w = (float)clearing->background.width, h = (float)clearing->background.height;
             if (Vector2Distance(player, (Vector2){w * 0.50f, h * 0.44f}) <= 125.0f) {
                 if (!e->chapelAltarDone) e->phase=ENCOUNTER_ANGEL_CINEMATIC;
@@ -978,14 +1014,13 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
     }
     if (e->progress.map == 4) {
         if (e->phase == ENCOUNTER_CHAPEL_TEXT) {
-            if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_E) ||
-                IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            if (advance) {
                 e->phase = ENCOUNTER_FIGHT;
             }
             return false;
         }
         if (e->phase == ENCOUNTER_BASEMENT_PILLAR) {
-            if (IsKeyPressed(KEY_ESCAPE)) { e->phase = ENCOUNTER_FIGHT; return false; }
+            if (IsKeyPressed(KEY_ESCAPE) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_RIGHT)) { e->phase = ENCOUNTER_FIGHT; return false; }
             int sel = ReadRitualChoice(2);
             if (sel >= 0) {
                 static const int solution[4] = {0, 1, 0, 1}; /* NW=V(0), NE=F(1), SW=V(0), SE=F(1) */
@@ -1012,7 +1047,7 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
             }
             return false;
         }
-        if (IsKeyPressed(KEY_E) && !e->basementComplete) {
+        if (interact && !e->basementComplete) {
             float w = (float)clearing->background.width, h = (float)clearing->background.height;
             static const float tabletX[4] = {0.08f, 0.22f, 0.78f, 0.91f};
             for (int i = 0; i < 4; i++) {
@@ -1038,13 +1073,12 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
     }
     if (e->progress.map == 5) {
         if (e->phase == ENCOUNTER_CHAPEL_TEXT) {
-            if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_E) ||
-                IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            if (advance) {
                 e->phase = ENCOUNTER_FIGHT;
             }
             return false;
         }
-        if (IsKeyPressed(KEY_E)) {
+        if (interact) {
             float w = (float)clearing->background.width, h = (float)clearing->background.height;
             if (Vector2Distance(player, (Vector2){w * 0.50f, h * 0.44f}) <= 125.0f) {
                 e->chapelTextId = 9; e->phase = ENCOUNTER_CHAPEL_TEXT;
@@ -1097,17 +1131,19 @@ bool UpdateEncounter(Encounter *e, EnemyGroup *enemies, const Clearing *clearing
             } else {
                 e->phase=ENCOUNTER_REWARD; e->rerolled=false; RollRewards(e);
             }
-        } else if (IsKeyPressed(KEY_E) && !(e->progress.map == 2 && !e->villageHordeStarted)) {
+        } else if (interact && !(e->progress.map == 2 && !e->villageHordeStarted)) {
             OpenEncounterSeal(e,enemies,player);
         }
     } else if (e->phase==ENCOUNTER_VILLAGE_LETTER_READY) {
-        if (IsKeyPressed(KEY_E))
+        if (interact)
             ReadVillageLetter(e,enemies,player);
     } else if (e->phase==ENCOUNTER_LETTER) {
-        if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_E) ||
-            IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+        if (advance)
             return PutAwayVillageLetter(e,enemies,clearing,player);
     } else if (e->phase==ENCOUNTER_REWARD) {
+        UpdateChoiceFocus(e->rewardCount, RewardCardRect);
+        if (PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_UP) && RerollEncounterReward(e, choiceFocus))
+            return false;
         if (!IsEpicRewardStage(e) && !e->rerolled &&
             IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             Vector2 mouse = GetMousePosition();
@@ -1306,10 +1342,17 @@ static void DrawRewardScreen(const Encounter *e) {
         DrawGameTextIn("Escolha seu bônus", banner, 42, GOLD, GAME_TEXT_TITLE);
     }
     bool canReroll = !IsEpicRewardStage(e);
+    UpdateChoiceFocus(e->rewardCount, RewardCardRect);
+    if (UsingGamepad())
+        DrawGameTextIn(canReroll && !e->rerolled
+                       ? InputHint("", "Direcional: escolher  ·  [Cruz]: confirmar  ·  [Triângulo]: sortear")
+                       : InputHint("", "Direcional: escolher  ·  [Cruz]: confirmar"),
+                       (Rectangle){0, GetScreenHeight()*.92f, GetScreenWidth(), 26},
+                       18, GOLD, GAME_TEXT_BODY);
     Vector2 mouse = GetMousePosition();
     for (int i = 0; i < e->rewardCount; i++) {
         Rectangle box = RewardCardRect(i, e->rewardCount);
-        DrawRewardCard(box, i, e, CheckCollisionPointRec(mouse, box));
+        DrawRewardCard(box, i, e, UsingGamepad() ? i == choiceFocus : CheckCollisionPointRec(mouse, box));
         if (canReroll) {
             Rectangle button = RerollButtonRect(i, e->rewardCount);
             DrawRerollButton(button, e->rerolled, !e->rerolled && CheckCollisionPointRec(mouse, button));
@@ -1352,8 +1395,8 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
     if (e->progress.map == NECROMANCER_MAP) {
         static const char *forms[]={"Forma esquelética","Forma humanoide","Anjo caído"};
         int form=enemies->list[0].necromancerForm;
-        const char *status=e->phase==ENCOUNTER_CLEAR ? "Vitória • Enter para voltar ao menu" :
-            enemies->list[0].state==ENEMY_FALLEN ? "Aproxime-se do selo central e pressione E" :
+        const char *status=e->phase==ENCOUNTER_CLEAR ? InputHint("Vitória • Enter para voltar ao menu", "Vitória · [Cruz]: voltar ao menu") :
+            enemies->list[0].state==ENEMY_FALLEN ? InputHint("Aproxime-se do selo central e pressione E", "Aproxime-se do selo central · [Quadrado]: selar") :
             form>0 ? TextFormat("Fase %d/3 • %s",form,forms[form-1]) : "Topo do Palácio";
         DrawGameText(status,24,statusY,20,GOLD);
     } else if (e->progress.map == TEMPLAR_FIELD_MAP) {
@@ -1371,22 +1414,23 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         DrawGameText(status, 24, statusY, 20, GOLD);
     } else if (e->progress.map == 3) DrawGameText(e->chapelAltarDone
         ? "Capela do Anjo - desça pela porta superior esquerda ao Porão"
-        : "Capela do Anjo - aproxime-se do altar central (E)", 24, statusY, 20, GOLD);
+        : InputHint("Capela do Anjo - aproxime-se do altar central (E)", "Capela do Anjo · altar central ([Quadrado])"), 24, statusY, 20, GOLD);
     else if (e->progress.map == 4) {
         int solved = e->basementSolved[0] + e->basementSolved[1] + e->basementSolved[2] + e->basementSolved[3];
         DrawGameText(e->basementComplete
             ? "Último Selo completo - suba pela escadaria ao norte para o Mundo Invertido"
-            : TextFormat("Porão da Capela - Pilares do Último Selo: %d/4 (E nas placas e pilares)", solved),
+            : TextFormat(InputHint("Porão da Capela - Pilares do Último Selo: %d/4 (E nas placas e pilares)",
+                                   "Porão da Capela · Pilares do Último Selo: %d/4 ([Quadrado])"), solved),
                      24, statusY, 20, GOLD);
     } else if (e->progress.map == 5) {
-        DrawGameText("Capela Invertida (Mundo Invertido) - aproxime-se do altar e estátuas (E)", 24, statusY, 20, GOLD);
+        DrawGameText(InputHint("Capela Invertida (Mundo Invertido) - aproxime-se do altar e estátuas (E)", "Capela Invertida · altar e estátuas ([Quadrado])"), 24, statusY, 20, GOLD);
     }
     else if (e->progress.stage<=CampaignWaveCount(e->progress.map)) DrawGameText(TextFormat("%s - onda %d/%d | Restantes: %d",
         mapLabel,e->progress.stage,CampaignWaveCount(e->progress.map)+1,EnemiesRemaining(enemies)),24,statusY,20,GOLD);
     else DrawGameText(e->phase==ENCOUNTER_CLEAR ? clearLabel :
         (e->progress.map == 2 ? (e->villageHordeStarted ?
             TextFormat("Horda da Vila - Restantes: %d", EnemiesRemaining(enemies)) :
-            e->phase==ENCOUNTER_VILLAGE_LETTER_READY ? "Aproxime-se da carta · E ou clique para ler" :
+            e->phase==ENCOUNTER_VILLAGE_LETTER_READY ? InputHint("Aproxime-se da carta · E ou clique para ler", "Aproxime-se da carta · [Quadrado]: ler") :
             "Duelo - Líder da Vila")
             : TextFormat("Onda %d/%d - %s", CampaignWaveCount(e->progress.map)+1,
                          CampaignWaveCount(e->progress.map)+1, bossLabel)),24,statusY,20,GOLD);
@@ -1519,7 +1563,7 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         for (int i = 0; i < 6; i++) {
             if (bodies[tid][i][0]) DrawGameText(bodies[tid][i], bx + 36, by + 84 + i * 32, 20, RAYWHITE);
         }
-        const char *hint = "[Espaço / Enter / Clique] Continuar";
+        const char *hint = InputHint("[Espaço / Enter / Clique] Continuar", "[Cruz]: continuar");
         DrawGameText(hint, (sw - MeasureGameText(hint, 19)) / 2, by + bh - 44, 19, GOLD);
         return;
     }
@@ -1531,7 +1575,7 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         int t = (e->basementTarget >= 0 && e->basementTarget < 4) ? e->basementTarget : 0;
         const char *choices[] = {"Verdadeiro (V)", "Falso (F)"};
         DrawRitualQuestion(pnames[t],"Qual valor as placas indicam para este pilar?",
-                           "Esc para voltar",choices,2);
+                           InputHint("Esc para voltar", "[Círculo]: voltar"),choices,2);
         return;
     }
     if (e->phase == ENCOUNTER_LETTER) {
@@ -1545,7 +1589,7 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
             DrawTexturePro(letter,(Rectangle){0,0,letter.width,letter.height},
                 (Rectangle){(sw-width)/2,(sh-hintHeight-height)/2,width,height},
                 (Vector2){0},0,WHITE);
-            DrawGameTextIn("Largar a carta · Espaço / Enter / E / Clique",
+            DrawGameTextIn(InputHint("Largar a carta · Espaço / Enter / E / Clique", "[Cruz]: largar a carta"),
                 (Rectangle){0,sh-hintHeight,sw,hintHeight},20,GOLD,GAME_TEXT_BODY);
             return;
         }
@@ -1568,7 +1612,7 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
         for (int i = 0; i < 8; i++) {
             DrawGameText(lines[i], bx + 36, by + 76 + i * 28, 19, RAYWHITE);
         }
-        const char *hint = "[Espaço / Enter / Clique] Continuar";
+        const char *hint = InputHint("[Espaço / Enter / Clique] Continuar", "[Cruz]: continuar");
         DrawGameText(hint, (sw - MeasureGameText(hint, 19)) / 2, by + bh - 44, 19, GOLD);
         return;
     }
@@ -1579,7 +1623,7 @@ void DrawEncounter(const Encounter *e, const EnemyGroup *enemies) {
     if (e->phase == ENCOUNTER_DEFEAT) {
         float width = GetScreenWidth(), center = GetScreenHeight()*.5f;
         DrawGameTextIn("Fim da tentativa",(Rectangle){0,center-160,width,49},42,GOLD,GAME_TEXT_TITLE);
-        DrawGameTextIn("Enter: repetir | Esc: voltar ao menu",
+        DrawGameTextIn(InputHint("Enter: repetir | Esc: voltar ao menu", "[Cruz]: repetir  ·  [Círculo]: menu"),
                        (Rectangle){0,center-80,width,38},20,RAYWHITE,GAME_TEXT_BODY);
         return;
     }

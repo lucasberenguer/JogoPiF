@@ -9,6 +9,16 @@
 - Etapa 1 de áudio implementada. Katana, Arma de Fogo, Bíblia, esquiva, inimigos e habilidades de chefes emitem sons nos eventos existentes. `src/sfx_presets.h` define os sons procedurais e os nomes de substituição em `assets/audio/sfx/`. O misturador tem atenuação estéreo, limite de 14 vozes e limitador de pico. Configurações de Áudio têm volume geral e mudo persistentes. **F10** abre o painel de audição.
 - Inventário de habilidades, sons compartilhados e instruções de substituição em `docs/audio-sfx.md`. A build Release em `out/review` abriu e fechou com o áudio ativo. Os dez testes passaram, incluindo os seis loops musicais, transição de volume, pausa, retomada e início da trilha de Igris após a apresentação. Escuta em combate e medição de FPS em horda pendentes.
 
+## Suporte a controle na campanha (25/11/2026)
+
+- Na branch feature/controle-clareira, o combate aceita controle em todos os mapas. Analógico esquerdo move, direito mira, R1/R2 ou RB/RT atacam e L1/L2 ou LB/LT esquivam. Sem mira ativa, o golpe segue a direção do movimento ou mantém a última direção ao parar. Teclado e mouse podem ser usados na mesma sessão.
+- O controle também navega nos menus, na pausa, nas configurações, nos selos e nas recompensas. O botão sul confirma e avança, o botão oeste interage e o botão leste volta. As cutscenes, a derrota e o ranking têm comandos de controle. No ranking, o direcional escolhe letras e Options/Menu salva. As ferramentas de depuração continuam no teclado e mouse.
+- Os avisos acompanham a entrada mais recente e exibem os nomes de PlayStation ou Xbox conforme o controle detectado. O usuário confirmou a versão anterior na Clareira com controle físico. A ampliação foi compilada em out/review e a simulação de troca de entrada, zona morta e rótulos passou. Após integrar os três commits de áudio da main, a build Release passou em nove dos dez testes. guardian_story_flow ultrapassou 360 s após as transições de campanha e os dois fluxos de Igris. O cenário final de derrota de Igris passou em execução isolada com --igris-defeat. A campanha inteira com controle físico segue pendente de validação.
+
+## Golpe do Guardião da Clareira (25/11/2026)
+
+- A animação do golpe corpo a corpo do Guardião da Clareira dura 1,00 s, com impacto aos 0,68 s. A recarga a partir do início do golpe dura 3,80 s na primeira fase e 3,10 s na segunda. A compilação e o teste enemy_audit passaram. clearing_encounter falhou ao validar a leitura da partida salva. As execuções com limite de 25 s de guardian_cutscene e guardian_story_flow excederam esse limite.
+
 ## Remaster de mapas e atmosfera (25/11/2026)
 
 - Merge com `origin/main` em `210fb3c`. Os oito mapas usam a iluminação do remaster para o cenário e conservam a iluminação de combate do novo renderizador. A opção de iluminação dinâmica controla as duas. O Porão continua usando a iluminação da main. O menu animado e a filtragem por pontos durante a partida foram integrados. A build Release e os nove testes passaram.

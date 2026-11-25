@@ -474,12 +474,15 @@ static void CheckGuardianClosePressure(Clearing *map, EnemyGroup *group) {
             UpdateEnemies(group,map,player,.01f,false,&health,100);
             assert(boss->state == ENEMY_ATTACK && boss->guardianMelee);
         }
-        float interval = phase ? 3.90f : 4.60f;
+        float interval = phase ? 3.10f : 3.80f;
         assert(fabsf(boss->guardianMeleeCooldown-interval) < .01f);
         UpdateEnemies(group,map,player,.69f,false,&health,100);
         assert(health == 74);
-        UpdateEnemies(group,map,player,.40f,false,&health,100);
-        UpdateEnemies(group,map,player,interval-1.14f,false,&health,100);
+        UpdateEnemies(group,map,player,.30f,false,&health,100);
+        assert(boss->state == ENEMY_ATTACK && boss->guardianMelee);
+        UpdateEnemies(group,map,player,.02f,false,&health,100);
+        assert(boss->state == ENEMY_IDLE && !boss->guardianMelee);
+        UpdateEnemies(group,map,player,interval-1.06f,false,&health,100);
         assert(boss->state == ENEMY_IDLE && health == 74);
         UpdateEnemies(group,map,player,.07f,false,&health,100);
         assert(boss->state == ENEMY_ATTACK && boss->guardianMelee);

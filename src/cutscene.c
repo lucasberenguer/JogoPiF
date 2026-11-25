@@ -1,3 +1,4 @@
+#include "game_input.h"
 #include "game_text.h"
 #include "video_settings.h"
 #include "cutscene.h"
@@ -109,13 +110,13 @@ void SetOpeningCutscenePaused(OpeningCutscene *scene, bool paused) {
 
 void UpdateOpeningCutscene(OpeningCutscene *scene, float dt) {
     if (scene->finished || scene->paused) return;
-    if (IsKeyPressed(KEY_ESCAPE)) {
+    if (IsKeyPressed(KEY_ESCAPE) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_RIGHT)) {
         scene->finished = true;
         return;
     }
     dt = fmaxf(0.0f, dt);
     bool advance = scene->beat < INTRO_BEAT_COUNT &&
-        (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER));
+        (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN));
     if (advance) {
         if (scene->cues[scene->beat].stream.buffer) StopSound(scene->cues[scene->beat]);
         if (scene->beat == INTRO_BEAT_COUNT-1) scene->finalBeatAtAdvance = scene->elapsed;
@@ -258,7 +259,7 @@ void DrawOpeningCutscene(const OpeningCutscene *scene) {
         }
     }
     if (scene->beat < INTRO_BEAT_COUNT) {
-        const char *hint = "Espaço / Enter  Avançar    |    Esc  Pular";
+        const char *hint = InputHint("Espaço / Enter  Avançar    |    Esc  Pular", "[Cruz] Avançar  ·  [Círculo] Pular");
         int size = (int)fmaxf(14.0f,19.0f*scale);
         int width = (int)ceilf(MeasureGameTextEx(hint,size,GAME_TEXT_CUTSCENE).x);
         Vector2 at = {canvas.x+canvas.width-31*scale-width,canvas.y+681*scale};

@@ -1,4 +1,5 @@
 #include "game_audio.h"
+#include "game_input.h"
 #include "game_text.h"
 #include "enemy.h"
 #include "raymath.h"
@@ -764,7 +765,7 @@ void CemeteryDrawEnemies(const EnemyGroup *group, Vector2 player, bool foregroun
             DrawCoveiroFallDust(bodyContact, enemy->stateTime - COVEIRO_BODY_CONTACT, 1.25f);
         }
 
-        if (fallen) DrawGameText("E: selar", (int)enemy->position.x-30, (int)enemy->position.y+10, 16, GOLD);
+        if (fallen) DrawGameText(InputHint("E: selar", "[Quadrado]: selar"), (int)enemy->position.x-30, (int)enemy->position.y+10, 16, GOLD);
         if (!boss && enemy->health < enemy->maxHealth)
             DrawEnemyHealthBar(enemy, (int)(enemy->position.y-height)-8);
         if (boss && enemy->state == ENEMY_ATTACK && !enemy->guardianMelee) {

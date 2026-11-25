@@ -1,3 +1,4 @@
+#include "game_input.h"
 #include "game_text.h"
 #include "weapon_select.h"
 #include <math.h>
@@ -84,20 +85,19 @@ void UnloadWeaponSelect(WeaponSelect *s) {
 }
 
 int UpdateWeaponSelect(WeaponSelect *s) {
-    bool pad = IsGamepadAvailable(0);
-    if (IsKeyPressed(KEY_ESCAPE) || (pad && IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT))) return -2;
-    if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D) || (pad && IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_RIGHT)))
+    if (IsKeyPressed(KEY_ESCAPE) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_RIGHT)) return -2;
+    if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D) || PadNavigate(GAMEPAD_BUTTON_LEFT_FACE_RIGHT))
         s->selected = (s->selected+1)%WEAPON_COUNT;
-    if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A) || (pad && IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_LEFT)))
+    if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A) || PadNavigate(GAMEPAD_BUTTON_LEFT_FACE_LEFT))
         s->selected = (s->selected+WEAPON_COUNT-1)%WEAPON_COUNT;
     Vector2 mouse = GetMousePosition();
     Vector2 delta = GetMouseDelta();
-    if (delta.x != 0 || delta.y != 0)
+    if (!UsingGamepad() && (delta.x != 0 || delta.y != 0))
         for (int i=0; i<WEAPON_COUNT; i++) if (CheckCollisionPointRec(mouse, CardBounds(i))) s->selected=i;
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         for (int i=0; i<WEAPON_COUNT; i++) if (CheckCollisionPointRec(mouse, CardBounds(i))) return i;
     }
-    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || (pad && IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN)))
+    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || PadPressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN))
         return s->selected;
     return -1;
 }
@@ -149,7 +149,7 @@ void DrawWeaponSelect(const WeaponSelect *s) {
                        (float)s->cards[i].height},r,(Vector2){0},0,WHITE);
         DrawCardText((Weapon)i, r);
     }
-    const char *hint = "Clique na arma ou use as setas e Enter  ·  Esc para voltar";
+    const char *hint = InputHint("Clique na arma ou use as setas e Enter  ·  Esc para voltar", "Direcional: escolher  ·  [Cruz]: confirmar  ·  [Círculo]: voltar");
     Rectangle footer = RelativeRect(screen, (Rectangle){.12f,.795f,.76f,.055f});
     DrawGameTextIn(hint, footer, fmaxf(18, screen.height*.030f), parchment, GAME_TEXT_BODY);
 }

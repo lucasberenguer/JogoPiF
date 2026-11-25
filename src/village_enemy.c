@@ -1,4 +1,5 @@
 #include "game_audio.h"
+#include "game_input.h"
 #include "enemy.h"
 #include "game_text.h"
 #include "raymath.h"
@@ -381,7 +382,7 @@ static void DrawVillageBrute(const EnemyGroup *group,const Enemy *brute) {
                    (Rectangle){brute->position.x,brute->position.y,width,height},
                    (Vector2){width*.5f,feetAnchor},0,Fade(brute->state==ENEMY_HURT ? PINK : WHITE,alpha));
     if (brute->state==ENEMY_FALLEN)
-        DrawGameText("E: selar",(int)brute->position.x-30,(int)brute->position.y+10,16,GOLD);
+        DrawGameText(InputHint("E: selar", "[Quadrado]: selar"),(int)brute->position.x-30,(int)brute->position.y+10,16,GOLD);
     DrawEnemyHealthBar(brute,brute->position.y-feetAnchor-3);
 }
 
