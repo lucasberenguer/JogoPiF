@@ -215,13 +215,21 @@ void DrawAudioDebug(GameAudio *audio, float dt) {
     static int selected;
     static AudioChannel channel=AUDIO_EFFECTS;
     if (IsKeyPressed(KEY_B)) {
-        debugTheme=debugTheme==TRACK_NECROMANCER ? TRACK_GUARDIAN : debugTheme+1;
+        debugTheme=debugTheme==TRACK_NECROMANCER_FALLEN_ANGEL ? TRACK_GUARDIAN : debugTheme+1;
         debugPhase=1;
+    }
+    bool igris=debugTheme==TRACK_IGRIS || debugTheme==TRACK_IGRIS_DUEL;
+    bool necromancer=debugTheme==TRACK_NECROMANCER || debugTheme==TRACK_NECROMANCER_FALLEN_ANGEL;
+    if (IsKeyPressed(KEY_T)) {
+        if (igris) audio->igrisPrevious=!audio->igrisPrevious;
+        if (necromancer) audio->necromancerPrevious=!audio->necromancerPrevious;
+        if (igris) debugTheme=audio->igrisPrevious ? TRACK_IGRIS : TRACK_IGRIS_DUEL;
+        if (necromancer) debugTheme=audio->necromancerPrevious ? TRACK_NECROMANCER : TRACK_NECROMANCER_FALLEN_ANGEL;
     }
     if (IsKeyPressed(KEY_P)) debugMusic=!debugMusic;
     if (IsKeyPressed(KEY_H)) {
-        int phases=debugTheme==TRACK_NECROMANCER || debugTheme==TRACK_IGRIS ? 3 :
-            debugTheme==TRACK_VILLAGE_LEADER ? 1 : 2;
+        int phases=igris || necromancer ? 3 :
+            debugTheme==TRACK_VILLAGE_LEADER || debugTheme==TRACK_VILLAGE_HORDE ? 1 : 2;
         debugPhase=debugPhase%phases+1;
     }
     UpdateBossMusic(audio,debugMusic ? debugTheme : TRACK_SILENT,debugPhase,1,dt);
@@ -243,12 +251,15 @@ void DrawAudioDebug(GameAudio *audio, float dt) {
     static const char *channels[] = {"Musica","Efeitos","Geral"};
     DrawText(TextFormat("%s %d%%   |   Vozes %d/%d   |   Ultimo: %s",
              channels[channel],audio->volume[channel],playing,SFX_VOICE_BUDGET,last),20,54,18,LIGHTGRAY);
-    DrawText(TextFormat("B  Trocar chefe   |   P  Tocar/parar   |   H  Fase   |   %s (%d) %s",
-                       BossThemeName(debugTheme),debugPhase,debugMusic ? "[tocando]" : ""),20,80,16,RAYWHITE);
-    int rows=(GetScreenHeight()-122)/23;
+    DrawText("B  Trocar faixa   |   P  Tocar/parar   |   H  Fase   |   T  Alternar trilha em combate",20,80,16,RAYWHITE);
+    const char *battle=(igris || necromancer) ?
+        ((igris ? audio->igrisPrevious : audio->necromancerPrevious) ? "  |  Combate: anterior" : "  |  Combate: padrao") : "";
+    DrawText(TextFormat("%s (%d) %s%s",BossThemeName(debugTheme),debugPhase,
+                        debugMusic ? "[tocando]" : "",battle),20,103,16,GOLD);
+    int rows=(GetScreenHeight()-147)/23;
     int first=selected>=rows ? selected-rows+1 : 0;
     for (int i=first; i<SFX_COUNT && i<first+rows; i++) {
-        Rectangle row={20,112+23.0f*(i-first),420,23};
+        Rectangle row={20,137+23.0f*(i-first),420,23};
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(GetMousePosition(),row)) {
             selected=i;
             PlaySfx((GameSfx)i);
@@ -305,10 +316,18 @@ GameTrack BossTrackForMap(int map) {
         case CEMETERY_MAP: return TRACK_COVEIRO;
         case VILLAGE_MAP: return TRACK_VILLAGE_LEADER;
         case BONELAND_MAP: return TRACK_BONE_LORD;
-        case TEMPLAR_FIELD_MAP: return TRACK_IGRIS;
-        case NECROMANCER_MAP: return TRACK_NECROMANCER;
+        case TEMPLAR_FIELD_MAP: return TRACK_IGRIS_DUEL;
+        case NECROMANCER_MAP: return TRACK_NECROMANCER_FALLEN_ANGEL;
         default: return TRACK_SILENT;
     }
+}
+
+GameTrack BossTrackForBattle(const GameAudio *audio, int map) {
+    if (map==TEMPLAR_FIELD_MAP && audio->igrisPrevious && audio->tracks[TRACK_IGRIS].stream.buffer)
+        return TRACK_IGRIS;
+    if (map==NECROMANCER_MAP && audio->necromancerPrevious && audio->tracks[TRACK_NECROMANCER].stream.buffer)
+        return TRACK_NECROMANCER;
+    return BossTrackForMap(map);
 }
 
 void UpdateBossMusic(GameAudio *audio, GameTrack track, int phase, float strength, float dt) {
@@ -316,11 +335,15 @@ void UpdateBossMusic(GameAudio *audio, GameTrack track, int phase, float strengt
         [TRACK_MENU]=.66f, [TRACK_COMBAT]=.66f, [TRACK_MINIBOSS]=.61f,
         [TRACK_CHAPEL]=.66f, [TRACK_NECROMANCER_LEGACY]=.55f,
         [TRACK_GUARDIAN]=.66f,[TRACK_COVEIRO]=.69f,[TRACK_VILLAGE_LEADER]=.66f,
-        [TRACK_BONE_LORD]=.62f,[TRACK_IGRIS]=.65f,[TRACK_NECROMANCER]=.66f
+        [TRACK_BONE_LORD]=.62f,[TRACK_IGRIS]=.62f,[TRACK_NECROMANCER]=.64f,
+        [TRACK_VILLAGE_HORDE]=.65f,[TRACK_IGRIS_DUEL]=.62f,[TRACK_NECROMANCER_FALLEN_ANGEL]=.64f
     };
     if (audio->suspended) return;
-    if (track>=TRACK_GUARDIAN && track<=TRACK_NECROMANCER && !audio->tracks[track].stream.buffer)
-        track=track==TRACK_NECROMANCER ? TRACK_NECROMANCER_LEGACY : TRACK_MINIBOSS;
+    if (track==TRACK_IGRIS_DUEL && !audio->tracks[track].stream.buffer) track=TRACK_IGRIS;
+    if (track==TRACK_NECROMANCER_FALLEN_ANGEL && !audio->tracks[track].stream.buffer) track=TRACK_NECROMANCER;
+    if (track>=TRACK_GUARDIAN && track<TRACK_COUNT && !audio->tracks[track].stream.buffer)
+        track=track==TRACK_NECROMANCER ? TRACK_NECROMANCER_LEGACY :
+            track==TRACK_VILLAGE_HORDE ? TRACK_COMBAT : TRACK_MINIBOSS;
     float step = fminf(1.0f, dt*(track==TRACK_SILENT ? 4.0f : 2.5f));
     float intensity=fmaxf(0,fminf(2,phase-1));
     for (int i = 0; i < TRACK_COUNT; i++) {
@@ -342,7 +365,7 @@ void UpdateBossMusic(GameAudio *audio, GameTrack track, int phase, float strengt
             audio->playing[i] = false;
             continue;
         }
-        if (selected && phase>0) {
+        if (selected && phase>0 && i!=TRACK_IGRIS_DUEL && i!=TRACK_NECROMANCER_FALLEN_ANGEL) {
             float desired=1+intensity*.044f;
             float change=fmaxf(-dt*.12f,fminf(dt*.12f,desired-audio->musicPitch[i]));
             if (change!=0) {

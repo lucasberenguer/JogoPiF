@@ -17,11 +17,18 @@ static void VerifyBossMusic(GameAudio *audio) {
     assert(BossTrackForMap(CEMETERY_MAP)==TRACK_COVEIRO);
     assert(BossTrackForMap(VILLAGE_MAP)==TRACK_VILLAGE_LEADER);
     assert(BossTrackForMap(BONELAND_MAP)==TRACK_BONE_LORD);
-    assert(BossTrackForMap(TEMPLAR_FIELD_MAP)==TRACK_IGRIS);
-    assert(BossTrackForMap(NECROMANCER_MAP)==TRACK_NECROMANCER);
+    assert(BossTrackForMap(TEMPLAR_FIELD_MAP)==TRACK_IGRIS_DUEL);
+    assert(BossTrackForMap(NECROMANCER_MAP)==TRACK_NECROMANCER_FALLEN_ANGEL);
     assert(BossTrackForMap(CHAPEL_MAP)==TRACK_SILENT);
     assert(BossTrackForMap(INVERTED_CHAPEL_MAP)==TRACK_SILENT);
-    for (int i=TRACK_GUARDIAN; i<=TRACK_NECROMANCER; i++) {
+    assert(BossTrackForBattle(audio,TEMPLAR_FIELD_MAP)==TRACK_IGRIS_DUEL);
+    assert(BossTrackForBattle(audio,NECROMANCER_MAP)==TRACK_NECROMANCER_FALLEN_ANGEL);
+    audio->igrisPrevious=audio->necromancerPrevious=true;
+    assert(BossTrackForBattle(audio,TEMPLAR_FIELD_MAP)==TRACK_IGRIS);
+    assert(BossTrackForBattle(audio,NECROMANCER_MAP)==TRACK_NECROMANCER);
+    assert(BossTrackForBattle(audio,CEMETERY_MAP)==TRACK_COVEIRO);
+    audio->igrisPrevious=audio->necromancerPrevious=false;
+    for (int i=TRACK_GUARDIAN; i<=TRACK_NECROMANCER_FALLEN_ANGEL; i++) {
         Music theme=audio->tracks[i];
         assert(theme.stream.buffer && theme.looping && audio->musicData[i]);
         assert(GetMusicTimeLength(theme)>12);
@@ -56,8 +63,11 @@ static void VerifyBossMusic(GameAudio *audio) {
     UpdateBossMusic(audio,TRACK_NECROMANCER,3,1,.4f);
     assert(audio->playing[TRACK_NECROMANCER] && audio->musicPitch[TRACK_NECROMANCER]>1.04f);
     StopGameMusic(audio);
+    UpdateBossMusic(audio,TRACK_NECROMANCER_FALLEN_ANGEL,3,1,.4f);
+    assert(audio->playing[TRACK_NECROMANCER_FALLEN_ANGEL] && audio->musicPitch[TRACK_NECROMANCER_FALLEN_ANGEL]==1);
+    StopGameMusic(audio);
     assert(!GameMusicPlaying(audio));
-    puts("Boss music: six different loops, phase intensity, fade, pause and resume verified.");
+    puts("Boss and horde music: nine different loops, track selection, phase intensity, fade, pause and resume verified.");
 }
 
 int main(void) {

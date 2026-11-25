@@ -41,7 +41,7 @@ Os nomes em MAIÚSCULAS são as famílias de sons da tabela de presets. `WARN` s
 
 Em **Configurações → Áudio**, ajuste geral, música e efeitos. **M** alterna o mudo nessa tela. As preferências ficam em `audio_pif.cfg`, ao lado do executável.
 
-Para trocar um efeito, use o nome que aparece no painel, como `assets/audio/sfx/coveiro_pa.ogg`. A ordem de busca é OGG, MP3 e WAV. Na ausência de arquivo válido, o sintetizador usa três variantes originais, em rodízio, com variação de volume e tom. Novos efeitos são cadastrados em `src/sfx_presets.h` e emitidos via `PlaySfx`, `EmitSfx` ou `EmitSfxTimed`. O código não inclui novos áudios de terceiros.
+Para trocar um efeito, use o nome que aparece no painel, como `assets/audio/sfx/coveiro_pa.ogg`. A ordem de busca é OGG, MP3 e WAV. Na ausência de arquivo válido, o sintetizador usa três variantes originais, em rodízio, com variação de volume e tom. Novos efeitos são cadastrados em `src/sfx_presets.h` e emitidos via `PlaySfx`, `EmitSfx` ou `EmitSfxTimed`. Os créditos das gravações ficam em `assets/audio/CREDITS.md`.
 
 ## Validação
 
@@ -51,19 +51,29 @@ Ficam para revisão em partida a escuta dos timbres e a medição de FPS com o �
 
 ## Timbres das armas e trilhas dos chefes
 
-A pistola tem estalo curto, corpo grave e ruído de ação mecânica. A Katana combina o ar do movimento com harmônicos metálicos. A Bíblia tem acordes de coro, sinos e ruído de página. Os nomes dos arquivos para substituição continuam os mesmos.
+As três ações principais usam as gravações enviadas. A pistola toca `arma_disparo.wav` quando a bala sai. A Bíblia toca `biblia_ativacao.wav` quando é ativada. A Katana toca `katana_corte.wav` no golpe e conserva um efeito separado quando o inimigo recebe dano. As gravações foram preparadas em WAV mono de 16 bits, com recorte e ajuste de nível.
 
 | Luta | Tema | BPM | Arquivo opcional em `assets/audio/music/` |
 |---|---|---:|---|
 | Guardião da Clareira | Folk metal com melodia dórica e tambores | 116 | `boss_guardiao.ogg` |
 | Coveiro das Raízes | Doom metal com riff grave, semitons e sinos | 78 | `boss_coveiro.ogg` |
-| Líder da Vila | Rock melancólico com caixa de marcha e cordas | 94 | `boss_lider_vila.ogg` |
+| Líder da Vila | Lamento com piano, cordas graves e melodia descendente | 68 | `boss_lider_vila.ogg` |
+| Horda de Chã da Tristeza | Rock acelerado com guitarras, viradas e caixa forte | 172 | `boss_horda_vila.ogg` |
 | Rasga-Ossos | Thrash com palhetada curta e bumbo acelerado | 154 | `boss_rasga_ossos.ogg` |
-| Igris, o Comandante | Power metal com galope, órgão e menor harmônica | 136 | `boss_igris.ogg` |
-| Necromante | Metal progressivo de registro grave, riff sincopado e órgão | 144 | `boss_necromante.ogg` |
+| Igris, o Comandante | Duelo do Cavaleiro, com metal instrumental, violino, violoncelo, cravo, sinos e bumbo duplo | 150 | `boss_igris_duelo_teste.ogg` |
+| Necromante | Anjo Caído, com riffs em si grave, solos, órgão, metais, bumbo duplo e coro sem palavras | 160 | `boss_necromante_anjo_caido_teste.ogg` |
 
-As músicas são composições originais sintetizadas no carregamento, com dois trechos por tema em loop. Depois da apresentação, o tema entra com transição de volume. Nas mudanças de fase, ganho e andamento sobem gradualmente, do ponto em que a música já está. Ao cair o chefe ou o jogador, a trilha diminui e o efeito de derrota correspondente marca o desfecho. A Capela, o Porão e a Capela Invertida usam a trilha de ambiente. A horda da Vila usa a música de ondas.
+As músicas são composições originais sintetizadas no carregamento e tocadas em loop. Depois da apresentação, o tema entra com transição de volume. Nas mudanças de fase, o ganho sobe gradualmente. Duelo do Cavaleiro e Anjo Caído mantêm o andamento base. Na Vila, o lamento acompanha o duelo e a carta. A cutscene tem seu próprio áudio. A faixa de rock entra quando o jogador guarda a carta e a horda começa. A Capela, o Porão e a Capela Invertida usam a trilha de ambiente.
 
 Em **F10**, **B** escolhe o chefe, **P** toca ou para e **H** alterna a fase. A tabela em `src/boss_music.c` define nomes, riffs, andamento, bateria e instrumentos. Se houver um OGG com o nome da tabela, ele recebe as mesmas transições e mudanças de andamento. Em uma falha de carregamento que também impeça a síntese, o jogo usa a faixa de combate antiga.
 
-O teste de áudio verifica o mapeamento por mapa, os seis loops, o pico das amostras, a transição de volume, a intensidade por fase, a pausa, a retomada e a saída da luta. A avaliação musical dos timbres e volumes em combate fica para escuta no jogo.
+O teste de áudio verifica o mapeamento por mapa, os loops, o pico das amostras, a transição de volume, a intensidade por fase, a pausa, a retomada e a saída da luta. O teste de campanha passa pelo lamento, pela cutscene e pela entrada da trilha da horda. A avaliação musical dos timbres e volumes em combate fica para escuta no jogo.
+
+### Comparação com as trilhas anteriores
+
+| Faixa | Andamento | Direção musical |
+|---|---:|---|
+| Igris – faixa anterior | 166 BPM | Metal com galope, tambores de guerra, ferro percutido e trecho em meio tempo |
+| Necromante – faixa anterior | 178 BPM | Metal sinfônico com coro em quatro vozes, órgão, piano e bumbo duplo |
+
+No painel **F10**, use **B** para escolher uma faixa e **P** para ouvir. Ao selecionar Igris ou Necromante, **T** alterna a música daquela luta entre a faixa aprovada e a anterior até fechar o jogo. Os arquivos das faixas aprovadas mantêm o sufixo `_teste` para compatibilidade com os WAVs exportados e com os caminhos de substituição.

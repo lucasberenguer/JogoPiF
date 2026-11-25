@@ -1037,7 +1037,7 @@ void DrawMenu(const Menu *m) {
         float gap = fminf(18.0f,pw*.025f);
         float margin = fminf(36.0f,pw*.05f);
         float top = panel.y+titleH+20.0f;
-        float bottom = panel.y+ph-42.0f;
+        float bottom = panel.y+ph-72.0f;
         float cardW = (pw-2*margin-(columns-1)*gap)/columns;
         float cardH = (bottom-top-(rows-1)*gap)/rows;
         for (int i=0;i<4;i++) {
@@ -1064,6 +1064,9 @@ void DrawMenu(const Menu *m) {
             DrawGameTextIn(names[i],(Rectangle){card.x+4,card.y+card.height-labelH-2,
                            card.width-8,labelH},(int)fminf(26.0f,labelH*.8f),RAYWHITE,GAME_TEXT_BODY);
         }
+        DrawGameTextIn("Áudio · TheNikonProductions, falcospizaetus e Merrick079 (Freesound)",
+                       (Rectangle){panel.x+12,bottom+4,pw-24,22},
+                       (int)fminf(17.0f,pw/35.0f),LIGHTGRAY,GAME_TEXT_BODY);
         DrawGameTextIn("Esc: voltar",(Rectangle){panel.x+12,panel.y+ph-37,pw-24,30},
                        20,LIGHTGRAY,GAME_TEXT_BODY);
         return;

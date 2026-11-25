@@ -378,20 +378,25 @@ int main(void) {
             const Enemy *boss=&enemies.list[0];
             if (clearing.chapel || clearing.basement || clearing.invertedChapel) {
                 if (encounter.phase!=ENCOUNTER_ANGEL_CINEMATIC) track=TRACK_CHAPEL;
+            } else if (clearing.village &&
+                       (encounter.phase==ENCOUNTER_VILLAGE_LETTER_READY || encounter.phase==ENCOUNTER_LETTER)) {
+                track=TRACK_VILLAGE_LEADER;
+                musicStrength=.62f;
             } else if (!encounter.guardianIntroPending &&
                        (encounter.phase==ENCOUNTER_FIGHT || encounter.phase==ENCOUNTER_REWARD ||
                         encounter.phase==ENCOUNTER_SEAL)) {
-                if (encounter.phase==ENCOUNTER_FIGHT && EncounterBossVisible(&encounter,&enemies)) {
-                    track=BossTrackForMap(map);
+                if (clearing.village && encounter.villageHordeStarted) {
+                    track=TRACK_VILLAGE_HORDE;
+                } else if (encounter.phase==ENCOUNTER_FIGHT && EncounterBossVisible(&encounter,&enemies)) {
+                    track=BossTrackForBattle(&menu.audio,map);
                     musicPhase=clearing.necromancerArena ? boss->necromancerForm :
                         boss->igrisFinalForm ? 3 : boss->guardianPhase==GUARDIAN_PHASE_ONE ? 1 : 2;
-                } else if (!clearing.necromancerArena &&
-                           (encounter.progress.stage<CLEARING_BOSS_STAGE ||
-                            (clearing.village && encounter.villageHordeStarted))) {
+                } else if (!clearing.necromancerArena && encounter.progress.stage<CLEARING_BOSS_STAGE) {
                     track=TRACK_COMBAT;
                 }
             }
-            if (screen==3 || EncounterPaused(&encounter)) musicStrength=.42f;
+            bool hordeArrival=track==TRACK_VILLAGE_HORDE && encounter.phase==ENCOUNTER_FIGHT;
+            if (screen==3 || (EncounterPaused(&encounter) && !hordeArrival)) musicStrength=.42f;
         }
         if (devTools.open) musicStrength*=.15f;
         UpdateBossMusic(&menu.audio,track,musicPhase,musicStrength,GetFrameTime());

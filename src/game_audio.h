@@ -6,7 +6,8 @@
 typedef enum GameTrack {
     TRACK_MENU, TRACK_COMBAT, TRACK_MINIBOSS, TRACK_CHAPEL, TRACK_NECROMANCER_LEGACY,
     TRACK_GUARDIAN, TRACK_COVEIRO, TRACK_VILLAGE_LEADER, TRACK_BONE_LORD,
-    TRACK_IGRIS, TRACK_NECROMANCER, TRACK_COUNT, TRACK_SILENT
+    TRACK_IGRIS, TRACK_NECROMANCER, TRACK_VILLAGE_HORDE,
+    TRACK_IGRIS_DUEL, TRACK_NECROMANCER_FALLEN_ANGEL, TRACK_COUNT, TRACK_SILENT
 } GameTrack;
 typedef enum AudioChannel { AUDIO_MUSIC, AUDIO_EFFECTS, AUDIO_MASTER, AUDIO_CHANNELS } AudioChannel;
 typedef enum GameSfx {
@@ -38,11 +39,13 @@ typedef struct GameAudio {
     Vector2 listener;
     int volume[AUDIO_CHANNELS];
     bool ownsDevice, muted, unlocked, suspended, combatPaused;
+    bool igrisPrevious, necromancerPrevious;
 } GameAudio;
 
 void InitGameAudio(GameAudio *audio);
 void UpdateBossMusic(GameAudio *audio, GameTrack track, int phase, float strength, float dt);
 GameTrack BossTrackForMap(int map);
+GameTrack BossTrackForBattle(const GameAudio *audio, int map);
 void StopGameMusic(GameAudio *audio);
 bool GameMusicPlaying(const GameAudio *audio);
 void PlayVillageEmergence(const GameAudio *audio, bool initialGroup);

@@ -136,6 +136,14 @@ static bool InteractInEncounter(Encounter *e,EnemyGroup *enemies,const Clearing 
 static bool TestCutsceneEncounter(Encounter *e,EnemyGroup *enemies,const Clearing *map,Vector2 p,int *health) {
     int expectedMap=checkedScenes[(mode-FIRST_NEW_MODE)/2].map;
     assert(e->progress.map==expectedMap);
+    if (map->village && e->villageHordeStarted) {
+        if (activeAudio->tracks[TRACK_VILLAGE_HORDE].stream.buffer) {
+            assert(activeAudio->playing[TRACK_VILLAGE_HORDE]);
+            assert(!activeAudio->playing[TRACK_COMBAT]);
+        }
+        transported=1;
+        return false;
+    }
     if (EncounterPaused(e) && e->phase!=ENCOUNTER_REWARD && e->phase!=ENCOUNTER_LETTER)
         return UpdateEncounter(e,enemies,map,p,health);
 
@@ -165,8 +173,13 @@ static bool TestCutsceneEncounter(Encounter *e,EnemyGroup *enemies,const Clearin
         }
         assert(LoadClearingCheckpoint(&saved) && saved.villageAftermath==VILLAGE_SCENE_SEEN);
         assert(!e->villageHordeStarted);
+        if (activeAudio->tracks[TRACK_VILLAGE_LEADER].stream.buffer) {
+            assert(activeAudio->playing[TRACK_VILLAGE_LEADER]);
+            assert(!activeAudio->playing[TRACK_VILLAGE_HORDE]);
+        }
         assert(InteractInEncounter(e,enemies,map,p,health));
         assert(e->villageHordeStarted && EnemiesRemaining(enemies)==82);
+        return true;
     } else {
         if (e->phase==ENCOUNTER_REWARD) {
             assert(ChooseEncounterReward(e,enemies,map,p,health,0));
@@ -240,7 +253,10 @@ static bool TestEncounter(Encounter *e,EnemyGroup *enemies,const Clearing *map,V
         }
         assert(e->phase==ENCOUNTER_FIGHT && !EncounterPaused(e) && EncounterBossVisible(e,enemies));
         assert(igrisStarts==1 && enemies->list[0].state==ENEMY_IDLE && enemies->list[0].attackCooldown>1);
-        if (activeAudio->tracks[TRACK_IGRIS].stream.buffer) assert(activeAudio->playing[TRACK_IGRIS]);
+        if (activeAudio->tracks[TRACK_IGRIS_DUEL].stream.buffer) {
+            assert(activeAudio->playing[TRACK_IGRIS_DUEL]);
+            assert(!activeAudio->playing[TRACK_IGRIS]);
+        }
         if (mode == 7) {
             Enemy *boss=&enemies->list[0];
             DamageEnemy(boss,boss->health);
