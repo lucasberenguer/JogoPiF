@@ -2,7 +2,10 @@
 #define SCENE_LIGHTING_H
 #include "raylib.h"
 
-enum { SCENE_LIGHT_LIMIT = 8, SCENE_CASTER_LIMIT = 7 };
+enum { SCENE_LIGHT_LIMIT = 8, SCENE_CASTER_LIMIT = 56, SCENE_SHADOW_LIMIT = 7 };
+typedef enum SceneCasterKind {
+    SCENE_MAIN_ACTOR, SCENE_PROP, SCENE_MINION, SCENE_CASTER_KINDS
+} SceneCasterKind;
 typedef struct SceneLight {
     Vector2 position;
     float radius, intensity;
@@ -13,6 +16,7 @@ typedef struct SceneCaster {
     Vector2 feet;
     float halfWidth, reach;
     float contactOpacity;
+    SceneCasterKind kind;
 } SceneCaster;
 
 typedef struct SceneLights {
@@ -21,7 +25,6 @@ typedef struct SceneLights {
     Vector2 ambient; /* dessaturação e redução de luminosidade */
     SceneCaster casters[SCENE_CASTER_LIMIT];
     int casterCount;
-    int shadowLightSlot; /* índice da luz + 1. Zero indica ausência de sombra projetada. */
 } SceneLights;
 
 static inline void AddSceneLight(SceneLights *scene, Vector2 point, float radius,
@@ -31,8 +34,8 @@ static inline void AddSceneLight(SceneLights *scene, Vector2 point, float radius
 }
 
 static inline void AddSceneCaster(SceneLights *scene, Vector2 feet, float halfWidth,
-                                  float reach, float contactOpacity) {
+                                  float reach, float contactOpacity, SceneCasterKind kind) {
     if (scene->casterCount < SCENE_CASTER_LIMIT)
-        scene->casters[scene->casterCount++] = (SceneCaster){feet, halfWidth, reach, contactOpacity};
+        scene->casters[scene->casterCount++] = (SceneCaster){feet, halfWidth, reach, contactOpacity, kind};
 }
 #endif

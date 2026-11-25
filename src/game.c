@@ -46,6 +46,16 @@ static Vector2 FacingVector(int facing) {
     }
 }
 
+static int PlayerWalkFacing(Vector2 traveled, int previousFacing) {
+    float horizontal = fabsf(traveled.x);
+    float vertical = fabsf(traveled.y);
+    // Diagonal movement keeps its previous axis until a slide clearly favors the other.
+    bool useHorizontal = previousFacing >= 2 ? horizontal > vertical * .80f
+                                              : horizontal > vertical * 1.25f;
+    if (useHorizontal) return traveled.x < 0.0f ? 2 : 3;
+    return traveled.y < 0.0f ? 1 : 0;
+}
+
 static Vector2 RotateVector2(Vector2 dir, float radians) {
     float c = cosf(radians), s = sinf(radians);
     return (Vector2){dir.x * c - dir.y * s, dir.x * s + dir.y * c};
@@ -236,7 +246,7 @@ int main(void) {
     Vector2 player = clearing.spawn;
     int playerHealth = 100;
     int playerMaxHealth = 100;
-    float playerSpeed = 204.0f;
+    float playerSpeed = PLAYER_BASE_SPEED;
     const float dodgeSpeed = 460.0f;
     const float dodgeDuration = 0.36f;
     const float dodgeRecovery = 5.0f;
@@ -246,6 +256,8 @@ int main(void) {
     int facing = 0; // 0: baixo, 1: cima, 2: esquerda, 3: direita
     int dodgeFacing = 0;
     float walkTime = 0.0f;
+    float walkLean = 0.0f;
+    int walkFacing = 0;
     bool walking = false;
     bool showCollisionGuide = false;
     bool showSpriteDebug = false;
@@ -259,6 +271,8 @@ int main(void) {
     int katanaAttackFacing = 0;
     Vector2 katanaAttackDirection = {0.0f, 1.0f};
     int gunAttackFacing = 0;
+    int gunAimFacing = 0;
+    float gunWalkPose = 0.0f;
     int bibleAttackFacing = 0;
     int katanaAttackId = 0;
     enum { OPENING_SCREEN = 4, GUARDIAN_SCREEN = 5 };
@@ -297,7 +311,7 @@ int main(void) {
         bool toolsBlocked=resolvingDeath || choosingWeaponAfterDeath || speedrunNamePending;
         if (toolsBlocked) devTools.open=false;
         Rectangle toolsButton={16,12,194,38};
-        bool toolsClicked=screen==0 && !devTools.open &&
+        bool toolsClicked=screen==0 && MenuControlsVisible(&menu) && !devTools.open &&
             CheckCollisionPointRec(GetMousePosition(),toolsButton) &&
             IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
         bool devToggle=!toolsBlocked && (IsKeyPressed(KEY_F1) || toolsClicked);
@@ -426,7 +440,9 @@ int main(void) {
                     dodgeRemaining=dodgeCooldown=katanaAttackRemaining=katanaAttackCooldown=0;
                     katanaAttackId=0;
                     walkTime=0;
-                    facing=0;
+                    walkLean=0;
+                    gunWalkPose=0;
+                    facing=walkFacing=0;
                     pedestalMessageTime=0;
                     entryFadeRemaining=0;
                     showCollisionGuide=devTools.collision;
@@ -474,6 +490,7 @@ int main(void) {
             if (action == MENU_START) {
                 weaponSelect.selected = 0;
                 screen = 1;
+                continue;
             } else if (action == MENU_CONTINUE) {
                 RunProgress progress;
                 if (LoadClearingCheckpoint(&progress)) {
@@ -554,8 +571,10 @@ int main(void) {
                 player = clearing.spawn;
                 dodgeRemaining = 0.0f;
                 dodgeCooldown = 0.0f;
-                facing = 0;
+                facing = walkFacing = 0;
                 walkTime = 0.0f;
+                walkLean = 0.0f;
+                gunWalkPose = 0.0f;
                 pedestalMessageTime = 0.0f;
                 ResetBible(&bible);
                 ResetGun(&gun);
@@ -569,10 +588,12 @@ int main(void) {
             BeginGameFrame();
                 ClearBackground(BLACK);
                 DrawMenu(&menu);
-                bool hoverTools=CheckCollisionPointRec(GetMousePosition(),toolsButton);
-                DrawRectangleRec(toolsButton,hoverTools?MAROON:Fade(BLACK,.65f));
-                DrawRectangleLinesEx(toolsButton,1,GOLD);
-                DrawGameTextIn("Ferramentas (F1)",toolsButton,20,RAYWHITE,GAME_TEXT_BODY);
+                if (MenuControlsVisible(&menu)) {
+                    bool hoverTools=CheckCollisionPointRec(GetMousePosition(),toolsButton);
+                    DrawRectangleRec(toolsButton,hoverTools?MAROON:Fade(BLACK,.65f));
+                    DrawRectangleLinesEx(toolsButton,1,GOLD);
+                    DrawGameTextIn("Ferramentas (F1)",toolsButton,20,RAYWHITE,GAME_TEXT_BODY);
+                }
             EndGameFrame();
             continue;
         }
@@ -638,8 +659,10 @@ int main(void) {
                 playerHealth = playerMaxHealth;
                 dodgeRemaining = 0.0f;
                 dodgeCooldown = 0.0f;
-                facing = 0;
+                facing = walkFacing = 0;
                 walkTime = 0.0f;
+                walkLean = 0.0f;
+                gunWalkPose = 0.0f;
                 pedestalMessageTime = 0.0f;
                 ResetBible(&bible);
                 ResetGun(&gun);
@@ -1156,39 +1179,50 @@ int main(void) {
                                   Vector2Scale(direction, playerSpeed * deltaTime));
         }
         Vector2 traveled = Vector2Subtract(player, previous);
-        walking = !dodging && Vector2LengthSqr(traveled) > 0.01f;
+        bool moving = Vector2LengthSqr(direction) > 0.0f;
+        walking = !dodging && moving && Vector2LengthSqr(traveled) > 0.0001f;
         if (dodging) {
             facing = dodgeFacing;
         }
+        float targetLean = 0.0f;
         if (walking) {
-            int newFacing = fabsf(traveled.x) >= fabsf(traveled.y) &&
-                fabsf(traveled.x) > 0.01f
-                ? (traveled.x < 0.0f ? 2 : 3)
-                : (traveled.y < 0.0f ? 1 : 0);
-            if (newFacing != facing) walkTime = 0.0f;
-            facing = newFacing;
-            walkTime += Vector2Length(traveled) / playerSpeed;
+            walkFacing = PlayerWalkFacing(traveled, walkFacing);
+            facing = walkFacing;
+            float distance = Vector2Length(traveled);
+            // Advance by distance so diagonal and cardinal strides cover the same ground.
+            walkTime = fmodf(walkTime + distance / PLAYER_BASE_SPEED, 4.0f);
+            Vector2 motion = Vector2Scale(traveled, 1.0f / distance);
+            targetLean = motion.x * (3.0f + 6.0f * fabsf(motion.y));
         } else if (!dodging) {
             if (direction.x != 0.0f && fabsf(direction.x) >= fabsf(direction.y)) {
                 facing = direction.x < 0.0f ? 2 : 3;
             } else if (direction.y != 0.0f) {
                 facing = direction.y < 0.0f ? 1 : 0;
             }
-            walkTime = 0.0f;
+        }
+        if (dodging || entering) {
+            walkFacing = facing;
+            walkLean = 0.0f;
+        } else {
+            walkLean = Lerp(walkLean, targetLean, 1.0f - expf(-16.0f * deltaTime));
         }
         if (currentWeapon == WEAPON_GUN) {
             Vector2 aimWorld = GetScreenToWorld2D(GetMousePosition(), camera);
             Vector2 aimDelta = {aimWorld.x - player.x, aimWorld.y - (player.y - 35.0f)};
-            if (!entering && !dodging && Vector2LengthSqr(aimDelta) > 4.0f)
-                facing = fabsf(aimDelta.x) >= fabsf(aimDelta.y)
-                    ? (aimDelta.x < 0.0f ? 2 : 3)
-                    : (aimDelta.y < 0.0f ? 1 : 0);
+            if (!entering && !dodging) {
+                if (Vector2LengthSqr(aimDelta) > 4.0f)
+                    gunAimFacing = PlayerWalkFacing(aimDelta, gunAimFacing);
+                if (walking)
+                    gunWalkPose = GunAdvanceWalkPose(gunWalkPose, traveled, FacingVector(gunAimFacing));
+                else
+                    facing = gunAimFacing;
+            }
             float previousPose = gun.poseRemaining;
             UpdateGun(&gun, &clearing, player, aimWorld,
                       entering ? 0.0f : deltaTime,
                       !entering && !grabbed && !dodging && IsMouseButtonPressed(MOUSE_BUTTON_LEFT),
                       weaponLevel);
-            if (gun.poseRemaining > previousPose) gunAttackFacing = facing;
+            if (gun.poseRemaining > previousPose) gunAttackFacing = gunAimFacing;
         }
         if (bibleActivationStarted) bibleAttackFacing = facing;
         if (!entering) {
@@ -1280,16 +1314,14 @@ int main(void) {
         if (GetVideoSettings()->dynamicLighting) {
             CollectMapLights(&clearing, altarOpen, (float)GetTime(), &scene);
             CollectEnemyLights(&enemies, &scene);
-            if (clearing.boneland) {
-                float lift = dodging ? sinf(PI*Clamp(dodgeRemaining/dodgeDuration,0,1)) : 0;
-                CollectBonelandActorShadows(&enemies, player, lift, &scene);
-            }
+            float lift = dodging ? sinf(PI*Clamp(dodgeRemaining/dodgeDuration,0,1)) : 0;
+            CollectActorShadows(&enemies, player, lift, &scene);
         }
         BeginWorldFrame();
             ClearBackground(BLACK);
             BeginMode2D(camera);
                 DrawClearing(&clearing);
-                if (clearing.boneland) DrawWorldContactShadows(&scene);
+                DrawWorldContactShadows(camera, &scene);
                 if (clearing.templarField && clearing.exitLocked) {
                     Vector2 left = {clearing.exit.x, clearing.exit.y + clearing.exit.height};
                     Vector2 right = {left.x + clearing.exit.width, left.y};
@@ -1356,12 +1388,12 @@ int main(void) {
                         (Vector2) { 0, 0 }, 0.0f, WHITE);
                 } else {
                     bool attacking = currentWeapon == WEAPON_KATANA && katanaAttackRemaining > 0.0f;
-                    bool firing = currentWeapon == WEAPON_GUN && gun.poseRemaining > 0.0f;
+                    bool firing = currentWeapon == WEAPON_GUN && !walking && gun.poseRemaining > 0.0f;
                     bool invoking = currentWeapon == WEAPON_BIBLE && bible.activationRemaining > 0.0f;
                     float pose = walking ? 1+fmodf(walkTime*7,4) : 0;
                     float walkPose = fmodf(walkTime*10,8);
                     float idlePose = (float)fmod(GetTime()*6,4);
-                    int bodyFacing = facing;
+                    int bodyFacing = walking ? walkFacing : facing;
                     Texture2D bodyTexture = protagonist;
                     if (attacking) {
                         bodyTexture = katanaSprites.attack[(katanaAttackId - 1) % 3];
@@ -1377,7 +1409,8 @@ int main(void) {
                         bodyFacing = gunAttackFacing;
                     } else if (currentWeapon == WEAPON_GUN) {
                         bodyTexture = walking ? gun.walkBody : gun.idleBody;
-                        pose = walking ? walkPose : idlePose;
+                        pose = walking ? gunWalkPose : idlePose;
+                        bodyFacing = gunAimFacing;
                     } else if (invoking) {
                         bodyTexture = bible.activation;
                         pose = Clamp((1-bible.activationRemaining/BIBLE_ACTIVATION_DURATION)*
@@ -1415,10 +1448,15 @@ int main(void) {
                         DrawRing(center, katanaAttackRange - 2, katanaAttackRange,
                                  angle - halfArc, angle + halfArc, 32, Fade(RAYWHITE, opacity * .75f));
                     }
-                    DrawTexturePro(bodyTexture,
-                        bodySource,
-                        bodyDestination,
-                        (Vector2) { 0, 0 }, 0.0f, WHITE);
+                    Vector2 bodyOrigin = {0};
+                    float bodyRotation = 0;
+                    if (fabsf(walkLean) > .01f && !attacking && !firing && !invoking) {
+                        bodyOrigin = Vector2Subtract(player, (Vector2){bodyDestination.x, bodyDestination.y});
+                        bodyDestination.x = player.x;
+                        bodyDestination.y = player.y;
+                        bodyRotation = walkLean;
+                    }
+                    DrawTexturePro(bodyTexture, bodySource, bodyDestination, bodyOrigin, bodyRotation, WHITE);
                 }
                 for (int s = 0; s < KATANA_MAX_SHOCKWAVES; s++) {
                     const KatanaShockwave *wave = &katanaShockwaves[s];

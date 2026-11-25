@@ -177,7 +177,7 @@ void StartArenaBoss(EnemyGroup *group, const Clearing *clearing, Vector2 player,
                        float power);
 void ClearEnemyAttacks(EnemyGroup *group);
 void CollectEnemyLights(const EnemyGroup *group, SceneLights *scene);
-void CollectBonelandActorShadows(const EnemyGroup *group, Vector2 player, float dodgeLift, SceneLights *scene);
+void CollectActorShadows(const EnemyGroup *group, Vector2 player, float dodgeLift, SceneLights *scene);
 void CollectCoveiroLights(const EnemyGroup *group, SceneLights *scene);
 int EnemiesRemaining(const EnemyGroup *group);
 float EnemyHurtRadius(const Enemy *enemy);

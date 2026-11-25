@@ -16,6 +16,7 @@ typedef struct VideoSettings {
     int fpsLimit;      /* 30 ou 60 */
     bool showFps;      /* contador de FPS no canto da tela */
     bool dynamicLighting;
+    bool reduceMenuMotion;
 } VideoSettings;
 
 VideoSettings *GetVideoSettings(void);
@@ -34,7 +35,7 @@ void CycleVideoFpsLimit(VideoSettings *video, int direction);
 void BeginGameFrame(void);
 /* Renderiza o cenário numa textura e o compõe antes do HUD. */
 void BeginWorldFrame(void);
-void DrawWorldContactShadows(const SceneLights *scene);
+void DrawWorldContactShadows(Camera2D camera, const SceneLights *scene);
 void DrawWorldFrame(Camera2D camera, const SceneLights *scene);
 void EndGameFrame(void);
 /* BeginScissorMode em coordenadas de tela, correto também com renderização reduzida. */

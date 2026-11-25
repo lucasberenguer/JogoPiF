@@ -84,9 +84,12 @@ void UnloadWeaponSelect(WeaponSelect *s) {
 }
 
 int UpdateWeaponSelect(WeaponSelect *s) {
-    if (IsKeyPressed(KEY_ESCAPE)) return -2;
-    if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) s->selected = (s->selected+1)%WEAPON_COUNT;
-    if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) s->selected = (s->selected+WEAPON_COUNT-1)%WEAPON_COUNT;
+    bool pad = IsGamepadAvailable(0);
+    if (IsKeyPressed(KEY_ESCAPE) || (pad && IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT))) return -2;
+    if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D) || (pad && IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_RIGHT)))
+        s->selected = (s->selected+1)%WEAPON_COUNT;
+    if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A) || (pad && IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_LEFT)))
+        s->selected = (s->selected+WEAPON_COUNT-1)%WEAPON_COUNT;
     Vector2 mouse = GetMousePosition();
     Vector2 delta = GetMouseDelta();
     if (delta.x != 0 || delta.y != 0)
@@ -94,7 +97,8 @@ int UpdateWeaponSelect(WeaponSelect *s) {
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         for (int i=0; i<WEAPON_COUNT; i++) if (CheckCollisionPointRec(mouse, CardBounds(i))) return i;
     }
-    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) return s->selected;
+    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || (pad && IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN)))
+        return s->selected;
     return -1;
 }
 

@@ -19,6 +19,7 @@
 #define CLEARING_BOSS_STAGE 5
 #define CLEARING_COMPLETE_STAGE 6
 #define MAX_WEAPON_LEVEL 5
+#define PLAYER_BASE_SPEED 204.0f
 #define WEAPON_LEVEL_DAMAGE_BONUS 0.2f
 #define EPIC_DAMAGE_STACK_BONUS 0.5f
 #define BIBLE_L1_DAMAGE_BONUS 0.15f
@@ -72,6 +73,6 @@ static inline int WeaponBaseDamage(int weapon) {
 
 static inline RunProgress NewRunProgress(int weapon) {
     return (RunProgress){.weapon=weapon, .initialWeapon=weapon, .stage=1, .health=100, .maxHealth=100,
-        .damage=1, .speed=204, .bossPower=1, .strongWeapon=-1, .epicDamageStacks=0};
+        .damage=1, .speed=PLAYER_BASE_SPEED, .bossPower=1, .strongWeapon=-1, .epicDamageStacks=0};
 }
 #endif

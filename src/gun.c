@@ -59,7 +59,7 @@ bool InitGun(Gun *gun) {
     gun->impact = LoadTexture("assets/arma_fogo_impacto.png");
     gun->body = LoadGunBody("assets/protagonista/fluido/arma_fogo_disparo.png",&gun->shotFit,8,4);
     gun->idleBody = LoadGunBody("assets/protagonista/fluido/arma_fogo_idle_novo.png",&gun->idleFit,4,12);
-    gun->walkBody = LoadGunBody("assets/protagonista/fluido/arma_fogo_caminhada.png",&gun->walkFit,8,12);
+    gun->walkBody = LoadGunBody("assets/protagonista/fluido/arma_fogo_caminhada.png",&gun->walkFit,GUN_WALK_FRAMES,12);
     if (!gun->projectile.id || !gun->impact.id ||
         !gun->body.id || !gun->idleBody.id || !gun->walkBody.id) {
         UnloadGun(gun);
@@ -87,6 +87,14 @@ Rectangle GunBodyDestination(const Gun *gun, Rectangle source, Vector2 player,
     float scaleY = baseScaleY*(reference.bottom-reference.top)/(frame.bottom-frame.top);
     float ground = player.y-72+reference.bottom*baseScaleY;
     return (Rectangle){player.x-width*.5f,ground-frame.bottom*scaleY,width,80*scaleY};
+}
+
+float GunAdvanceWalkPose(float pose, Vector2 traveled, Vector2 facing) {
+    float distance = Vector2Length(traveled);
+    float stride = distance * (10.0f / PLAYER_BASE_SPEED);
+    if (Vector2DotProduct(traveled, facing) < -.35f * distance) stride = -stride;
+    pose = fmodf(pose + stride, GUN_WALK_FRAMES);
+    return pose < 0.0f ? pose + GUN_WALK_FRAMES : pose;
 }
 
 void UnloadGun(Gun *gun) {

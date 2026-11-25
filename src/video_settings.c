@@ -20,7 +20,7 @@ static bool drawingToTarget = false;
 static Shader worldLighting;
 static bool triedWorldLighting;
 static int lightScreenSize, lightCount, lightArray, lightTints, lightAmbient;
-static int shadowLightIndex, shadowCount, shadowStartsLocation, shadowShapesLocation;
+static int shadowLightMask, shadowCount, shadowStartsLocation, shadowShapesLocation;
 
 static const char *VideoSettingsPath(void) {
     return TextFormat("%s/video_pif.cfg", GetApplicationDirectory());
@@ -40,20 +40,22 @@ void LoadVideoSettings(VideoSettings *video) {
     const char *path = VideoSettingsPath();
     char *data = FileExists(path) ? LoadFileText(path) : NULL;
     if (!data) return;
-    int fullscreen, scale, fps, showFps, lighting = 1;
-    if (sscanf(data, "fullscreen=%d render=%d fps=%d show_fps=%d dynamic_lighting=%d",
-               &fullscreen, &scale, &fps, &showFps, &lighting) >= 4 &&
+    int fullscreen, scale, fps, showFps, lighting = 1, reduceMotion = 0;
+    if (sscanf(data, "fullscreen=%d render=%d fps=%d show_fps=%d dynamic_lighting=%d reduce_menu_motion=%d",
+               &fullscreen, &scale, &fps, &showFps, &lighting, &reduceMotion) >= 4 &&
         (fullscreen == 0 || fullscreen == 1) && IndexOf(renderScales, VIDEO_RENDER_SCALES, scale) >= 0 &&
         IndexOf(fpsOptions, VIDEO_FPS_OPTIONS, fps) >= 0 && (showFps == 0 || showFps == 1)) {
-        *video = (VideoSettings){fullscreen == 1, scale, fps, showFps == 1, lighting != 0};
+        *video = (VideoSettings){.fullscreen = fullscreen == 1, .renderScale = scale, .fpsLimit = fps,
+            .showFps = showFps == 1, .dynamicLighting = lighting != 0, .reduceMenuMotion = reduceMotion != 0};
     } else TraceLog(LOG_WARNING, "video_pif.cfg invalido; usando as opcoes padrao.");
     UnloadFileText(data);
 }
 
 void SaveVideoSettings(const VideoSettings *video) {
-    char data[96];
-    snprintf(data, sizeof(data), "fullscreen=%d render=%d fps=%d show_fps=%d dynamic_lighting=%d\n",
-             video->fullscreen, video->renderScale, video->fpsLimit, video->showFps, video->dynamicLighting);
+    char data[128];
+    snprintf(data, sizeof(data), "fullscreen=%d render=%d fps=%d show_fps=%d dynamic_lighting=%d reduce_menu_motion=%d\n",
+             video->fullscreen, video->renderScale, video->fpsLimit, video->showFps, video->dynamicLighting,
+             video->reduceMenuMotion);
     if (!SaveFileText(VideoSettingsPath(), data))
         TraceLog(LOG_WARNING, "Nao foi possivel salvar as opcoes de video.");
 }
@@ -122,7 +124,7 @@ void BeginWorldFrame(void) {
             lightArray = GetShaderLocation(worldLighting, "lights[0]");
             lightTints = GetShaderLocation(worldLighting, "tints[0]");
             lightAmbient = GetShaderLocation(worldLighting, "ambientGrade");
-            shadowLightIndex = GetShaderLocation(worldLighting, "shadowLightIndex");
+            shadowLightMask = GetShaderLocation(worldLighting, "shadowLightMask");
             shadowCount = GetShaderLocation(worldLighting, "shadowCount");
             shadowStartsLocation = GetShaderLocation(worldLighting, "shadowStarts[0]");
             shadowShapesLocation = GetShaderLocation(worldLighting, "shadowShapes[0]");
@@ -138,10 +140,18 @@ static void DrawFrameTexture(void) {
                    (Vector2){0}, 0, WHITE);
 }
 
-void DrawWorldContactShadows(const SceneLights *scene) {
+static bool WorldPointVisible(Vector2 point, float margin, Vector2 size) {
+    return point.x + margin >= 0 && point.y + margin >= 0 &&
+           point.x - margin <= size.x && point.y - margin <= size.y;
+}
+
+void DrawWorldContactShadows(Camera2D camera, const SceneLights *scene) {
+    Vector2 size = {(float)GetScreenWidth(), (float)GetScreenHeight()};
     for (int i = 0; i < scene->casterCount; i++) {
         const SceneCaster *caster = &scene->casters[i];
         if (caster->contactOpacity <= 0.0f) continue;
+        Vector2 point = GetWorldToScreen2D(caster->feet, camera);
+        if (!WorldPointVisible(point, caster->halfWidth*camera.zoom, size)) continue;
         rlPushMatrix();
         rlTranslatef(caster->feet.x, caster->feet.y, 0);
         rlScalef(1.0f, .38f, 1.0f);
@@ -150,33 +160,51 @@ void DrawWorldContactShadows(const SceneLights *scene) {
     }
 }
 
-static void UploadWorldShadows(Camera2D camera, const SceneLights *scene, int sourceIndex) {
-    int count = 0;
-    Vector4 starts[SCENE_CASTER_LIMIT];
-    Vector2 shapes[SCENE_CASTER_LIMIT];
-    if (sourceIndex >= 0) {
-        const SceneLight *light = &scene->lights[scene->shadowLightSlot - 1];
-        for (int i = 0; i < scene->casterCount; i++) {
+static void UploadWorldShadows(Camera2D camera, const SceneLights *scene, Vector2 size,
+                               const Vector4 *lights, int visibleLights) {
+    int count = 0, mask = 0;
+    Vector4 starts[SCENE_SHADOW_LIMIT];
+    Vector3 shapes[SCENE_SHADOW_LIMIT];
+    for (int kind = SCENE_MAIN_ACTOR; kind < SCENE_CASTER_KINDS && count < SCENE_SHADOW_LIMIT && visibleLights > 0; kind++) {
+        for (int i = 0; i < scene->casterCount && count < SCENE_SHADOW_LIMIT; i++) {
             const SceneCaster *caster = &scene->casters[i];
-            Vector2 away = Vector2Subtract(caster->feet, light->position);
-            float distance = Vector2Length(away);
-            if (distance < 1 || distance >= light->radius) continue;
-            float reach = fminf(caster->reach, light->radius-distance+caster->halfWidth);
-            if (reach < 8) continue;
-            away = Vector2Scale(away, 1.0f/distance);
+            if ((int)caster->kind != kind) continue;
             Vector2 from = GetWorldToScreen2D(caster->feet, camera);
-            Vector2 tip = GetWorldToScreen2D(Vector2Add(caster->feet, away), camera);
-            Vector2 axis = Vector2Normalize(Vector2Subtract(tip, from));
-            float width = caster->halfWidth * (.58f + .42f*fabsf(away.y));
+            float maxReach = caster->reach*camera.zoom;
+            float halfWidth = caster->halfWidth*camera.zoom;
+            if (!WorldPointVisible(from, maxReach+halfWidth, size)) continue;
+            // Usa a contribuição local, para que uma tocha distante não roube a sombra.
+            int best = -1;
+            float score = .018f, distance = 0, reach = 0;
+            Vector2 away = {0};
+            for (int j = 0; j < visibleLights; j++) {
+                Vector2 delta = {from.x-lights[j].x, from.y-lights[j].y};
+                float d = Vector2Length(delta);
+                if (d < fmaxf(1, halfWidth*.42f)) continue;
+                float fraction = Vector2Length((Vector2){delta.x,delta.y*1.18f}) / lights[j].z;
+                if (fraction >= 1) continue;
+                float contribution = lights[j].w*(1-fraction*fraction*(3-2*fraction));
+                if (contribution <= score) continue;
+                score = contribution;
+                best = j;
+                distance = d;
+                away = delta;
+                reach = fminf(maxReach, lights[j].z-d+halfWidth);
+            }
+            if (best < 0) continue;
+            if (reach < 8) continue;
+            Vector2 axis = Vector2Scale(away,1.0f/distance);
+            float width = halfWidth*(.58f+.42f*fabsf(axis.y));
             starts[count] = (Vector4){from.x, from.y, axis.x, axis.y};
-            shapes[count++] = (Vector2){reach*camera.zoom,width*camera.zoom};
+            shapes[count++] = (Vector3){reach,width,(float)best};
+            mask |= 1 << best;
         }
     }
-    SetShaderValue(worldLighting, shadowLightIndex, &sourceIndex, SHADER_UNIFORM_INT);
+    SetShaderValue(worldLighting, shadowLightMask, &mask, SHADER_UNIFORM_INT);
     SetShaderValue(worldLighting, shadowCount, &count, SHADER_UNIFORM_INT);
     if (count > 0) {
         SetShaderValueV(worldLighting, shadowStartsLocation, starts, SHADER_UNIFORM_VEC4, count);
-        SetShaderValueV(worldLighting, shadowShapesLocation, shapes, SHADER_UNIFORM_VEC2, count);
+        SetShaderValueV(worldLighting, shadowShapesLocation, shapes, SHADER_UNIFORM_VEC3, count);
     }
 }
 
@@ -189,22 +217,20 @@ void DrawWorldFrame(Camera2D camera, const SceneLights *scene) {
         Vector4 screenLights[SCENE_LIGHT_LIMIT];
         Vector3 tints[SCENE_LIGHT_LIMIT];
         Vector2 size = {(float)GetScreenWidth(), (float)GetScreenHeight()};
-        int count = 0, shadowSource = -1;
+        int count = 0;
         Vector2 ambient = scene->ambient;
         for (int i = 0; i < scene->count; i++) {
             SceneLight light = scene->lights[i];
             Vector2 position = GetWorldToScreen2D(light.position, camera);
             float radius = light.radius * camera.zoom;
-            if (position.x + radius < 0 || position.x - radius > size.x ||
-                position.y + radius < 0 || position.y - radius > size.y) continue;
-            if (i + 1 == scene->shadowLightSlot) shadowSource = count;
+            if (!WorldPointVisible(position,radius,size)) continue;
             screenLights[count] = (Vector4){position.x, position.y, radius, light.intensity};
             tints[count++] = light.tint;
         }
         SetShaderValue(worldLighting, lightScreenSize, &size, SHADER_UNIFORM_VEC2);
         SetShaderValue(worldLighting, lightCount, &count, SHADER_UNIFORM_INT);
         SetShaderValue(worldLighting, lightAmbient, &ambient, SHADER_UNIFORM_VEC2);
-        UploadWorldShadows(camera, scene, shadowSource);
+        UploadWorldShadows(camera, scene, size, screenLights, count);
         if (count > 0) {
             SetShaderValueV(worldLighting, lightArray, screenLights, SHADER_UNIFORM_VEC4, count);
             SetShaderValueV(worldLighting, lightTints, tints, SHADER_UNIFORM_VEC3, count);

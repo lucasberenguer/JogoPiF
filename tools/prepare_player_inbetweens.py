@@ -1,4 +1,5 @@
 """Generate smoother player sprites from the original directional poses."""
+import argparse
 from pathlib import Path
 
 import cv2
@@ -105,6 +106,29 @@ def repair_gun_body(frame, interpolated=False):
     return Image.fromarray(pixels)
 
 
+def repair_katana_neck(frame):
+    """Recover short gaps between the hair or jaw and the red collar."""
+    pixels = np.array(frame)
+    solid = pixels[:, :, 3] >= 144
+    # Only cover the central head/collar seam, away from the blade and cape outline.
+    for x in range(68, 94):
+        upper = None
+        for y in range(54, 79):
+            if not solid[y, x]:
+                continue
+            if upper is not None and 1 < y - upper <= 7:
+                shoulder = pixels[y, x, :3].astype(int)
+                if shoulder[0] >= shoulder[1] + 14 and shoulder[0] >= shoulder[2] + 7:
+                    # Require opaque neighbors in the collar, not a passing sword pixel.
+                    if solid[y:y+3, x-1:x+2].sum() >= 6:
+                        missing = pixels[upper+1:y, x]
+                        dark = np.minimum(pixels[upper, x, :3], shoulder)
+                        missing[missing[:, 3] < 64, :3] = np.maximum(dark, (23, 10, 15))
+                        missing[:, 3] = 255
+            upper = y
+    return Image.fromarray(pixels)
+
+
 def generate(name, size, loop, ends):
     source = Image.open(ASSETS / f"{name}.png").convert("RGBA")
     width, height = size
@@ -154,13 +178,21 @@ def generate(name, size, loop, ends):
                     reused += fallback
                 if step and name == "arma_fogo_caminhada":
                     frame = repair_gun_body(frame, interpolated=True)
+                if name.startswith("katana_"):
+                    frame = repair_katana_neck(frame)
                 atlas.paste(frame, (col * width, (row + step * rows) * height))
     atlas.save(OUTPUT / f"{name}.png")
     print(f"{name}: {repaired} pixels corrigidos, {reused} quadros retomam a pose original")
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("sheets", nargs="*", metavar="SHEET", help="Regenerate only these sheets")
+    args = parser.parse_args()
+    unknown = set(args.sheets) - SHEETS.keys()
+    if unknown:
+        parser.error(f"unknown sheets: {', '.join(sorted(unknown))}")
     cv2.setNumThreads(4)
     OUTPUT.mkdir(parents=True, exist_ok=True)
-    for sheet, geometry in SHEETS.items():
-        generate(sheet, *geometry)
+    for sheet in args.sheets or SHEETS:
+        generate(sheet, *SHEETS[sheet])

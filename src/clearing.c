@@ -291,6 +291,12 @@ static void AddMapLantern(const Clearing *map, SceneLights *scene,
     AddSceneLight(scene, point, radius, flicker, (Vector3){1.0f,.68f,.39f});
 }
 
+static void AddMapShadow(const Clearing *map, SceneLights *scene,
+                         float x, float y, float width, float reach) {
+    Vector2 feet = {map->background.width*x, map->background.height*y};
+    AddSceneCaster(scene,feet,width,reach,0,SCENE_PROP);
+}
+
 void CollectMapLights(const Clearing *map, bool altarOpen, float time, SceneLights *scene) {
     const Vector3 violet = {.69f,.41f,1.0f};
     const Vector3 blue = {.43f,.83f,1.0f};
@@ -299,43 +305,64 @@ void CollectMapLights(const Clearing *map, bool altarOpen, float time, SceneLigh
     if (map->boneland) {
         scene->ambient = (Vector2){.29f,.06f};
         // Bases das pedras e colunas pintadas no cenário (arte 1672×941).
-        AddSceneCaster(scene,(Vector2){292,379},30,108,0);
-        AddSceneCaster(scene,(Vector2){1118,326},31,66,0);
-        AddSceneCaster(scene,(Vector2){1366,357},29,128,0);
-        AddSceneCaster(scene,(Vector2){1388,609},29,108,0);
-        AddSceneCaster(scene,(Vector2){558,748},34,83,0);
+        AddSceneCaster(scene,(Vector2){292,379},30,108,0,SCENE_PROP);
+        AddSceneCaster(scene,(Vector2){1118,326},31,66,0,SCENE_PROP);
+        AddSceneCaster(scene,(Vector2){1366,357},29,128,0,SCENE_PROP);
+        AddSceneCaster(scene,(Vector2){1388,609},29,108,0,SCENE_PROP);
+        AddSceneCaster(scene,(Vector2){558,748},34,83,0,SCENE_PROP);
     } else if (map->cemetery) {
         AddMapLantern(map,scene,.11f,.71f,110,flicker);
         AddMapLantern(map,scene,.63f,.86f,110,flicker);
         AddMapLantern(map,scene,.89f,.32f,120,flicker);
+        AddMapShadow(map,scene,.089f,.650f,17,53);
+        AddMapShadow(map,scene,.171f,.767f,18,63);
+        AddMapShadow(map,scene,.606f,.831f,18,61);
+        AddMapShadow(map,scene,.846f,.340f,23,62);
     } else if (map->village) {
         AddMapLantern(map,scene,.11f,.71f,175,flicker);
         AddMapLantern(map,scene,.91f,.76f,170,flicker);
         AddMapLantern(map,scene,.12f,.34f,125,flicker);
+        AddMapShadow(map,scene,.072f,.754f,18,59);
+        AddMapShadow(map,scene,.947f,.829f,23,68);
+        AddMapShadow(map,scene,.146f,.406f,24,61);
     } else if (map->chapel) {
         AddSceneLight(scene,map->pedestal,235,.34f,(Vector3){1.0f,.86f,.54f});
         AddMapLantern(map,scene,.27f,.25f,100,flicker);
         AddMapLantern(map,scene,.72f,.25f,100,flicker);
+        AddMapShadow(map,scene,.361f,.295f,22,83);
+        AddMapShadow(map,scene,.624f,.295f,22,83);
     } else if (map->basement) {
         AddMapLantern(map,scene,.42f,.28f,145,flicker);
         AddMapLantern(map,scene,.58f,.28f,145,flicker);
         AddMapLantern(map,scene,.04f,.26f,105,flicker);
         AddMapLantern(map,scene,.95f,.26f,105,flicker);
+        AddMapShadow(map,scene,.218f,.395f,23,66);
+        AddMapShadow(map,scene,.782f,.395f,23,66);
+        AddMapShadow(map,scene,.218f,.795f,23,66);
+        AddMapShadow(map,scene,.782f,.795f,23,66);
     } else if (map->invertedChapel) {
         AddSceneLight(scene,map->pedestal,230,.28f,(Vector3){1.0f,.28f,.43f});
+        AddMapShadow(map,scene,.361f,.295f,22,83);
+        AddMapShadow(map,scene,.624f,.295f,22,83);
     } else if (map->templarField) {
         scene->ambient = (Vector2){.21f,.05f};
         const Vector2 left = {map->background.width*.095f,map->background.height*.83f};
         const Vector2 right = {map->background.width*.905f,left.y};
         AddSceneLight(scene,left,190,flicker,violet);
         AddSceneLight(scene,right,190,flicker,violet);
+        AddMapShadow(map,scene,.083f,.774f,28,84);
+        AddMapShadow(map,scene,.913f,.762f,28,84);
     } else if (map->necromancerArena) {
         Vector2 throne = {map->background.width*.50f,map->background.height*.19f};
         AddSceneLight(scene,throne,235,.26f,(Vector3){.88f,.29f,.46f});
+        AddMapShadow(map,scene,.411f,.227f,28,94);
+        AddMapShadow(map,scene,.595f,.227f,28,94);
     } else {
         Vector2 altar = {map->pedestal.x,map->pedestal.y-32};
         Vector3 tint = altarOpen ? blue : (Vector3){1.0f,.88f,.48f};
         AddSceneLight(scene,altar,182,altarOpen?.36f:.22f,tint);
+        AddMapShadow(map,scene,.462f,.182f,19,68);
+        AddMapShadow(map,scene,.567f,.177f,19,68);
     }
 }
 

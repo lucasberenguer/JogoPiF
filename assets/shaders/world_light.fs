@@ -7,19 +7,20 @@ uniform int lightCount;
 uniform vec4 lights[8];
 uniform vec3 tints[8];
 uniform vec2 ambientGrade;
-uniform int shadowLightIndex;
+uniform int shadowLightMask;
 uniform int shadowCount;
 uniform vec4 shadowStarts[7];
-uniform vec2 shadowShapes[7];
+uniform vec3 shadowShapes[7];
 out vec4 finalColor;
 
-float projectedShadow(vec2 position)
+float projectedShadow(vec2 position, int lightIndex)
 {
     float coverage = 0.0;
     for (int i = 0; i < shadowCount; i++) {
+        if (int(shadowShapes[i].z) != lightIndex) continue;
         vec2 delta = position - shadowStarts[i].xy;
         vec2 axis = shadowStarts[i].zw;
-        vec2 shape = shadowShapes[i];
+        vec2 shape = shadowShapes[i].xy;
         float along = dot(delta, axis);
         if (along < 0.0 || along >= shape.x) continue;
         float across = abs(dot(delta, vec2(-axis.y, axis.x)));
@@ -47,9 +48,9 @@ void main()
         vec2 delta = (position - lights[i].xy) * vec2(1.0, 1.18);
         float falloff = 1.0 - smoothstep(0.0, lights[i].z, length(delta));
         float strength = lights[i].w * falloff;
-        if (i == shadowLightIndex && strength > .004) {
-            float coverage = projectedShadow(position);
-            shadowShade = coverage * strength * .27;
+        if ((shadowLightMask & (1 << i)) != 0 && strength > .004) {
+            float coverage = projectedShadow(position, i);
+            shadowShade += coverage * strength * .27;
             strength *= 1.0 - .92 * coverage;
         }
         light += strength;
@@ -57,6 +58,6 @@ void main()
     }
     emission *= .85 / max(light, .85);
     float surface = smoothstep(0.0, .18, max(scene.r, max(scene.g, scene.b)));
-    vec3 lit = ambient * (1.0 - shadowShade) + (1.0 - ambient) * emission * surface * .55;
+    vec3 lit = ambient * (1.0 - min(shadowShade, .22)) + (1.0 - ambient) * emission * surface * .55;
     finalColor = vec4(clamp(lit, 0.0, 1.0), scene.a);
 }

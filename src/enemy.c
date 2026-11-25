@@ -1262,9 +1262,7 @@ void CollectEnemyLights(const EnemyGroup *group, SceneLights *scene) {
                 static const Vector2 forward[] = {{0,1},{0,-1},{-1,0},{1,0}};
                 // O clarão nasce à frente das patas, permitindo uma sombra atrás do corpo.
                 Vector2 origin = Vector2Add(boss->position, Vector2Scale(forward[boss->facing], 56));
-                int previousCount = scene->count;
                 AddSceneLight(scene,origin,224 + 120 * (1 - tail),tail*tail*.84f,amber);
-                if (scene->count > previousCount) scene->shadowLightSlot = scene->count;
             }
         } else if (boss->templarRole == TEMPLAR_MARSHAL) {
             int skill = boss->bossAttack;
@@ -1298,6 +1296,7 @@ void CollectEnemyLights(const EnemyGroup *group, SceneLights *scene) {
         if (shot->boneShot) AddSceneLight(scene,shot->position,105,.42f*fade,amber);
         else if (shot->umbraSpear) AddSceneLight(scene,shot->position,115,.43f*fade,violet);
         else if (group->cemetery) AddSceneLight(scene,shot->position,110,.39f*fade,green);
+        else if (group->boneland) AddSceneLight(scene,shot->position,95,.24f*fade,amber);
     }
 }
 
@@ -1306,14 +1305,30 @@ static bool BoneLordHidden(const Enemy *boss) {
            boss->stateTime >= BONE_DASH_HIDE && boss->stateTime < BONE_DASH_REAPPEAR;
 }
 
-void CollectBonelandActorShadows(const EnemyGroup *group, Vector2 player, float dodgeLift, SceneLights *scene) {
-    if (!group->boneland) return;
-    AddSceneCaster(scene, player, 24 + 5*dodgeLift, 91, .65f - .31f*dodgeLift);
-    const Enemy *boss = &group->list[0];
-    if (boss->type == ENEMY_BOSS && boss->state != ENEMY_GONE && boss->state != ENEMY_QUEUED &&
-        boss->state != ENEMY_DIE && boss->state != ENEMY_FALLEN && !BoneLordHidden(boss)) {
-        float reveal = boss->state == ENEMY_SPAWNING ? Clamp(boss->stateTime, 0, 1) : 1;
-        AddSceneCaster(scene,boss->position,46,136,.55f*reveal);
+void CollectActorShadows(const EnemyGroup *group, Vector2 player, float dodgeLift, SceneLights *scene) {
+    AddSceneCaster(scene,player,24 + 5*dodgeLift,91,.65f - .31f*dodgeLift,SCENE_MAIN_ACTOR);
+    for (int i = 0; i < ENEMY_COUNT; i++) {
+        const Enemy *enemy = &group->list[i];
+        if (enemy->state == ENEMY_GONE || enemy->state == ENEMY_QUEUED ||
+            enemy->state == ENEMY_DIE || enemy->state == ENEMY_FALLEN || enemy->necromancerWraith)
+            continue;
+        bool boss = enemy->type == ENEMY_BOSS;
+        if ((group->boneland && boss && BoneLordHidden(enemy)) ||
+            (enemy->state == ENEMY_ATTACK && enemy->coveiroBuried))
+            continue;
+        bool emerging = enemy->state == ENEMY_SPAWNING;
+        if (emerging && !boss && !group->village) continue;
+        float reveal = emerging ? Clamp(enemy->stateTime, 0, 1) : 1;
+        if (reveal <= 0) continue;
+        if (boss) {
+            float radius = group->boneland ? 46 : group->cemetery ? 37 :
+                           group->village ? 27 : enemy->necromancerForm ? 34 : 39;
+            AddSceneCaster(scene,enemy->position,radius,136,.55f*reveal,SCENE_MAIN_ACTOR);
+        } else {
+            bool heavy = enemy->type == ENEMY_SPECIAL || enemy->type == ENEMY_ELITE || enemy->villageBrute;
+            AddSceneCaster(scene,enemy->position,heavy?24:17,heavy?60:43,
+                           (heavy?.44f:.36f)*reveal,SCENE_MINION);
+        }
     }
 }
 

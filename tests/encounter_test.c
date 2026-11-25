@@ -11,6 +11,13 @@
 #include <string.h>
 
 static void CheckGunBodyScale(void) {
+    const Vector2 aimRight = {1,0};
+    float stepDistance = PLAYER_BASE_SPEED / 10.0f;
+    float back = GunAdvanceWalkPose(.5f, (Vector2){-stepDistance,0}, aimRight);
+    assert(fabsf(back - 7.5f) < .001f);
+    float side = GunAdvanceWalkPose(back, (Vector2){0,stepDistance}, aimRight);
+    assert(fabsf(side - .5f) < .001f);
+    assert(fabsf(GunAdvanceWalkPose(side, (Vector2){0}, aimRight) - side) < .001f);
     Gun gun;
     assert(InitGun(&gun));
     const Vector2 player = {300,400};
